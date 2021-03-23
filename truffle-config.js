@@ -1,11 +1,12 @@
-const HDWalletProvider = require("@truffle/hdwallet-provider");
+//const HDWalletProvider = require("@truffle/hdwallet-provider");
+const Web3 = require('web3');
 
-require('dotenv').config();
+//require('dotenv').config();
 
 module.exports = {
 
   networks: {
-    kovan: {
+    /*kovan: {
       provider: function() {
         return new HDWalletProvider(
           process.env.MNENOMIC,
@@ -15,7 +16,14 @@ module.exports = {
       network_id: 42,
       networkCheckTimeout: 1000000,
       timeoutBlocks: 200
-    }
+    },*/
+
+    development: {
+      provider: () => new Web3.providers.HttpProvider('http://127.0.0.1:9545/ext/bc/C/rpc'),
+      network_id: "*",
+      gas: 89902345,
+      gasPrice: 470000000000
+   }
   },
 
   compilers: {
@@ -29,12 +37,12 @@ module.exports = {
       }
     }
   },
-  
+  /*
   plugins: [
     'truffle-plugin-verify'
   ],
 
   api_keys: {
     etherscan: process.env.ETHERSCAN_KEY
-  }
+  }*/
 };
