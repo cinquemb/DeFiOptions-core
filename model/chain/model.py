@@ -98,16 +98,12 @@ xSDS = {
   "symbol": 'xSDS',
 }
 
-DaoContract = json.loads(open('./build/contracts/Implementation.json', 'r+').read())
-USDCContract = json.loads(open('./build/contracts/TestnetUSDC.json', 'r+').read())
-# Use the full Dollar ABI so we can interrogate the token for metadata
-DollarContract = json.loads(open('./build/contracts/Dollar.json', 'r+').read())
+AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
+CreditTokenContract = json.loads(open('./build/contracts/CreditToken.json', 'r+').read())
+CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
+OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
+ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 
-PangolinPairContract = json.loads(open('./build/contracts/IPangolinPair.json', 'r+').read())
-PangolinRouterAbiContract = json.loads(open('./node_modules/@pangolindex/exchange-contracts/artifacts/contracts/pangolin-periphery/interfaces/IPangolinRouter.sol/IPangolinRouter.json', 'r+').read())
-TokenContract = json.loads(open('./build/contracts/Root.json', 'r+').read())
-PoolContract = json.loads(open('./build/contracts/Pool.json', 'r+').read())
-OracleContract = json.loads(open('./build/contracts/MockOracle.json', 'r+').read())
 
 def get_addr_from_contract(contract):
     return contract["networks"][str(sorted(map(int,contract["networks"].keys()))[0])]["address"]
@@ -675,347 +671,26 @@ class Agent:
         
         return faith
         
-class PangolinPool:
-    """
-    Represents the Pangolin pool. Tracks xSD and USDC balances of pool, and total outstanding LP shares.
-    """
-    
-    def __init__(self, pangolin, pangolin_router, pangolin_token, usdc_token, xsd_token, **kwargs):
-        self.pangolin_pair_token = pangolin
-        self.pangolin_router = pangolin_router
-        self.pangolin_token = pangolin_token
-        self.usdc_token = usdc_token
-        self.xsd_token = xsd_token
-    
-    def operational(self):
-        """
-        Return true if buying and selling is possible.
-        """
-        reserve = self.getReserves()
-        token0Balance = reserve[0]
-        token1Balance = reserve[1]
-        return token0Balance > 0 and token1Balance > 0
-    
-    def getToken0(self):
-        exchange = self.pangolin_pair_token.contract
-        return exchange.functions.token0().call()
 
-    def getReserves(self):
-        exchange = self.pangolin_pair_token.contract
-        return exchange.functions.getReserves().call()
-
-    def getTokenBalance(self):
-        reserve, token0 = self.getReserves(), self.getToken0()
-        token0Balance = reserve[0]
-        token1Balance = reserve[1]
-        if (token0.lower() == USDC["addr"].lower()):
-            return reg_int(token0Balance, USDC['decimals']), reg_int(token1Balance, xSD['decimals'])
-        return reg_int(token1Balance, USDC['decimals']), reg_int(token0Balance, xSD['decimals'])
-
-    def getInstantaneousPrice(self):
-      reserve, token0 = self.getReserves(), self.getToken0()
-      token0Balance = reserve[0]
-      token1Balance = reserve[1]
-      if (token0.lower() == USDC["addr"].lower()):
-        return int(token0Balance) * pow(10, PGLRouter['decimals']) / float(int(token1Balance)) if int(token1Balance) != 0 else 0
-      return int(token1Balance) * pow(10, PGLRouter['decimals']) / float(int(token0Balance)) if int(token0Balance) != 0 else 0
-    
-    def xsd_price(self):
-        """
-        Get the current xSD price in USDC.
-        """
-        
-        if self.operational():
-            success = False
-            while not success:
-                try:
-                    price = self.getInstantaneousPrice()
-                    success = True
-                    return price
-                except Exception as inst:
-                    """
-                        Seen:
-                            raise ContractLogicError(f'execution reverted: {response["error"]["message"]}')
-                            web3.exceptions.ContractLogicError: execution reverted: Reverting to invalid state checkpoint failed
-                    """
-                    logger.info({"function": "xsd_price", "error": inst })
-        else:
-            return 1.0
-
-    def total_lp(self):
-        return reg_int(self.pangolin_pair_token.contract.functions.totalSupply().call(), PGLRouter['decimals'])
-        
-    def provide_liquidity(self, agent, xsd, usdc):
-        """
-        Provide liquidity.
-        """        
-        
-        self.usdc_token.ensure_approved(agent, PGLRouter["addr"])
-        self.xsd_token.ensure_approved(agent, PGLRouter["addr"])
-        
-        slippage = 0.01
-        min_xsd_amount = (xsd * (1 - slippage))
-        min_usdc_amount = (usdc * (1 - slippage))
-
-        if IS_DEBUG:
-            # Make sure we can afford this
-            xsd_wei = self.xsd_token[agent].to_wei()
-            usdc_wei = self.usdc_token[agent].to_wei()
-
-            assert xsd_wei >= xsd.to_wei()
-            assert usdc_wei >= usdc.to_wei()
-
-        tx_hash = self.pangolin_router.functions.addLiquidity(
-            self.xsd_token.address,
-            self.usdc_token.address,
-            xsd.to_wei(),
-            usdc.to_wei(),
-            min_xsd_amount.to_wei(),
-            min_usdc_amount.to_wei(),
-            agent.address,
-            (int(w3.eth.get_block('latest')['timestamp']) + DEADLINE_FROM_NOW)
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-
-        return tx_hash
-        
-    def remove_liquidity(self, agent, shares, min_xsd_amount, min_usdc_amount):
-        """
-        Remove liquidity for the given number of shares.
-
-        """
-        self.pangolin_pair_token.ensure_approved(agent, PGLRouter["addr"])
-
-        slippage = 0.99
-        min_xsd_amount = (min_xsd_amount * (1 - slippage))
-        min_usdc_amount = (min_usdc_amount * (1 - slippage))
-
-        tx_hash = self.pangolin_router.functions.removeLiquidity(
-            self.xsd_token.address,
-            self.usdc_token.address,
-            shares.to_wei(),
-            min_xsd_amount.to_wei(),
-            min_usdc_amount.to_wei(),
-            agent.address,
-            int(w3.eth.get_block('latest')['timestamp'] + DEADLINE_FROM_NOW)   
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-
-        return tx_hash
-        
-    def buy(self, agent, usdc, max_usdc_amount):
-        """
-        Spend the given number of USDC to buy xSD.
-        ['swapTokensForExactTokens(uint256,uint256,address[],address,uint256)']
-        """  
-        
-        self.usdc_token.ensure_approved(agent, PGLRouter["addr"])
-        self.xsd_token.ensure_approved(agent, PGLRouter["addr"])
-
-        # explore this more?
-        slippage = 0.01
-        max_usdc_amount = (max_usdc_amount * (1 + slippage))
-
-        tx_hash = self.pangolin_router.functions.swapExactTokensForTokens(
-            usdc.to_wei(),
-            max_usdc_amount.to_wei(),
-            [self.usdc_token.address, self.xsd_token.address],
-            agent.address,
-            int(w3.eth.get_block('latest')['timestamp'] + DEADLINE_FROM_NOW)
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-        return tx_hash
-        
-    def sell(self, agent, xsd, min_usdc_amount, advancer, pangolin_usdc_supply):
-        """
-        Sell the given number of xSD for USDC.
-        """
-
-        self.usdc_token.ensure_approved(agent, PGLRouter["addr"])
-        self.xsd_token.ensure_approved(agent, PGLRouter["addr"])
-
-        # explore this more?
-        slippage = 0.99 if (advancer.address == agent.address) or ((agent.redeem_count > 0) and agent.xsd > pangolin_usdc_supply) else 0.01
-        min_usdc_amount = (min_usdc_amount * (1 - slippage))
-
-        tx_hash = self.pangolin_router.functions.swapExactTokensForTokens(
-            xsd.to_wei(),
-            min_usdc_amount.to_wei(),
-            [self.xsd_token.address, self.usdc_token.address],
-            agent.address,
-            int(w3.eth.get_block('latest')['timestamp'] + DEADLINE_FROM_NOW)
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-
-        return tx_hash
-
-    def update(self, is_init_agents=[]):
-        self.pangolin_pair_token.update(is_init_agents=is_init_agents)
-
-class DAO:
-    """
-    Represents the xSD DAO. Tracks xSD balance of DAO and total outstanding xSDS.
-    """
-    
+class OptionsExchange:
     def __init__(self, contract, xsd, **kwargs):
-        """
-        Take keyword arguments to nspecify experimental parameters.
-        """
-        self.contract = contract  
-        self.xsd_token = xsd    
+        pass
 
-    def xsd_supply(self):
-        '''
-        How many xSD exist?
-        '''
-        return self.xsd_token.totalSupply
+class CreditProvider:
 
-    def total_coupons_at_epoch(self, address, epoch):
-        total_coupons = self.contract.caller({'from' : address, 'gas': 100000}).outstandingCoupons(epoch)
-        return Balance.from_tokens(total_coupons, xSD['decimals'])
-        
-    def total_coupons(self):
-        """
-        Get all outstanding unexpired coupons.
-        """
-        
-        total = self.contract.caller().totalCoupons()
-        return reg_int(total, xSD['decimals'])
+    def __init__(self, contract, xsd, **kwargs):
+        pass
 
-    def total_coupons_for_agent(self, agent):
-        total_coupons = self.contract.caller({'from' : agent.address, 'gas': 100000}).outstandingCouponsForAddress(agent.address)
-        return total_coupons
-
-    def coupon_balance_at_epoch(self, address, epoch):
-        ''' 
-            returns the total coupon balance for an address
-        '''
-        if epoch == 0:
-            return 0
-        total_coupons = self.contract.caller({'from' : address, 'gas': 100000}).balanceOfCoupons(address, epoch)
-        return total_coupons
-
-    def get_coupon_expirirations(self, agent):
-        '''
-            Return a list of coupon expirations for an address from last time called
-        '''
-        epochs = []
-        epoch_index_max = self.contract.caller({'from' : agent.address, 'gas': 100000}).getCouponsCurrentAssignedIndex(agent.address)
-
-        for i in range(agent.max_coupon_epoch_index, epoch_index_max):
-            t_epoch = self.contract.caller({'from' : agent.address, 'gas': 100000}).getCouponsAssignedAtEpoch(agent.address, i)
-            total_coupons = self.coupon_balance_at_epoch(agent.address, t_epoch)
-            if total_coupons == 0:
-                continue
-            else:
-                epochs.append(t_epoch)
-
-        agent.max_coupon_epoch_index = 0
-        agent.coupon_expirys = epochs
-        agent.coupon_expirys.sort()
-
-        #agent.coupon_expirys = list(set(agent.coupon_expirys))
-        return agent.coupon_expirys
-
-    def epoch(self, address):
-        return self.contract.caller({'from' : address, 'gas': 100000}).epoch()
-        
-    def has_coupon_bid(self):
-        """
-        Return True if the DAO implements coupon bidding.
-        """
-        return hasattr(self.contract.functions, 'placeCouponAuctionBid')
-        
-    def coupon_bid(self, agent, coupon_expiry, xsd_amount, max_coupon_amount):
-        """
-        Place a coupon bid
-        """
-        
-        self.xsd_token.ensure_approved(agent, self.contract)
-        tx_hash = self.contract.functions.placeCouponAuctionBid(
-            coupon_expiry,
-            xsd_amount.to_wei(),
-            max_coupon_amount.to_wei()
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 8000000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-        return tx_hash
-        
-    def redeem(self, agent, epoch_expired):
-        """
-        Redeem the given number of coupons. Expired coupons redeem to 0.
-        
-        Pays out the underlying and premium in an expansion phase, or only the
-        underlying otherwise, or if the coupons are expired (or nothing depending on the behavior of the protocol).
-        
-        Assumes everything is actually redeemable.
-        """
-        total_coupons = self.coupon_balance_at_epoch(agent.address, epoch_expired)
-        if total_coupons == 0:
-            return
-
-        tx_hash = self.contract.functions.redeemCoupons(
-            epoch_expired,
-            total_coupons
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 8000000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-
-        return tx_hash
-
-
-    def advance(self, agent):
-        """
-        Advance the epoch. Return the balance of XSD created.
-        
-        Note that if advance() does any kind of auction settlement or other
-        operations, the reported reward may be affected by those transfers.
-        """        
-        tx_hash = self.contract.functions.advance().transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 8000000,
-            'gasPrice': Web3.toWei(470, 'gwei'),
-        })
-        providerAvax.make_request("avax.issueBlock", {})
-        receipt = w3.eth.waitForTransactionReceipt(tx_hash, poll_latency=tx_pool_latency)
-    
-        return tx_hash
-                        
 class Model:
     """
     Full model of the economy.
     """
     
-    def __init__(self, dao, pangolin, usdc, pangolin_router, pangolin_token, xsd, oracle, agents, **kwargs):
+    def __init__(self, options_exchange, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
-        self.pangolin = PangolinPool(pangolin, pangolin_router, pangolin_token, usdc, xsd, **kwargs)
-        self.dao = DAO(dao, xsd, **kwargs)
-        self.oracle = oracle
+
         self.agents = []
         self.usdc_token = usdc
         self.pangolin_router = pangolin_router
@@ -1089,7 +764,7 @@ class Model:
         
         Returns True if anyone could act.
         """
-        # Update caches to current chain state
+        # Update caches to current chain state for all the tokens
         self.usdc_token.update()
         self.xsd_token.update()
         self.pangolin.update()
@@ -1102,80 +777,17 @@ class Model:
         
         logger.info("Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
 
-        epoch_before = self.dao.epoch(seleted_advancer.address)
-        incentivized_adv_tx = self.dao.advance(seleted_advancer)
-        adv_recp = w3.eth.waitForTransactionReceipt(incentivized_adv_tx, poll_latency=tx_pool_latency)
-        is_advance_fail = False
-        if adv_recp["status"] == 0:
-            is_advance_fail = True
-            self.has_prev_advanced = False
-        else:
-            self.has_prev_advanced = True
+        '''
 
-        logger.info("Earliest Non Dead Auction: {}".format(self.dao.contract.caller({'from' : seleted_advancer.address, 'gas': 100000}).getEarliestDeadAuctionEpoch()))
-        logger.info("Prospective Advance from {}, is_advance_fail: {}".format(seleted_advancer.address, is_advance_fail))
+            Stuff related to making a deposit
+            Stuff related to writing (after deposit)
+            Stuff related to writing (from balance)
+            Stuff related to liquidating (who is usually expected to perform this? the writer or the buyer depending on which side of the winning trade they're on?)
+            Stuff related to making a withdrawal
+            Whether to liquidate position early if short collateral (only available to writer).
 
-        (usdc_b, xsd_b) = self.pangolin.getTokenBalance()
-        revs = self.pangolin.getReserves()
+        '''
 
-        current_epoch = self.dao.epoch(seleted_advancer.address)
-
-        epoch_start_price = self.pangolin.xsd_price()
-        dao_xsd_supply = self.dao.xsd_supply()
-        total_coupons = self.dao.total_coupons()
-        
-        logger.info("Block {}, epoch {}, price {:.2f}, supply {:.2f}, faith: {:.2f}, bonded {:2.1f}%, coupons: {:.2f}, liquidity {:.2f} xSD / {:.2f} USDC".format(
-            w3.eth.get_block('latest')["number"], current_epoch, epoch_start_price, dao_xsd_supply,
-            self.get_overall_faith(), 0, total_coupons,
-            xsd_b, usdc_b)
-        )
-        
-        latest_price = Balance(self.oracle.caller({'from' : seleted_advancer.address, 'gas': 100000}).latestPrice()[0], xSD['decimals'])
-        latest_valid = self.oracle.caller({'from' : seleted_advancer.address, 'gas': 100000}).latestValid()
-        logger.info("latest_price: {}, latest_valid: {}".format(latest_price, latest_valid))
-        
-        anyone_acted = False
-        if current_epoch < self.bootstrap_epoch:
-            anyone_acted = True
-            return anyone_acted, seleted_advancer
-
-
-        total_tx_submitted = 0
-        total_redeem_submitted = 0
-        total_coupoun_bidders = 0
-        random.shuffle(self.agents)
-
-        tx_hashes = []
-
-        is_pgl_op = self.pangolin.operational()
-
-        # try to redeem any outstanding coupons here first to better
-        if latest_price > 1.0 and total_coupons > 0:
-            for agent_num, a in enumerate(self.agents):
-                tr = self.dao.contract.caller({'from' : a.address, 'gas': 100000}).totalRedeemable()
-                if tr == 0:
-                    break
-                
-                if self.agent_coupons[a.address] > 0 and tr >= self.agent_coupons[a.address]:
-                    self.dao.get_coupon_expirirations(a)
-                    if len(a.coupon_expirys) == 0:
-                        #logger.info("ERROR WITH EXIPRIATION LIST")
-                        continue
-                    else:
-                        # if agent has coupons                    
-                        logger.info("COUPON EXP: Agent {}, exp_epochs: {}".format(a.address, json.dumps(a.coupon_expirys)))
-
-                        a.redeem_count += 1
-                        tried_idx = []
-                        for c_idx, c_exp in enumerate(a.coupon_expirys):
-                            try:
-                                redeem_tx_hash = self.dao.redeem(a, c_exp)
-                                total_redeem_submitted += 1
-                                providerAvax.make_request("avax.issueBlock", {})
-                                receipt = w3.eth.waitForTransactionReceipt(redeem_tx_hash, poll_latency=tx_pool_latency)
-                                tx_hashes.append({'type': 'redeem', 'hash': redeem_tx_hash})
-                            except Exception as inst:
-                                logger.info({"agent": a.address, "error": inst, "action": "redeem", "exact_expiry": c_exp})
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1184,26 +796,6 @@ class Model:
             start_tx_count = a.next_tx_count
             commitment = random.random() * 0.1
 
-            if portion_dedusted(a.usdc, commitment) > 0 and is_pgl_op:
-                options.append("buy")
-            if portion_dedusted(a.xsd, commitment) > 0 and is_pgl_op:
-                options.append("sell")
-            '''
-            TODO: CURRENTLY NO INCENTIVE TO BOND INTO LP OR DAO (EXCEPT FOR VOTING, MAY USE THIS TO DISTRUBTION EXPANSIONARY PROFITS)
-            if a.xsd > 0:
-                options.append("bond")
-            if a.xsds > 0:
-                options.append("unbond")
-            if a.coupons > 0 and epoch_start_price > 1.0:
-                options.append("redeem")
-            '''
-            if usdc_b >= self.min_usdc_balance and portion_dedusted(a.xsd, commitment) >= Balance.from_tokens(1, xSD['decimals']) and self.dao.has_coupon_bid():
-                options.append("coupon_bid")
-            if portion_dedusted(a.usdc, commitment) > 0 and portion_dedusted(a.xsd, commitment) > 0:
-                options.append("provide_liquidity")
-            if a.lp > 0:
-                options.append("remove_liquidity")
-                                
             if len(options) > 0:
                 # We can act
 
@@ -1217,7 +809,7 @@ class Model:
                         advance, provide_liquidity, remove_liquidity, buy, sell, coupon_bid, redeem, 
                 '''
         
-                strategy = a.get_strategy(w3.eth.get_block('latest')["number"], self.pangolin.xsd_price(), dao_xsd_supply, total_coupons, self.agent_coupons[a.address])
+                strategy = a.get_strategy(w3.eth.get_block('latest')["number"])
                 
                 weights = [strategy[o] for o in options]
                 
@@ -1228,161 +820,10 @@ class Model:
                 
                 
                 if action == "buy":
-                    # this will limit the size of orders avaialble
-                    (usdc_b, xsd_b) = self.pangolin.getTokenBalance()
-                    if xsd_b > 0 and usdc_b > 0:
-                        usdc_in = portion_dedusted(
-                            min(a.usdc, xsd_b.to_decimals(USDC['decimals'])),
-                            commitment
-                        )
-                    else:
-                        continue
-
-                    try:
-                        (max_amount, _) = self.pangolin_router.caller({'from' : a.address, 'gas': 100000}).getAmountsIn(
-                            usdc_in.to_wei(), 
-                            [self.usdc_token.address, self.xsd_token.address]
-                        )
-
-                        if max_amount == 1:
-                            normed_max_out =  (usdc_in * epoch_start_price)
-                            max_amount = normed_max_out.to_decimals(xSD['decimals'])
-
-                    except Exception as inst:
-                        # not enough on market to fill bid
-                        logger.info({"agent": a.address, "error": inst, "action": "buy", "amount_in": usdc_in})
-                        continue
-                    
-                    try:
-                        price = epoch_start_price
-                        #logger.info("Buy init {:.2f} xSD @ {:.2f} for {:.2f} USDC".format(usdc_in, price, max_amount))
-                        buy_tx = self.pangolin.buy(a, usdc_in, max_amount)
-                        tx_hashes.append({'type': 'buy', 'hash': buy_tx})
-                        #logger.debug("Buy end {:.2f} xSD @ {:.2f} for {:.2f} USDC".format(max_amount, price, usdc_in))
-                        
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "buy", "usdc_in": usdc_in, "max_amount": max_amount})
-                        continue
                 elif action == "sell":
-                    # this will limit the size of orders avaialble
-                    (usdc_b, xsd_b) = self.pangolin.getTokenBalance()
-                    if xsd_b > 0 and usdc_b > 0:
-                        xsd_out = min(
-                            portion_dedusted(
-                                a.xsd,
-                                commitment
-                            ),
-                            usdc_b.to_decimals(xSD['decimals'])
-                        )
-                    else:
-                        continue
-                    
-                    try:
-                        (_, max_amount) = self.pangolin_router.caller({'from' : a.address, 'gas': 100000}).getAmountsOut(
-                            xsd_out.to_wei(), 
-                            [self.xsd_token.address, self.usdc_token.address]
-                        )
-
-                        max_amount = reg_int(max_amount, USDC['decimals'])
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "sell", "amount_out": xsd_out})
-
-                    try:
-                        price = epoch_start_price
-                        #logger.info("Sell init {:.2f} xSD @ {:.2f} for {:.2f} USDC".format(xsd_out, price, max_amount))
-                        sell_tx = self.pangolin.sell(a, xsd_out, max_amount, seleted_advancer, usdc_b.to_decimals(xSD['decimals']))
-                        tx_hashes.append({'type': 'sell', 'hash': sell_tx})
-                        #logger.debug("Sell end {:.2f} xSD @ {:.2f} for {:.2f} USDC".format(xsd_out, price, usdc))
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "sell", "xsd_out": xsd_out, "max_amount": max_amount, "account_xsd": a.xsd})
                 elif action == "coupon_bid":
-                    '''
-                        TODO: NEED TO FIGURE OUT BETTER WAY TO TRACK THIS?
-                    '''
-                    xsd_at_risk = max(Balance.from_tokens(1, 18), portion_dedusted(a.xsd, commitment))
-                    rand_epoch_expiry = int(random.random() * self.max_coupon_exp)
-                    rand_max_coupons =  round(max(1.01, min(int(math.floor(random.random() * self.max_coupon_premium)) + 1, 10.0)) * xsd_at_risk)
-                    #rand_max_coupons =  round(max(1.01, int(math.floor(self.max_coupon_premium))) * xsd_at_risk)
-
-
-                    if rand_max_coupons < xsd_at_risk:
-                        xsd_at_risk = rand_max_coupons
-                    try:
-                        exact_expiry = rand_epoch_expiry + current_epoch
-                        #logger.info("Addr {} Bid to burn init {:.2f} xSD for {:.2f} coupons with expiry at epoch {}".format(a.address, xsd_at_risk, rand_max_coupons, exact_expiry))
-                        coupon_bid_tx_hash = self.dao.coupon_bid(a, rand_epoch_expiry, xsd_at_risk, rand_max_coupons)
-                
-                        #if (latest_valid == True):
-                        if (self.has_prev_advanced == False):
-                            providerAvax.make_request("avax.issueBlock", {})
-                            coup_adv_recp = w3.eth.waitForTransactionReceipt(coupon_bid_tx_hash, poll_latency=tx_pool_latency)
-                            is_advance_fail = False
-                            if coup_adv_recp["status"] == 0:
-                                is_advance_fail = True
-                                self.has_prev_advanced = False
-                            else:
-                                latest_price = Balance(self.oracle.caller({'from' : a.address, 'gas': 100000}).latestPrice()[0], xSD['decimals'])
-                                self.has_prev_advanced = True
-                            
-                            logger.info("Coupon Advance from {}, is_advance_fail: {}".format(a.address, is_advance_fail))
-
-                        
-                        tx_hashes.append({'type': 'coupon_bid', 'hash': coupon_bid_tx_hash})
-                        self.agent_coupons[a.address] = a.coupons
-                        #logger.info("Addr {} Bid to burn end {:.2f} xSD for {:.2f} coupons with expiry at epoch {}".format(a.address, xsd_at_risk, rand_max_coupons, exact_expiry))
-                        total_coupoun_bidders += 1
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "coupon_bid", "exact_expiry": exact_expiry, "xsd_at_risk": xsd_at_risk})
                 elif action == "provide_liquidity":
-                    min_xsd_needed = Balance(0, xSD['decimals'])
-                    usdc = Balance(0, USDC['decimals'])
-                    if float(a.xsd) < float(a.usdc):
-                        usdc = portion_dedusted(a.xsd.to_decimals(USDC['decimals']), commitment)
-                    else:
-                        usdc = portion_dedusted(a.usdc, commitment)
-                    
-                    try: 
-                        if revs[1] > 0:
-                            min_xsd_needed = reg_int(
-                                self.pangolin_router.caller(
-                                    {'from' : a.address, 'gas': 100000}
-                                ).quote(
-                                    usdc.to_wei(), revs[0], revs[1]
-                                ),
-                                xSD['decimals']
-                            )
-                            if min_xsd_needed == 0:
-                                price = epoch_start_price
-                                min_xsd_needed = (usdc / float(price)).to_decimals(xSD['decimals'])
-                        else:
-                            min_xsd_needed = usdc.to_decimals(xSD['decimals'])
-                            
-                        if min_xsd_needed == 0:
-                            continue
-                    
-                        #logger.info("Provide {:.2f} xSD (of {:.2f} xSD) and {:.2f} USDC".format(min_xsd_needed, a.xsd, usdc))
-                        plp_hash = self.pangolin.provide_liquidity(a, min_xsd_needed, usdc)
-                        tx_hashes.append({'type': 'provide_liquidity', 'hash': plp_hash})
-                    except Exception as inst:
-                        # SLENCE TRANSFER_FROM_FAILED ISSUES
-                        #logger.info({"agent": a.address, "error": inst, "action": "provide_liquidity", "min_xsd_needed": min_xsd_needed, "usdc": usdc})
-                        continue
                 elif action == "remove_liquidity":
-                    (usdc_b, xsd_b) = self.pangolin.getTokenBalance()
-                    lp = portion_dedusted(a.lp, commitment)
-                    total_lp = self.pangolin.total_lp()
-                    min_xsd_amount = max(Balance(0, xSD['decimals']), Balance(float(xsd_b) * float(lp / float(total_lp)), xSD['decimals']))
-                    min_usdc_amount = max(Balance(0, USDC['decimals']), Balance(float(usdc_b) * float(lp / float(total_lp)), USDC['decimals']))
-
-                    if not (min_xsd_amount > 0 and min_usdc_amount > 0):
-                        continue
-
-                    try:
-                        #logger.info("Stop providing {:.2f} xSD and {:.2f} USDC".format(min_xsd_amount, min_usdc_amount))
-                        rlp_hash = self.pangolin.remove_liquidity(a, lp, min_xsd_amount, min_usdc_amount)
-                        tx_hashes.append({'type': 'remove_liquidity', 'hash': rlp_hash})
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "remove_liquidity", "min_xsd_needed": min_xsd_amount, "usdc": min_usdc_amount})
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
@@ -1443,77 +884,13 @@ def main():
 
     #sys.exit()
 
-    logger.info('Root Addr: {}'.format(xSDS['addr']))
-
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
-    dao = w3.eth.contract(abi=DaoContract['abi'], address=xSDS["addr"])
-    logger.info('Dao is at: {}'.format(dao.address))
-
-    '''
-    for acc in w3.eth.accounts[:max_accounts]:
-        logger.info("how many times assigned coupons for {}: {}".format(acc, dao.functions.getCouponsCurrentAssignedIndex(acc).call()))
-    '''
-    avg_auction_yields = []
-    for epoch in range(0, dao.caller().epoch()):
-        yields = dao.caller().getAvgYieldFilled(epoch)
-        tmp_yield = yields[0] / 10. ** xSD["decimals"]
-        if (tmp_yield > 0):
-            avg_auction_yields.append(tmp_yield)
-            logger.info(
-                "epoch: {}, avg yeild: {}".format(
-                    epoch, tmp_yield
-                )
-            )
-
-    avg_a_y = sum(avg_auction_yields) / float(len(avg_auction_yields))
-    logger.info("avg yield cross auctions: {}".format(avg_a_y))
-    sys.exit()
-    #'''
-    
-    '''
-
-    #logger.info("getTotalFilled at epoch 4: {}".format(dao.caller().getTotalFilled(10)))
-    earlies_active_epoch = dao.caller().getEarliestDeadAuctionEpoch()
-    baddr = dao.caller().getBestBidderFromEarliestActiveAuctionEpoch(earlies_active_epoch)
-    logger.info("getBestBidderFromEarliestActiveAuctionEpoch at epoch {}: {}".format(earlies_active_epoch, baddr))
-    exp = dao.caller().getCouponsAssignedAtEpoch(baddr, 0)
-
-    total_coupons = dao.caller().balanceOfCoupons(baddr, exp) / 10.**xSD["decimals"]
-    logger.info("total_coupons at exp epoch {}: {}".format(exp, total_coupons))
-
-    total_best_coupons = dao.caller().getSumofBestBidsAcrossCouponAuctions() / 10.**xSD["decimals"]
-    logger.info("total_best_coupons: {}".format(total_best_coupons))
-    tr = dao.caller().totalRedeemable() / 10.**xSD["decimals"]
-    logger.info("totalRedeemable: {}".format(tr))
-    sys.exit()
-    dao.functions.redeemCoupons(
-        exp,
-        dao.caller().balanceOfCoupons(baddr, exp)
-    ).transact({
-        'nonce': w3.eth.getTransactionCount(baddr, block_identifier=int(w3.eth.get_block('latest')["number"])),
-        'from' : baddr,
-        'gas': 8000000
-    })
-    #sys.exit()
-    '''
-
-    #print(dao.caller().oracle())
-    oracle = w3.eth.contract(abi=OracleContract['abi'], address=dao.caller().oracle())
-    logger.info("Oracle is at: {}".format(oracle.address))
-
-    pangolin = TokenProxy(w3.eth.contract(abi=PangolinPairContract['abi'], address=PGL["addr"]))
-    usdc = TokenProxy(w3.eth.contract(abi=USDCContract['abi'], address=USDC["addr"]))
-    
-    pangolin_router = w3.eth.contract(abi=PangolinRouterAbiContract['abi'], address=PGLRouter["addr"])
-    pangolin_token = w3.eth.contract(abi=PoolContract['abi'], address=PGLLP["addr"])
-
-    xsd = TokenProxy(w3.eth.contract(abi=DollarContract['abi'], address=dao.caller().dollar()))
-    logger.info(dao.caller().dollar())
+    options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=xSDS["addr"])
 
     # Make a model of the economy
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(dao, pangolin, usdc, pangolin_router, pangolin_token, xsd, oracle, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=True)
+    model = Model(options_exchange,  w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=True)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
