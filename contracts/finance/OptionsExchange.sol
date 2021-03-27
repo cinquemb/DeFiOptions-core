@@ -45,9 +45,17 @@ contract OptionsExchange is ManagedContract {
     CreditProvider private creditProvider;
     OptionTokenFactory private factory;
 
+
+    uint256[] private bookOwnerIndecies;
+    uint256 private _currentBookOwnerIndex;
+
     mapping(uint => OrderData) private orders;
     mapping(address => uint64[]) private book;
+    mapping(uint256 => address) private bookOwners;
+    mapping(address => uint256) private reverseBookOwners;
+
     mapping(address => mapping(string => uint64)) private index;
+
 
     mapping(string => address) private tokenAddress;
     mapping(string => uint64[]) private tokenIds;
@@ -205,6 +213,9 @@ contract OptionsExchange is ManagedContract {
             book[to].push(toOrd.id);
             index[to][symbol] = toOrd.id;
             tokenIds[symbol].push(toOrd.id);
+
+            checkAndTrackBookOwner(to);
+
         } else {
             orders[toOrd.id].holding = uint(orders[toOrd.id].holding).add(volume).toUint120();
         }
@@ -332,6 +343,35 @@ contract OptionsExchange is ManagedContract {
 
         return collateral > 0 ? uint(collateral) : 0;
     }
+
+    function calcRawCollateralShortage(address owner) public view returns (uint) {
+        // this represents negative exposure of owner on the exchange from their book
+        int collateral;
+        uint64[] memory ids = book[owner];
+
+        for (uint i = 0; i < ids.length; i++) {
+
+            OrderData memory ord = orders[ids[i]];
+
+            if (isValid(ord)) {
+                collateral = collateral.add(
+                    calcIntrinsicValue(ord).mul(
+                        int(ord.written).sub(int(ord.holding))
+                    )
+                ).add(int(calcCollateral(ord.upperVol, ord)));
+            }
+        }
+
+        uint bal = creditProvider.balanceOf(owner);
+        collateral = collateral.div(int(volumeBase));
+
+        int net = int(bal) - collateral;
+
+        if (net >= 0)
+            return 0;
+
+        return uint(net * -1);
+    }
     
     function calcCollateral(address owner) public view returns (uint) {
         
@@ -395,6 +435,58 @@ contract OptionsExchange is ManagedContract {
         address addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
         return addr;
+    }
+
+    function incrementBookOwnerIndex() private {
+        _currentBookOwnerIndex++;
+    }
+
+    function getCurrentBookOwnerIndex() public view returns (uint256) {
+        return _currentBookOwnerIndex;
+    }
+
+    function checkAndTrackBookOwner(address owner) private returns (bool) {
+        if (book[owner].length > 0) {
+            // already in the book, dont track again;
+            return false;
+        } else {
+            // insert into book tracking;
+            uint256 b_idx = getCurrentBookOwnerIndex();
+            bookOwnerIndecies.push(b_idx);
+            bookOwners[b_idx] = owner;
+            reverseBookOwners[owner] = b_idx;
+            incrementBookOwnerIndex();
+            return true;
+        }
+    }
+
+    function untrackBookOwner(address owner) private returns (bool) {
+        if (book[owner].length == 0) {
+            // not in book tracking;
+            return false;
+        } else {
+            // remove from book tracking;
+            uint256 b_idx = reverseBookOwners[owner];
+            Arrays.removeItem(bookOwnerIndecies, b_idx);
+            delete bookOwners[b_idx];
+            delete reverseBookOwners[owner];
+            return true;
+        }
+    }
+
+    function getOptionsExchangeTotalExposure() public view returns (uint256) {
+        /* 
+            TODO: NEED TO SEE HOW GAS USAGE IS FOR THIS WHEN SIMULATING
+
+            O(n*m)
+        */
+        uint totalShortage = 0;
+        for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
+            uint256 b_idx = bookOwnerIndecies[o_idx];
+            uint shortage = calcRawCollateralShortage(bookOwners[b_idx]);
+            totalShortage += shortage;
+        }
+        return totalShortage;
     }
 
     function getBook(address owner)
@@ -522,6 +614,8 @@ contract OptionsExchange is ManagedContract {
             book[msg.sender].push(ord.id);
             index[msg.sender][symbol] = ord.id;
             tokenIds[symbol].push(ord.id);
+
+            checkAndTrackBookOwner(msg.sender);
         }
 
         address tk = tokenAddress[symbol];
@@ -643,6 +737,10 @@ contract OptionsExchange is ManagedContract {
         Arrays.removeItem(book[owner], id);
         delete index[owner][symbol];
         delete orders[id];
+
+        if (book[owner].length == 0) {
+            untrackBookOwner(owner);
+        } 
     }
 
     function getOptionSymbol(OrderData memory ord) private view returns (string memory symbol) {
