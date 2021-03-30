@@ -677,7 +677,6 @@ class OptionsExchange:
         pass
 
 class CreditProvider:
-
     def __init__(self, contract, xsd, **kwargs):
         pass
 
@@ -769,25 +768,14 @@ class Model:
         self.xsd_token.update()
         self.pangolin.update()
 
-        #randomly have an agent advance the epoch
+        #randomly have an agent for maintainence tasks
         seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
-
+        '''
         if self.has_prev_advanced:
             provider.make_request("debug_increaseTime", [7200])   
+        '''
         
         logger.info("Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
-
-        '''
-
-            Stuff related to making a deposit
-            Stuff related to writing (after deposit)
-            Stuff related to writing (from balance)
-            Stuff related to liquidating (who is usually expected to perform this? the writer or the buyer depending on which side of the winning trade they're on?)
-            Stuff related to making a withdrawal
-            Whether to liquidate position early if short collateral (only available to writer).
-
-        '''
-
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -800,13 +788,15 @@ class Model:
                 # We can act
 
                 '''
+                    LATER:
+                        advance: to do maintainence functions, payout from dynamic collateral and/or gov token
+                    
                     TODO:
-                        bond, unbond
-                        
+                        deposit, withdraw, redeem, burn, write, buy, sell, balance_write, liquidate                        
                     TOTEST:
-                        bond, unbond
+                        deposit, withdraw, redeem, burn, write, buy, sell, balance_write, liquidate
                     WORKS:
-                        advance, provide_liquidity, remove_liquidity, buy, sell, coupon_bid, redeem, 
+                        
                 '''
         
                 strategy = a.get_strategy(w3.eth.get_block('latest')["number"])
@@ -819,11 +809,14 @@ class Model:
                 # action will the agent do?
                 
                 
-                if action == "buy":
-                elif action == "sell":
-                elif action == "coupon_bid":
-                elif action == "provide_liquidity":
-                elif action == "remove_liquidity":
+                if action == "deposit":
+                elif action == "withdraw":
+                elif action == "redeem":
+                elif action == "burn":
+                elif action == "write":
+                elif action == "buy":
+                elif action == "balance_write":
+                elif action == "liquidate":
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
@@ -849,13 +842,13 @@ class Model:
         providerAvax.make_request("avax.issueBlock", {})
         tx_hashes_good = 0
         tx_fails = []
-        '''
+        #'''
         for tmp_tx_hash in tx_hashes:
             receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
             tx_hashes_good += receipt["status"]
             if receipt["status"] == 0:
                 tx_fails.append(tmp_tx_hash['type'])
-        '''
+        #'''
 
         logger.info("total tx: {}, successful tx: {}, tx fails: {}".format(
                 len(tx_hashes), tx_hashes_good, json.dumps(tx_fails)
@@ -876,9 +869,6 @@ def main():
         #logger.info(provider.make_request("debug_increaseTime", [0]))
 
         #logger.info(provider.make_request("debug_increaseTime", [7201+2400]))
-        #data = providerAvax.make_request("avax.incrementTimeTx", {"time": 7201})
-        #logger.info("After Reset Clock: {}, {}".format(w3.eth.get_block('latest')['timestamp'], json.dumps(data)))
-        #time.sleep(100)
         
     logger.info(w3.eth.get_block('latest')["number"])
 
