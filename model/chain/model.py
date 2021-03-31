@@ -102,6 +102,7 @@ AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.j
 CreditTokenContract = json.loads(open('./build/contracts/CreditToken.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
+OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 
 
@@ -673,12 +674,179 @@ class Agent:
         
 
 class OptionsExchange:
-    def __init__(self, contract, xsd, **kwargs):
-        pass
+    def __init__(self, contract, stablecoin_token, liquidity_pool, **kwargs):
+        self.contract = contract
+        self.stablecoin_token = stablecoin_token
+        self.liquidity_pool = liquidity_pool
+
+    def deposit(self, agent, amount):
+        '''
+            ERC20 stablecoin = ERC20(0x123...);
+            OptionsExchange exchange = OptionsExchange(0xABC...);
+
+            address to = 0x456...;
+            uint value = 100e18;
+            stablecoin.approve(address(exchange), value);
+            exchange.depositTokens(to, address(stablecoin), value);
+        '''
+        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+        tx = self.contract.functions.depositTokens(
+            agent.address,
+            self.stablecoin_token.address,
+            amount.to_wei()
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
+
+    def withwdraw(self, agent, amount):
+        '''
+            uint value = 50e18;
+            exchange.withdrawTokens(value);
+        '''
+        tx = self.contract.functions.withwdraw(
+            amount.to_wei()
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
+
+    def write(self, agent, feed_address, amount, volume_base, strike_price, maturity):
+        '''
+            uint id = exchange.writeOptions(
+                eth_usd_feed, 
+                10 * volumeBase, 
+                OptionsExchange.OptionType.CALL, 
+                strikePrice, 
+                maturity
+            );
+        '''
+        tx = self.contract.functions.writeOptions(
+            feed_address,
+            amount,
+            volume_base.to_wei()
+            strike_price,
+            maturity,
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
+
+    def balance_write(self, agent):
+        '''
+            pool.receivePayment()`
+            write
+        '''
+        tx = self.liquidity_pool.functions.receivePayment(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        tx1 = self.write(agent)
+
+        return [tx, tx1]
+
+
+    def burn(self, agent, option_token_address, token_amount):
+         '''
+        uint amount = token_amount * volumeBase;
+        token.burn(amount);
+        '''
+        option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
+
+        tx = option_token.contract.functions.burn(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
+
+    def liquidate(self, agent):
+        '''
+            exchange.liquidateOptions()
+        '''
+        tx = self.contract.functions.liquidateOptions(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
 
 class CreditProvider:
-    def __init__(self, contract, xsd, **kwargs):
+    def __init__(self, contract, stablecoin_token, **kwargs):
+        self.contract = contract
+        self.stablecoin_token = stablecoin_token
+
+class LiquidityPool:
+    def __init__(self, contract, stablecoin_token, **kwargs):
+        self.contract = contract
+        self.stablecoin_token = stablecoin_token
+
+    def get_holders_index(self, agent):
         pass
+
+    def redeem(self, agent, holders_index):
+        '''
+            pool.redeem()
+        '''
+        self.contract.functions.redeem(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        pass
+
+    def buy(self, agent):
+        '''
+            stablecoin.approve(address(pool), price * volume / volumeBase);
+            pool.buy(symbol, price, volume, address(stablecoin));
+        '''
+        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+        self.contract.functions.buy(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+    def sell(self, agent, option_token_address):
+        '''
+            option_token.approve(address(pool), price * volume / volumeBase)`;
+            pool.sell(symbol, price, volume)`;
+        '''
+        option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
+        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+
+        self.contract.functions.sell(
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })        
 
 class Model:
     """
@@ -792,7 +960,7 @@ class Model:
                         advance: to do maintainence functions, payout from dynamic collateral and/or gov token
                     
                     TODO:
-                        deposit, withdraw, redeem, burn, write, buy, sell, balance_write, liquidate                        
+                        redeem, burn, buy, sell, balance_write, liquidate                        
                     TOTEST:
                         deposit, withdraw, redeem, burn, write, buy, sell, balance_write, liquidate
                     WORKS:
