@@ -516,6 +516,10 @@ contract OptionsExchange is ManagedContract {
         }
     }
 
+    function getBookIds(address owner) external view returns (uint64[] memory ids) {
+        return book[owner];
+    }
+
     function getBookLength() external view returns (uint len) {
         
         for (uint i = 0; i < serial; i++) {

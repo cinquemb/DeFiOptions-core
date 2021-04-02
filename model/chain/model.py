@@ -84,18 +84,11 @@ for contract in [PGL, USDC, PGLLP, PGLRouter]:
     logger.info('\t'+contract["addr"])
 
 
-# dao (from Deploy current Implementation on testnet)
-xSD = {
-  "addr": '',
-  "decimals": 18,
-  "symbol": 'xSD',
-}
-
 # token (from Deploy Root on testnet)
-xSDS = {
+StableCoin = {
   "addr": '',
   "decimals": 18,
-  "symbol": 'xSDS',
+  "symbol": 'StableCoin',
 }
 
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
@@ -105,12 +98,13 @@ OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.jso
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 
+ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
+
 
 def get_addr_from_contract(contract):
     return contract["networks"][str(sorted(map(int,contract["networks"].keys()))[0])]["address"]
 
-xSD['addr'] = get_addr_from_contract(DaoContract)
-xSDS['addr'] = get_addr_from_contract(TokenContract)
+StableCoin['addr'] = get_addr_from_contract(ERC20StableCoinContract)
 
 def get_nonce(agent):
     current_block = int(w3.eth.get_block('latest')["number"])
@@ -123,8 +117,6 @@ def get_nonce(agent):
     else:
         agent.next_tx_count += 1
         agent.seen_block[current_block] = True
-
-    provider.make_request("debug_increaseTime", [1])
 
     return agent.next_tx_count
 
@@ -719,7 +711,7 @@ class OptionsExchange:
 
         return tx
 
-    def write(self, agent, feed_address, amount, volume_base, strike_price, maturity):
+    def write(self, agent, feed_address, amount, strike_price, maturity):
         '''
             uint id = exchange.writeOptions(
                 eth_usd_feed, 
@@ -732,7 +724,7 @@ class OptionsExchange:
         tx = self.contract.functions.writeOptions(
             feed_address,
             amount,
-            volume_base.to_wei()
+            StableCoin['decimals'],
             strike_price,
             maturity,
         ).transact({
@@ -744,23 +736,6 @@ class OptionsExchange:
 
         return tx
 
-    def balance_write(self, agent):
-        '''
-            pool.receivePayment()`
-            write
-        '''
-        tx = self.liquidity_pool.functions.receivePayment(
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-        tx1 = self.write(agent)
-
-        return [tx, tx1]
-
-
     def burn(self, agent, option_token_address, token_amount):
          '''
         uint amount = token_amount * volumeBase;
@@ -769,6 +744,7 @@ class OptionsExchange:
         option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
 
         tx = option_token.contract.functions.burn(
+            Balance(token_amount, StableCoin['decimals']).to_wei()
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -778,18 +754,21 @@ class OptionsExchange:
 
         return tx
 
-    def liquidate(self, agent):
+    def get_book_ids(self, agent):
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getBookIds(agent.address)
+
+    def liquidate(self, agent, _id):
         '''
             exchange.liquidateOptions()
         '''
         tx = self.contract.functions.liquidateOptions(
+            _id
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
             'gas': 500000,
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
-
         return tx
 
 class CreditProvider:
@@ -818,13 +797,17 @@ class LiquidityPool:
         })
         pass
 
-    def buy(self, agent):
+    def buy(self, agent, symbol, price, volume):
         '''
             stablecoin.approve(address(pool), price * volume / volumeBase);
             pool.buy(symbol, price, volume, address(stablecoin));
         '''
         self.stablecoin_token.ensure_approved(agent, self.contract.address)
         self.contract.functions.buy(
+            symbol,
+            price,
+            volume,
+            self.stablecoin_token.contract.address
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -832,7 +815,7 @@ class LiquidityPool:
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
 
-    def sell(self, agent, option_token_address):
+    def sell(self, agent, symbol, price, volume, option_token_address):
         '''
             option_token.approve(address(pool), price * volume / volumeBase)`;
             pool.sell(symbol, price, volume)`;
@@ -841,6 +824,9 @@ class LiquidityPool:
         self.stablecoin_token.ensure_approved(agent, self.contract.address)
 
         self.contract.functions.sell(
+            symbol,
+            price,
+            volume
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -936,13 +922,6 @@ class Model:
         self.xsd_token.update()
         self.pangolin.update()
 
-        #randomly have an agent for maintainence tasks
-        seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
-        '''
-        if self.has_prev_advanced:
-            provider.make_request("debug_increaseTime", [7200])   
-        '''
-        
         logger.info("Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
 
         for agent_num, a in enumerate(self.agents):            
@@ -960,9 +939,9 @@ class Model:
                         advance: to do maintainence functions, payout from dynamic collateral and/or gov token
                     
                     TODO:
-                        redeem, burn, buy, sell, balance_write, liquidate                        
+                        redeem                        
                     TOTEST:
-                        deposit, withdraw, redeem, burn, write, buy, sell, balance_write, liquidate
+                        deposit, withdraw, redeem, burn, write, buy, sell, liquidate
                     WORKS:
                         
                 '''
@@ -983,7 +962,6 @@ class Model:
                 elif action == "burn":
                 elif action == "write":
                 elif action == "buy":
-                elif action == "balance_write":
                 elif action == "liquidate":
                 else:
                     raise RuntimeError("Bad action: " + action)
