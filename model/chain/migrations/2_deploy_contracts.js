@@ -67,12 +67,15 @@ module.exports = async function(deployer) {
   
   /*
       const roundIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-  const answers = [20e8, 25e8, 28e8, 18e8, 19e8, 12e8, 12e8, 13e8, 18e8, 20e8];
-  const prices = [20e18, 25e18, 28e18, 18e18, 19e18, 12e18, 12e18, 13e18, 18e18, 20e18];
+  const answers = [20e18, 25e18, 28e18, 18e18, 19e18, 12e18, 12e18, 13e18, 18e18, 20e18];
         updatedAts = 
             [1 days, 2 days, 3 days, 4 days, 5 days, 6 days, 7 days, 8 days, 9 days, 10 days];
 
-  AggregatorV3Mock mock = new AggregatorV3Mock(roundIds, answers, updatedAts);
+  AggregatorV3Mock mock = new AggregatorV3Mock();
+
+    await mock.setRoundIds(roundIds);
+    await mock.setAnswers(answers);
+    await mock.setUpdatedAts(updatedAts);
 
       const await pool.setParameters(
         spread,
@@ -84,9 +87,6 @@ module.exports = async function(deployer) {
       settings.setAllowedToken(address(erc20), 1, 1);
       settings.setDefaultUdlFeed(address(feed));
       settings.setUdlFeed(address(feed), 1);
-
-      bob = new PoolTrader(address(erc20), address(exchange), address(pool));
-      alice = new PoolTrader(address(erc20), address(exchange), address(pool));
 
       feed.setPrice(ethInitialPrice);
       time.setFixedTime(0);

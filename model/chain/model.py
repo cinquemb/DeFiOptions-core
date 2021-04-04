@@ -95,9 +95,10 @@ AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.j
 CreditTokenContract = json.loads(open('./build/contracts/CreditToken.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
+USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read())
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
-
+LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPoolContract.json', 'r+').read())
 ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
 
 
@@ -504,12 +505,12 @@ class Agent:
     Represents an agent. Tracks all the agent's balances.
     """
     
-    def __init__(self, dao, pangolin_pair, xsd_token, usdc_token, **kwargs):
+    def __init__(self, dao, pangolin_pair, xsd_token, usdt_token, **kwargs):
  
         # xSD TokenProxy
         self.xsd_token = xsd_token
-        # USDC TokenProxy 
-        self.usdc_token = usdc_token
+        # USDT TokenProxy 
+        self.usdt_token = usdt_token
         # xSDS (Dao share) balance
         self.xsds = Balance(0, xSDS["decimals"])
         # avax balance
@@ -520,7 +521,7 @@ class Agent:
         # Coupon premium part by expiration epoch
         self.premium_coupons = collections.defaultdict(float)
         
-        # What's our max faith in the system in USDC?
+        # What's our max faith in the system in USDT?
         self.max_faith = kwargs.get("max_faith", 0.0)
         # And our min faith
         self.min_faith = kwargs.get("min_faith", 0.0)
@@ -549,15 +550,15 @@ class Agent:
         self.current_block = 0
 
         if kwargs.get("is_mint", False):
-            # need to mint USDC to the wallets for each agent
-            start_usdc_formatted = kwargs.get("starting_usdc", Balance(0, USDC["decimals"]))
-            tx_hash = self.usdc_token.contract.functions.mint(
-                self.address, start_usdc_formatted.to_wei()
+            # need to mint USDT to the wallets for each agent
+            start_usdt_formatted = kwargs.get("starting_usdt", Balance(0, USDT["decimals"]))
+            tx_hash = self.usdt_token.contract.functions.mint(
+                self.address, start_usdt_formatted.to_wei()
             ).transact({
                 'nonce': get_nonce(self),
                 'from' : self.address,
                 'gas': 500000,
-                'gasPrice': Web3.toWei(470, 'gwei'),
+                'gasPrice': Web3.toWei(225, 'gwei'),
             })
             time.sleep(1.1)
             w3.eth.waitForTransactionReceipt(tx_hash, poll_latency=tx_pool_latency)
@@ -565,16 +566,16 @@ class Agent:
     @property
     def xsd(self):
         """
-        Get the current balance in USDC from the TokenProxy.
+        Get the current balance in USDT from the TokenProxy.
         """
         return self.xsd_token[self]
     
     @property
-    def usdc(self):
+    def usdt(self):
         """
-        Get the current balance in USDC from the TokenProxy.
+        Get the current balance in USDT from the TokenProxy.
         """
-        return self.usdc_token[self]
+        return self.usdt_token[self]
 
     @property
     def lp(self):
@@ -594,11 +595,11 @@ class Agent:
         """
         Turn into a readable string summary.
         """
-        return "Agent(xSD={:.2f}, usdc={:.2f}, avax={}, lp={}, coupons={:.2f})".format(
-            self.xsd, self.usdc, self.avax, self.lp, self.coupons)
+        return "Agent(xSD={:.2f}, usdt={:.2f}, avax={}, lp={}, coupons={:.2f})".format(
+            self.xsd, self.usdt, self.avax, self.lp, self.coupons)
 
         
-    def get_strategy(self, block, price, total_supply, total_coupons, agent_coupons):
+    def get_strategy(self, current_timestamp, price, total_supply, total_coupons, agent_coupons):
         """
         Get weights, as a dict from action to float, as a function of the price.
         """
@@ -634,7 +635,7 @@ class Agent:
        
         if self.use_faith:
             # Vary our strategy based on how much xSD we think ought to exist
-            if price * total_supply > self.get_faith(block, price, total_supply):
+            if price * total_supply > self.get_faith(current_timestamp, price, total_supply):
                 # There is too much xSD, so we want to sell
                 strategy["sell"] = 10.0 if ((agent_coupons> 0) and (price > 1.0)) else 2.0
             else:
@@ -643,9 +644,9 @@ class Agent:
         
         return strategy
         
-    def get_faith(self, block, price, total_supply):
+    def get_faith(self, current_timestamp, price, total_supply):
         """
-        Get the total faith in xSD that this agent has, in USDC.
+        Get the total faith in xSD that this agent has, in USDT.
         
         If the market cap is over the faith, the agent thinks the system is
         over-valued. If the market cap is under the faith, the agent thinks the
@@ -660,7 +661,7 @@ class Agent:
         
         center_faith = (self.max_faith + self.min_faith) / 2
         swing_faith = (self.max_faith - self.min_faith) / 2
-        faith = center_faith + swing_faith * math.sin(block * (2 * math.pi / 50))
+        faith = center_faith + swing_faith * math.sin(current_timestamp * (2 * math.pi / 5000000))
         
         return faith
         
@@ -776,7 +777,7 @@ class CreditProvider:
         self.contract = contract
         self.stablecoin_token = stablecoin_token
 
-class LiquidityPool:
+class LinearLiquidityPool:
     def __init__(self, contract, stablecoin_token, **kwargs):
         self.contract = contract
         self.stablecoin_token = stablecoin_token
@@ -839,24 +840,15 @@ class Model:
     Full model of the economy.
     """
     
-    def __init__(self, options_exchange, agents, **kwargs):
+    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
 
         self.agents = []
-        self.usdc_token = usdc
-        self.pangolin_router = pangolin_router
-        self.xsd_token = xsd
-        self.max_avax = Balance.from_tokens(1000000, 18)
-        self.max_usdc = self.usdc_token.from_tokens(100000)
-        self.bootstrap_epoch = 2
-        self.max_coupon_exp = 131400
-        self.max_coupon_premium = 10
-        self.min_usdc_balance = self.usdc_token.from_tokens(1)
-        self.agent_coupons = {x: 0 for x in agents}
-        self.has_prev_advanced = True
-
+        self.options_exchange = OptionsExchange(options_exchange, **kwargs)
+        self.credit_provider = CreditProvider(credit_provider, **kwargs)
+        self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, **kwargs))
 
         is_mint = is_try_model_mine
         if w3.eth.get_block('latest')["number"] == block_offset:
@@ -875,15 +867,7 @@ class Model:
             self.agents.append(agent)
 
         # Update caches to current chain state
-        self.usdc_token.update(is_init_agents=self.agents)
-        self.xsd_token.update(is_init_agents=self.agents)
-        self.pangolin.update(is_init_agents=self.agents)
-
-        for i in range(len(agents)):
-            if not is_mint:
-                self.agent_coupons[self.agents[i].address] = self.agents[i].coupons
-                self.dao.get_coupon_expirirations(self.agents[i])
-            logger.info(self.agents[i])
+        self.usdt_token.update(is_init_agents=self.agents)
 
         #sys.exit()
         
@@ -918,9 +902,7 @@ class Model:
         Returns True if anyone could act.
         """
         # Update caches to current chain state for all the tokens
-        self.usdc_token.update()
-        self.xsd_token.update()
-        self.pangolin.update()
+        self.usdt_token.update()
 
         logger.info("Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
 
@@ -1010,23 +992,18 @@ def main():
     
     logging.basicConfig(level=logging.INFO)
 
-    if w3.eth.get_block('latest')["number"] == block_offset:
-        logger.info("Start Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
-        #logger.info(provider.make_request("debug_increaseTime", [0]))
-
-        #logger.info(provider.make_request("debug_increaseTime", [7201+2400]))
-        
-    logger.info(w3.eth.get_block('latest')["number"])
-
-    #sys.exit()
-
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=xSDS["addr"])
+    usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
+    credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=xSDS["addr"])
+    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=xSDS["addr"])
+
+
 
     # Make a model of the economy
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange,  w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=True)
+    model = Model(options_exchange, credit_provider, liquidity_pool, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=True)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
