@@ -25,6 +25,7 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private callers;
 
     address private ctAddr;
+    uint private _totalBalance;
     uint private _totalTokenStock;
     uint private _totalAccruedFees;
 
@@ -149,6 +150,7 @@ contract CreditProvider is ManagedContract {
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
             balances[owner] = balances[owner].add(v);
+            _totalBalance.add(v);
         }
     }
     
@@ -156,6 +158,11 @@ contract CreditProvider is ManagedContract {
         
         require(balances[owner] >= value, "insufficient balance");
         balances[owner] = balances[owner].sub(value);
+        _totalBalance.sub(v);
+    }
+
+    function getTotalBalance() public view returns (uint) {
+        return _totalBalance;
     }
 
     function burnDebtAndTransferTokens(address to, uint value) private {
