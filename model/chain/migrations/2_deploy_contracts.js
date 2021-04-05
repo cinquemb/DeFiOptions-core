@@ -61,36 +61,4 @@ module.exports = async function(deployer) {
     [],
     []
   );
-
-
-
-  
-  /*
-      const roundIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-  const answers = [20e18, 25e18, 28e18, 18e18, 19e18, 12e18, 12e18, 13e18, 18e18, 20e18];
-        updatedAts = 
-            [1 days, 2 days, 3 days, 4 days, 5 days, 6 days, 7 days, 8 days, 9 days, 10 days];
-
-  AggregatorV3Mock mock = new AggregatorV3Mock();
-
-    await mock.setRoundIds(roundIds);
-    await mock.setAnswers(answers);
-    await mock.setUpdatedAts(updatedAts);
-
-      const await pool.setParameters(
-        spread,
-        reserveRatio,
-        "90 days"
-    );
-      erc20 = new ERC20Mock();
-      settings.setOwner(address(this));
-      settings.setAllowedToken(address(erc20), 1, 1);
-      settings.setDefaultUdlFeed(address(feed));
-      settings.setUdlFeed(address(feed), 1);
-
-      feed.setPrice(ethInitialPrice);
-      time.setFixedTime(0);
-
-  */
-
 };

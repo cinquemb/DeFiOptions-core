@@ -92,6 +92,7 @@ StableCoin = {
 }
 
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
+ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeedContract.json', 'r+').read())
 CreditTokenContract = json.loads(open('./build/contracts/CreditToken.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
@@ -999,6 +1000,64 @@ def main():
     linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=xSDS["addr"])
 
 
+    '''
+        TODO: 
+            init feeds for BTCUSDAgg.address and ETHUSDAgg.address
+                - with AggregatorV3Mock
+                - historcal data
+                - normalize timestamps to present time and project out into future
+    '''
+
+                # 
+
+    btcusd_historical_ohlc = []
+
+    with open('data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
+        btcusd_historical_ohlc = json.loads(btcusd_file.read())["chart"]
+    
+
+    daily_period = 60 * 60 * 24
+    current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
+    btcusd_round_ids = range(len(btcusd_historical_ohlc))
+    btcusd_answers = [float(x["close"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
+    btcusd_updated_ats = [current_timestamp + (x * daily_period) for x in btcusd_round_ids]
+    btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=xSDS["addr"])
+
+    btcusd_agg.setRoundIds(btcusd_round_ids);
+    btcusd_agg.setAnswers(btcusd_answers);
+    btcusd_agg.setUpdatedAts(btcusd_updated_ats);
+
+
+    '''
+        TODO:
+            - set up pool parameters
+
+            const await pool.setParameters(
+                spread,
+                reserveRatio,
+                "90 days" //unix timestamp in that represents 90 days in the future
+            );
+    '''
+
+    '''
+        TODO:
+            - set up protical settings
+
+            erc20 = new ERC20Mock();
+            settings.setOwner(address(this)); //address(this) == linear_liquidity_pool.address
+            settings.setAllowedToken(address(erc20), 1, 1);
+            settings.setDefaultUdlFeed(address(feed));
+            settings.setUdlFeed(address(feed), 1);
+    '''
+
+
+    '''
+        TODO:
+            - setup feed and time settings
+
+            feed.setPrice(ethInitialPrice);
+            time.setFixedTime(0); // supply the existing block timestamp at this point
+    '''
 
     # Make a model of the economy
     start_init = time.time()
