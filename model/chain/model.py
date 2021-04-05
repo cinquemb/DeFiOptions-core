@@ -33,11 +33,6 @@ logger = logging.getLogger(__name__)
 #provider = Web3.HTTPProvider('http://127.0.0.1:7545/ext/bc/C/rpc', request_kwargs={"timeout": 60*300})
 provider = Web3.WebsocketProvider('ws://127.0.0.1:9545/ext/bc/C/ws', websocket_timeout=60*300)
 
-'''
-curl -X POST --data '{ "jsonrpc":"2.0", "id" :1, "method" :"platform.incrementTimeTx", "params" :{ "time": 10000 }}' -H 'content-type:application/json;' http://127.0.0.1:9545/ext/P
-
-curl -X POST --data '{ "jsonrpc":"2.0", "id" :1, "method" :"evm.increaseTime", "params" : [0]}' -H 'content-type:application/json;' http://127.0.0.1:9545/ext/bc/C/rpc
-'''
 providerAvax = Web3.HTTPProvider('http://127.0.0.1:9545/ext/bc/C/avax', request_kwargs={"timeout": 60*300})
 w3 = Web3(provider)
 from web3.middleware import geth_poa_middleware
@@ -48,37 +43,54 @@ logger.info(w3.eth.blockNumber)
 logger.info(w3.clientVersion)
 #sys.exit()
 
-# from (Pangolin pair is at:)
-PGL = {
-  "addr": '',
-  "decimals": 18,
-  "symbol": 'PGL',
-  "deploy_slug": "Pangolin pair is at: "
+
+TPRO = {
+    "addr": '',
+    "deploy_slug": "timeProvider is at: "
 }
 
-# USDC is at: 
-USDC = {
+EXCHG = {
+    "addr": '',
+    "deploy_slug": "exchange is at: "
+}
+
+CREDPRO = {
+    "addr": '',
+    "deploy_slug": "creditProvider is at: "
+}
+
+STG = {
+    "addr": '',
+    "deploy_slug": "settings is at: "
+}
+
+# USE FROM XSD SIMULATION
+USDT = {
   "addr": '',
   "decimals": 6,
-  "symbol": 'USDC',
-  "deploy_slug": "USDC is at: "
+  "symbol": 'USDT',
 }
 
-#Pool is at: 
-PGLLP = {
+LLP = {
+    "addr": '',
+    "deploy_slug": "pool is at: "
+}
+
+BTCUSDAgg = {
+  "addr": '',
+  "decimals": 18,
+  "symbol": 'BTCUSD',
+  "deploy_slug": "BTCUSDAgg is at: "
+}
+
+BTCUSDc = {
     "addr": '',
     "decimals": 18,
-    "deploy_slug": "Pool is at: "
+    "symbol": 'BTCUSDc',
+    "deploy_slug": "BTCUSDMockFeed is at: "
 }
 
-#PangolinRouter is at: 
-PGLRouter = {
-    "addr": "",
-    "decimals": 12,
-    "deploy_slug": "PangolinRouter is at: "
-}
-
-for contract in [PGL, USDC, PGLLP, PGLRouter]:
+for contract in [BTCUSDc, BTCUSDAgg, LLP, STG, CREDPRO, EXCHG, TPRO]:
     logger.info(contract["deploy_slug"])
     contract["addr"] = deploy_data.split(contract["deploy_slug"])[1].split('\n')[0]
     logger.info('\t'+contract["addr"])
@@ -93,7 +105,6 @@ StableCoin = {
 
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
 ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeedContract.json', 'r+').read())
-CreditTokenContract = json.loads(open('./build/contracts/CreditToken.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
 USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read())
@@ -101,6 +112,7 @@ OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+'
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPoolContract.json', 'r+').read())
 ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
+TimeProviderMockContract = json.loads(open('./build/contracts/TimeProviderMock.json', 'r+').read())
 
 
 def get_addr_from_contract(contract):
@@ -879,15 +891,15 @@ class Model:
         """
         
         if header:
-            stream.write("#block\tepoch\tprice\tsupply\tcoupons\tfaith\n")
+            stream.write("#block\twritten\tbought\texposure\tcredit supply\n")#\tfaith\n")
         
         stream.write('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
-            w3.eth.get_block('latest')["number"],
-            self.dao.epoch(seleted_advancer.address),
-            self.pangolin.xsd_price(),
-            self.dao.xsd_supply(),
-            self.dao.total_coupons(),
-            self.get_overall_faith())
+                w3.eth.get_block('latest')["number"],
+                self.dao.epoch(seleted_advancer.address),
+                self.pangolin.xsd_price(),
+                self.dao.xsd_supply(),
+                self.options_exchange.getTotalBalance()
+            )
         )
        
     def get_overall_faith(self):
@@ -994,22 +1006,18 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
-    options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=xSDS["addr"])
+    options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
-    credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=xSDS["addr"])
-    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=xSDS["addr"])
+    credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
+    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=LLP["addr"])
+    time_provider = w3.eth.contract(abi=TimeProviderMockContract['abi'], address=TPRO['addr'])
+    protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
+    btcusd_chainling_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
 
 
     '''
-        TODO: 
-            init feeds for BTCUSDAgg.address and ETHUSDAgg.address
-                - with AggregatorV3Mock
-                - historcal data
-                - normalize timestamps to present time and project out into future
+        INIT FEEDS FOR BTCUSDAGG
     '''
-
-                # 
-
     btcusd_historical_ohlc = []
 
     with open('data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
@@ -1021,48 +1029,122 @@ def main():
     btcusd_round_ids = range(len(btcusd_historical_ohlc))
     btcusd_answers = [float(x["close"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
     btcusd_updated_ats = [current_timestamp + (x * daily_period) for x in btcusd_round_ids]
-    btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=xSDS["addr"])
+    btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
 
-    btcusd_agg.setRoundIds(btcusd_round_ids);
-    btcusd_agg.setAnswers(btcusd_answers);
-    btcusd_agg.setUpdatedAts(btcusd_updated_ats);
-
-
-    '''
-        TODO:
-            - set up pool parameters
-
-            const await pool.setParameters(
-                spread,
-                reserveRatio,
-                "90 days" //unix timestamp in that represents 90 days in the future
-            );
-    '''
-
-    '''
-        TODO:
-            - set up protical settings
-
-            erc20 = new ERC20Mock();
-            settings.setOwner(address(this)); //address(this) == linear_liquidity_pool.address
-            settings.setAllowedToken(address(erc20), 1, 1);
-            settings.setDefaultUdlFeed(address(feed));
-            settings.setUdlFeed(address(feed), 1);
-    '''
+    btcusd_agg.setRoundIds(
+        btcusd_round_ids
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+    btcusd_agg.setAnswers(
+        btcusd_answers
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+    btcusd_agg.setUpdatedAts(
+        btcusd_updated_ats
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
 
 
     '''
-        TODO:
-            - setup feed and time settings
-
-            feed.setPrice(ethInitialPrice);
-            time.setFixedTime(0); // supply the existing block timestamp at this point
+        SETUP POOL:
+            DOES THIS NEED TO HAPPEN FOR EVERY KIND OF OPTION EXPIRY?
     '''
+    pool_spread = 5 * (10**7)
+    pool_reserve_ratio = 20 * (10**7)
+    pool_maturity = (90 * daily_period) + current_timestamp
+    linear_liquidity_pool.functions.setParameters(
+        pool_spread,
+        pool_reserve_ratio,
+        pool_maturity
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    '''
+        SETUP PROTOCOL SETTINGS FOR POOL
+    '''
+
+    protocol_settings.functions.setOwner(
+        linear_liquidity_pool.address,
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    protocol_settings.functions.setAllowedToken(
+        usdt.address,
+        1,
+        1
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    protocol_settings.functions.setDefaultUdlFeed(
+        btcusd_chainling_feed.address,
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    protocol_settings.functions.setUdlFeed(
+        btcusd_chainling_feed.address,
+        1
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+
+    '''
+        SETUP CHAINLINK FEED AND TIME SETTINGS:
+    '''
+
+    btcusd_chainling_feed.functions.setPrice(
+        btcusd_answers[0]
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    time_provider.setFixedTime(
+        current_timestamp
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
 
     # Make a model of the economy
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, liquidity_pool, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=True)
+    model = Model(options_exchange, credit_provider, liquidity_pool, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 

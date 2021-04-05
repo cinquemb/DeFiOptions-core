@@ -25,7 +25,8 @@ module.exports = async function(deployer) {
   console.log("settings is at: "+ settings.address);
   await deployer.deploy(CreditToken, Deployer4.address);
   await deployer.deploy(GovToken, Deployer4.address);
-  await deployer.deploy(CreditProvider, Deployer4.address);
+  const creditProvider = await deployer.deploy(CreditProvider, Deployer4.address);
+  console.log("creditProvider is at: "+ exchange.address);
   await deployer.deploy(OptionTokenFactory, Deployer4.address);
   const exchange = await deployer.deploy(OptionsExchange, Deployer4.address);
   console.log("exchange is at: "+ exchange.address);
@@ -47,18 +48,20 @@ module.exports = async function(deployer) {
     "BTC/USD", 
     BTCUSDAgg.address,//btc/usd feed mock
     timeProvider.address, //time provider address
-    3 * 60 * 60,
+    24 * 60 * 60,
     [],
     []
   );
+  console.log("BTCUSDMockFeed is at: "+ BTCUSDMockFeed.address);
 
   const ETHUSDMockFeed = await deployer.deploy(
     MockChainLinkFeed, 
     "ETH/USD", 
     ETHUSDAgg.address, //eth/usd feed mock
     timeProvider.address, //time provider address
-    3 * 60 * 60,
+    24 * 60 * 60,
     [],
     []
   );
+  console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
 };
