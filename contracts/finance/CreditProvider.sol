@@ -158,7 +158,7 @@ contract CreditProvider is ManagedContract {
         
         require(balances[owner] >= value, "insufficient balance");
         balances[owner] = balances[owner].sub(value);
-        _totalBalance.sub(v);
+        _totalBalance.sub(value);
     }
 
     function getTotalBalance() public view returns (uint) {

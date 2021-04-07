@@ -48,7 +48,7 @@ module.exports = async function(deployer) {
     "BTC/USD", 
     BTCUSDAgg.address,//btc/usd feed mock
     timeProvider.address, //time provider address
-    24 * 60 * 60,
+    0,//offset
     [],
     []
   );
@@ -59,7 +59,7 @@ module.exports = async function(deployer) {
     "ETH/USD", 
     ETHUSDAgg.address, //eth/usd feed mock
     timeProvider.address, //time provider address
-    24 * 60 * 60,
+    0,//offset
     [],
     []
   );

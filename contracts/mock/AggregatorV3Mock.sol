@@ -10,16 +10,6 @@ contract AggregatorV3Mock is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
-    /*constructor(uint[] memory _roundIds, int[] memory _answers, uint[] memory _updatedAts) public {
-
-        for (uint i = 0; i < _roundIds.length; i++) {
-            rounds[_roundIds[i]] = i;
-        }
-        latestRound = _roundIds[ _roundIds.length - 1];
-        answers = _answers;
-        updatedAts = _updatedAts;
-    }*/
-
     function decimals() override external view returns (uint8) {
 
         return 8;
@@ -33,20 +23,17 @@ contract AggregatorV3Mock is AggregatorV3Interface {
 
     }
 
-    function setRoundIds(uint[] calldata rids) external {
-        for (uint i = 0; i < rids.length; i++) {
-            rounds[rids[i]] = i;
-        }
-
-        latestRound = rids[ rids.length - 1];
+    function appendRoundId(uint rid) external {
+        rounds[rid] = answers.length;
+        latestRound = rid;
     }
 
-    function setAnswers(int[] calldata ans) external {
-        answers = ans;
+    function appendAnswer(int ans) external {
+        answers.push(ans);
     }
 
-    function setUpdatedAts(uint[] calldata uts) external {
-        updatedAts = uts;
+    function appendUpdatedAt(uint ut) external {
+        updatedAts.push(ut);
     }
 
     function getRoundData(uint80 _roundId)

@@ -682,10 +682,10 @@ class Agent:
 class OptionsExchange:
     def __init__(self, contract, stablecoin_token, liquidity_pool, **kwargs):
         self.contract = contract
-        self.stablecoin_token = stablecoin_token
+        self.usdt_token = stablecoin_token
         self.liquidity_pool = liquidity_pool
 
-    def deposit(self, agent, amount):
+    def deposit_exchange(self, agent, amount):
         '''
             ERC20 stablecoin = ERC20(0x123...);
             OptionsExchange exchange = OptionsExchange(0xABC...);
@@ -695,10 +695,10 @@ class OptionsExchange:
             stablecoin.approve(address(exchange), value);
             exchange.depositTokens(to, address(stablecoin), value);
         '''
-        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+        self.usdt_token.ensure_approved(agent, self.contract.address)
         tx = self.contract.functions.depositTokens(
             agent.address,
-            self.stablecoin_token.address,
+            self.usdt_token.address,
             amount.to_wei()
         ).transact({
             'nonce': get_nonce(agent),
@@ -739,6 +739,7 @@ class OptionsExchange:
             feed_address,
             amount,
             StableCoin['decimals'],
+            self.contract.OptionType.CALL,
             strike_price,
             maturity,
         ).transact({
@@ -788,15 +789,35 @@ class OptionsExchange:
 class CreditProvider:
     def __init__(self, contract, stablecoin_token, **kwargs):
         self.contract = contract
-        self.stablecoin_token = stablecoin_token
+        self.usdt_token = stablecoin_token
 
 class LinearLiquidityPool:
     def __init__(self, contract, stablecoin_token, **kwargs):
         self.contract = contract
-        self.stablecoin_token = stablecoin_token
+        self.usdt_token = stablecoin_token
 
     def get_holders_index(self, agent):
         pass
+
+    def deposit_pool(self, agent, amount):
+        '''
+            pool.depositTokens(
+                address to, address token, uint value
+            );
+        '''
+        self.usdt_token.ensure_approved(agent, self.contract.address)
+        tx = self.contract.functions.depositTokens(
+            agent.address,
+            self.usdt_token.address,
+            amount.to_wei()
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
 
     def redeem(self, agent, holders_index):
         '''
@@ -816,12 +837,12 @@ class LinearLiquidityPool:
             stablecoin.approve(address(pool), price * volume / volumeBase);
             pool.buy(symbol, price, volume, address(stablecoin));
         '''
-        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+        self.usdt_token.ensure_approved(agent, self.contract.address)
         self.contract.functions.buy(
             symbol,
             price,
             volume,
-            self.stablecoin_token.contract.address
+            self.usdt_token.contract.address
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -835,7 +856,7 @@ class LinearLiquidityPool:
             pool.sell(symbol, price, volume)`;
         '''
         option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
-        self.stablecoin_token.ensure_approved(agent, self.contract.address)
+        self.usdt_token.ensure_approved(agent, self.contract.address)
 
         self.contract.functions.sell(
             symbol,
@@ -853,7 +874,7 @@ class Model:
     Full model of the economy.
     """
     
-    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, agents, **kwargs):
+    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
@@ -862,6 +883,12 @@ class Model:
         self.options_exchange = OptionsExchange(options_exchange, **kwargs)
         self.credit_provider = CreditProvider(credit_provider, **kwargs)
         self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, **kwargs))
+        self.btcusd_chainlink_feed = btcusd_chainlink_feed
+        self.btcusd_agg = btcusd_agg
+        self.btcusd_data = btcusd_data
+        self.current_round_id = 0
+        self.prev_timestamp = 0
+        self.daily_period = 60 * 60 * 24
 
         is_mint = is_try_model_mine
         if w3.eth.get_block('latest')["number"] == block_offset:
@@ -871,11 +898,9 @@ class Model:
         
         total_tx_submitted = len(agents) 
         for i in range(len(agents)):
-            start_avax = random.random() * self.max_avax
-            start_usdc = random.random() * self.max_usdc
             
             address = agents[i]
-            agent = Agent(self.dao, pangolin, xsd, usdc, starting_axax=start_avax, starting_usdc=start_usdc, wallet_address=address, is_mint=is_mint, **kwargs)
+            agent = Agent(self.dao, pangolin, xsd, usdc, starting_axax=0, starting_usdc=0, wallet_address=address, is_mint=is_mint, **kwargs)
              
             self.agents.append(agent)
 
@@ -917,7 +942,42 @@ class Model:
         # Update caches to current chain state for all the tokens
         self.usdt_token.update()
 
-        logger.info("Clock: {}".format(w3.eth.get_block('latest')['timestamp']))
+        current_timestamp = w3.eth.get_block('latest')['timestamp']
+        diff_timestamp = current_timestamp - self.prev_timestamp
+
+        '''
+            UPDATE FEEDS WHEN LASTEST DAY PASSESS
+        '''
+        if (diff_timestamp >= daily_period):
+            self.btcusd_agg.appendRoundId(
+                self.current_round_id
+            ).transact({
+                'nonce': get_nonce(agent),
+                'from' : agent.address,
+                'gas': 500000,
+                'gasPrice': Web3.toWei(225, 'gwei'),
+            })
+            self.btcusd_agg.appendAnswer(
+                self.btcusd_data[self.current_round_id]
+            ).transact({
+                'nonce': get_nonce(agent),
+                'from' : agent.address,
+                'gas': 500000,
+                'gasPrice': Web3.toWei(225, 'gwei'),
+            })
+            self.btcusd_agg.appendUpdatedAt(
+                current_timestamp
+            ).transact({
+                'nonce': get_nonce(agent),
+                'from' : agent.address,
+                'gas': 500000,
+                'gasPrice': Web3.toWei(225, 'gwei'),
+            })
+
+            self.current_round_id += 1
+            self.prev_timestamp = current_timestamp
+
+        logger.info("Clock: {}".format(current_timestamp))
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -936,7 +996,7 @@ class Model:
                     TODO:
                         redeem                        
                     TOTEST:
-                        deposit, withdraw, redeem, burn, write, buy, sell, liquidate
+                        deposit_exchange, deposit_pool, withdraw, redeem, burn, write, buy, sell, liquidate
                     WORKS:
                         
                 '''
@@ -951,7 +1011,8 @@ class Model:
                 # action will the agent do?
                 
                 
-                if action == "deposit":
+                if action == "deposit_exchange":
+                elif action == "deposit_pool":
                 elif action == "withdraw":
                 elif action == "redeem":
                 elif action == "burn":
@@ -1004,15 +1065,14 @@ def main():
     """
     
     logging.basicConfig(level=logging.INFO)
-
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
+    
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
     linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=LLP["addr"])
-    time_provider = w3.eth.contract(abi=TimeProviderMockContract['abi'], address=TPRO['addr'])
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
-    btcusd_chainling_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
+    btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
 
 
     '''
@@ -1026,44 +1086,17 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_round_ids = range(len(btcusd_historical_ohlc))
     btcusd_answers = [float(x["close"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
-    btcusd_updated_ats = [current_timestamp + (x * daily_period) for x in btcusd_round_ids]
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
-
-    btcusd_agg.setRoundIds(
-        btcusd_round_ids
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-    btcusd_agg.setAnswers(
-        btcusd_answers
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-    btcusd_agg.setUpdatedAts(
-        btcusd_updated_ats
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
 
 
     '''
         SETUP POOL:
-            DOES THIS NEED TO HAPPEN FOR EVERY KIND OF OPTION EXPIRY?
+            All options must have maturities under the pool maturity
     '''
     pool_spread = 5 * (10**7)
     pool_reserve_ratio = 20 * (10**7)
-    pool_maturity = (90 * daily_period) + current_timestamp
+    pool_maturity = (1000000000 * daily_period) + current_timestamp
     linear_liquidity_pool.functions.setParameters(
         pool_spread,
         pool_reserve_ratio,
@@ -1100,7 +1133,7 @@ def main():
     })
 
     protocol_settings.functions.setDefaultUdlFeed(
-        btcusd_chainling_feed.address,
+        btcusd_chainlink_feed.address,
     ).transact({
         'nonce': get_nonce(agent),
         'from' : agent.address,
@@ -1109,7 +1142,7 @@ def main():
     })
 
     protocol_settings.functions.setUdlFeed(
-        btcusd_chainling_feed.address,
+        btcusd_chainlink_feed.address,
         1
     ).transact({
         'nonce': get_nonce(agent),
@@ -1118,33 +1151,29 @@ def main():
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
 
-
     '''
-        SETUP CHAINLINK FEED AND TIME SETTINGS:
+        TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
+
+        pool.addSymbol(
+            symbol,
+            address(feed),
+            strike,
+            maturity,
+            CALL,
+            time.getNow(),
+            time.getNow() + 1 days,
+            x,
+            y,
+            100 * volumeBase, // buy stock
+            200 * volumeBase  // sell stock
+        );
     '''
 
-    btcusd_chainling_feed.functions.setPrice(
-        btcusd_answers[0]
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-
-    time_provider.setFixedTime(
-        current_timestamp
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
 
     # Make a model of the economy
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, liquidity_pool, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
+    model = Model(options_exchange, credit_provider, liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
