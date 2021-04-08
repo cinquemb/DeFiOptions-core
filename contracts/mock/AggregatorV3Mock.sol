@@ -23,13 +23,29 @@ contract AggregatorV3Mock is AggregatorV3Interface {
 
     }
 
+    function setRoundIds(uint[] calldata rids) external {
+        for (uint i = 0; i < rids.length; i++) {
+            rounds[rids[i]] = i;
+        }
+
+        latestRound = rids[ rids.length - 1];
+    }
+
     function appendRoundId(uint rid) external {
         rounds[rid] = answers.length;
         latestRound = rid;
     }
 
+    function setAnswers(int[] calldata ans) external {
+        answers = ans;
+    }
+
     function appendAnswer(int ans) external {
         answers.push(ans);
+    }
+
+    function setUpdatedAts(uint[] calldata uts) external {
+        updatedAts = uts;
     }
 
     function appendUpdatedAt(uint ut) external {

@@ -791,6 +791,33 @@ class CreditProvider:
         self.contract = contract
         self.usdt_token = stablecoin_token
 
+
+    def prefetch_daily(self, agent, latest_round_id, iv_bin_window):            '''
+
+            First call prefetchDailyPrice passing in the "roundId" of the latest sample you appended to your mock, corresponding to the underlying price for the new day
+            Then call prefetchDailyVolatility passing in the volatility period defined in the ProtocolSettings contract (defaults to 90 days)
+        '''
+        txr = self.contract.functions.prefetchDailyPrice(
+            latest_round_id
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        txr_recp = w3.eth.waitForTransactionReceipt(txr, poll_latency=tx_pool_latency)
+
+        txv = self.contract.functions.prefetchDailyVolatility(
+            iv_bin_window
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
+
+
 class LinearLiquidityPool:
     def __init__(self, contract, stablecoin_token, **kwargs):
         self.contract = contract
@@ -886,7 +913,8 @@ class Model:
         self.btcusd_chainlink_feed = btcusd_chainlink_feed
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
-        self.current_round_id = 0
+        self.btcusd_data_offset = 30
+        self.current_round_id = 30
         self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
 
@@ -906,6 +934,37 @@ class Model:
 
         # Update caches to current chain state
         self.usdt_token.update(is_init_agents=self.agents)
+
+
+        '''
+            INIT T-MINUS DATA FOR FEED
+        '''
+        current_timestamp = w3.eth.get_block('latest')['timestamp']
+        seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+        self.btcusd_agg.setRoundIds(
+            range(30)
+        ).transact({
+            'nonce': get_nonce(seleted_advancer),
+            'from' : seleted_advancer.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        self.btcusd_agg.setAnswers(
+            self.btcusd_data[:self.btcusd_data_offset]
+        ).transact({
+            'nonce': get_nonce(seleted_advancer),
+            'from' : seleted_advancer.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+        self.btcusd_agg.setUpdatedAts(
+            [(x* self.daily_period * -1) + current_timestamp for x in range(30, 0, -1)]
+        ).transact({
+            'nonce': get_nonce(seleted_advancer),
+            'from' : seleted_advancer.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
 
         #sys.exit()
         
@@ -945,6 +1004,9 @@ class Model:
         current_timestamp = w3.eth.get_block('latest')['timestamp']
         diff_timestamp = current_timestamp - self.prev_timestamp
 
+        #randomly have an agent do maintence tasks the epoch
+        seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+
         '''
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
         '''
@@ -952,30 +1014,52 @@ class Model:
             self.btcusd_agg.appendRoundId(
                 self.current_round_id
             ).transact({
-                'nonce': get_nonce(agent),
-                'from' : agent.address,
+                'nonce': get_nonce(seleted_advancer),
+                'from' : seleted_advancer.address,
                 'gas': 500000,
                 'gasPrice': Web3.toWei(225, 'gwei'),
             })
             self.btcusd_agg.appendAnswer(
                 self.btcusd_data[self.current_round_id]
             ).transact({
-                'nonce': get_nonce(agent),
-                'from' : agent.address,
+                'nonce': get_nonce(seleted_advancer),
+                'from' : seleted_advancer.address,
                 'gas': 500000,
                 'gasPrice': Web3.toWei(225, 'gwei'),
             })
             self.btcusd_agg.appendUpdatedAt(
                 current_timestamp
             ).transact({
-                'nonce': get_nonce(agent),
-                'from' : agent.address,
+                'nonce': get_nonce(seleted_advancer),
+                'from' : seleted_advancer.address,
                 'gas': 500000,
                 'gasPrice': Web3.toWei(225, 'gwei'),
             })
 
+            self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30)
+
             self.current_round_id += 1
             self.prev_timestamp = current_timestamp
+
+        '''
+            TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
+            TODO: HOW TO UPDATE X AND Y?
+
+            pool.addSymbol(
+                symbol,
+                address(feed),
+                strike,
+                maturity,
+                CALL,
+                time.getNow(),
+                time.getNow() + 1 days,
+                x,
+                y,
+                100 * volumeBase, // buy stock
+                200 * volumeBase  // sell stock
+            );
+        '''
+
 
         logger.info("Clock: {}".format(current_timestamp))
 
@@ -1086,7 +1170,7 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_answers = [float(x["close"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
+    btcusd_answers = [float(x["open"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
 
 
@@ -1150,25 +1234,6 @@ def main():
         'gas': 500000,
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
-
-    '''
-        TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
-
-        pool.addSymbol(
-            symbol,
-            address(feed),
-            strike,
-            maturity,
-            CALL,
-            time.getNow(),
-            time.getNow() + 1 days,
-            x,
-            y,
-            100 * volumeBase, // buy stock
-            200 * volumeBase  // sell stock
-        );
-    '''
-
 
     # Make a model of the economy
     start_init = time.time()
