@@ -3,7 +3,8 @@
 """
 model.py: agent-based model of xSD system behavior, against a testnet
 """
-
+from subprocess import Popen
+import subprocess
 import json
 import collections
 import random
@@ -180,6 +181,17 @@ def defaultdict_from_dict(d):
     ni = collections.defaultdict(set)
     ni.update(d)
     return ni
+
+def execute_cmd(cmd):
+    try:
+        proc = Popen(cmd, shell=True, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
+        proc_data = proc.communicate()[0]
+        return proc_data
+    
+    except Exception, e:
+        print e
+        data = e
+    return data
 
 # Because token balances need to be accuaate to the atomic unit, we can't store
 # them as floats. Otherwise we might turn our float back into a token balance
@@ -792,7 +804,8 @@ class CreditProvider:
         self.usdt_token = stablecoin_token
 
 
-    def prefetch_daily(self, agent, latest_round_id, iv_bin_window):            '''
+    def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
+        '''
 
             First call prefetchDailyPrice passing in the "roundId" of the latest sample you appended to your mock, corresponding to the underlying price for the new day
             Then call prefetchDailyVolatility passing in the volatility period defined in the ProtocolSettings contract (defaults to 90 days)
@@ -957,8 +970,10 @@ class Model:
         self.btcusd_data = btcusd_data
         self.btcusd_data_offset = 30
         self.current_round_id = 30
+        self.daily_vol_period = 30
         self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
+        self.days_per_year = 365
 
         is_mint = is_try_model_mine
         if w3.eth.get_block('latest')["number"] == block_offset:
@@ -1084,6 +1099,29 @@ class Model:
 
             strike = 0
             maturity = 0
+            days_until_expiry = 1.0
+            num_samples = 2000
+            option_type = 'PUT'
+
+            '''
+                FIGURE OUT HOW TO NORMALISE INTO FRACTION
+            '''
+            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 100000}).getDailyVolatility(
+                self.daily_vol_period * self.daily_period
+            )
+
+            months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
+            cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
+                self.btcusd_data[self.current_round_id] / 10**xSD['decimals'],
+                vol,
+                strike,
+                num_samples,
+                0.2,
+                months_to_exp,
+                option_type
+            )
+
+            option_params = execute_cmd(cmd).split('\n')
 
             '''
                 TODO: need to feed in pricing params
@@ -1097,7 +1135,7 @@ class Model:
             buyStock = 100
             sellStock = 200
 
-            self.linear_liquidity_pool.add_or_update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+            self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
             self.prev_timestamp = current_timestamp
@@ -1213,7 +1251,7 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_answers = [float(x["open"]) * xSD['decimals'] for x in btcusd_historical_ohlc]
+    btcusd_answers = [float(x["open"]) * (10**xSD['decimals']) for x in btcusd_historical_ohlc]
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
 
 
