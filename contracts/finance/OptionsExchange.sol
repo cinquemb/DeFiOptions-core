@@ -760,6 +760,21 @@ contract OptionsExchange is ManagedContract {
             MoreMath.toString(ord.option.maturity)
         ));
     }
+
+
+    function getOptionSymbolFromParams(address udlFeed, OptionType optType, uint strike, uint maturity) public view returns (string memory symbol) {
+        
+        symbol = string(abi.encodePacked(
+            UnderlyingFeed(udlFeed).symbol(),
+            "-",
+            "E",
+            optType == OptionType.CALL ? "C" : "P",
+            "-",
+            MoreMath.toString(strike),
+            "-",
+            MoreMath.toString(maturity)
+        ));
+    }
     
     function ensureFunds(address owner) private view {
         

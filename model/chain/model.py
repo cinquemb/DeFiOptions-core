@@ -885,7 +885,7 @@ class LinearLiquidityPool:
         option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
         self.usdt_token.ensure_approved(agent, self.contract.address)
 
-        self.contract.functions.sell(
+        tx = self.contract.functions.sell(
             symbol,
             price,
             volume
@@ -894,7 +894,49 @@ class LinearLiquidityPool:
             'from' : agent.address,
             'gas': 500000,
             'gasPrice': Web3.toWei(225, 'gwei'),
-        })        
+        })
+
+        return tx
+
+    def add_or_update_symbol(self, agent, udlfeed_address, strike, maturity, current_timestamp, x, y, buyStock, sellStock):
+        '''
+            TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
+            TODO: HOW TO UPDATE X AND Y?
+            TODO:
+                NEED TO CALL addSymbol again every day at the start of the day to update t0, t1, x, and y (and buy/sell stock?) for every symbol
+
+            pool.addSymbol(
+                address(feed),
+                strike,
+                maturity,
+                CALL,
+                time.getNow(),
+                time.getNow() + 1 days,
+                x,
+                y,
+                100 * volumeBase, // buy stock
+                200 * volumeBase  // sell stock
+            );
+        '''
+
+        tx = self.contract.functions.addSymbol(
+            udlfeed_address,
+            strike * 10**18,
+            maturity,
+            current_timestamp,
+            current_timestamp + (60 * 60 * 24),
+            x,
+            y,
+            buyStock,
+            sellStock
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
 
 class Model:
     """
@@ -958,7 +1000,7 @@ class Model:
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
         self.btcusd_agg.setUpdatedAts(
-            [(x* self.daily_period * -1) + current_timestamp for x in range(30, 0, -1)]
+            [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
         ).transact({
             'nonce': get_nonce(seleted_advancer),
             'from' : seleted_advancer.address,
@@ -1009,6 +1051,7 @@ class Model:
 
         '''
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
+            UPDATE SYMBOL PARAMS
         '''
         if (diff_timestamp >= daily_period):
             self.btcusd_agg.appendRoundId(
@@ -1038,27 +1081,10 @@ class Model:
 
             self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30)
 
+            self.linear_liquidity_pool(seleted_advancer)
+
             self.current_round_id += 1
             self.prev_timestamp = current_timestamp
-
-        '''
-            TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
-            TODO: HOW TO UPDATE X AND Y?
-
-            pool.addSymbol(
-                symbol,
-                address(feed),
-                strike,
-                maturity,
-                CALL,
-                time.getNow(),
-                time.getNow() + 1 days,
-                x,
-                y,
-                100 * volumeBase, // buy stock
-                200 * volumeBase  // sell stock
-            );
-        '''
 
 
         logger.info("Clock: {}".format(current_timestamp))
@@ -1228,6 +1254,15 @@ def main():
     protocol_settings.functions.setUdlFeed(
         btcusd_chainlink_feed.address,
         1
+    ).transact({
+        'nonce': get_nonce(agent),
+        'from' : agent.address,
+        'gas': 500000,
+        'gasPrice': Web3.toWei(225, 'gwei'),
+    })
+
+    protocol_settings.functions.setVolatilityPeriod(
+        30
     ).transact({
         'nonce': get_nonce(agent),
         'from' : agent.address,
