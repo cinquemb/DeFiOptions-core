@@ -1079,9 +1079,25 @@ class Model:
                 'gasPrice': Web3.toWei(225, 'gwei'),
             })
 
-            self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30)
+            self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
 
-            self.linear_liquidity_pool(seleted_advancer)
+
+            strike = 0
+            maturity = 0
+
+            '''
+                TODO: need to feed in pricing params
+            '''
+            x = []
+            y = []
+
+             '''
+                TODO: need to explor 2:1 bs, 1:1 bs and 1:2 bs
+            '''
+            buyStock = 100
+            sellStock = 200
+
+            self.linear_liquidity_pool.add_or_update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
             self.prev_timestamp = current_timestamp
@@ -1104,7 +1120,7 @@ class Model:
                         advance: to do maintainence functions, payout from dynamic collateral and/or gov token
                     
                     TODO:
-                        redeem                        
+                        redeem, add_symbol                 
                     TOTEST:
                         deposit_exchange, deposit_pool, withdraw, redeem, burn, write, buy, sell, liquidate
                     WORKS:
@@ -1122,6 +1138,7 @@ class Model:
                 
                 
                 if action == "deposit_exchange":
+                elif action == "add_symbol":
                 elif action == "deposit_pool":
                 elif action == "withdraw":
                 elif action == "redeem":
@@ -1262,7 +1279,7 @@ def main():
     })
 
     protocol_settings.functions.setVolatilityPeriod(
-        30
+        30 * daily_period
     ).transact({
         'nonce': get_nonce(agent),
         'from' : agent.address,
