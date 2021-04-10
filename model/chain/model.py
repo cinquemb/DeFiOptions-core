@@ -911,13 +911,47 @@ class LinearLiquidityPool:
 
         return tx
 
-    def add_or_update_symbol(self, agent, udlfeed_address, strike, maturity, current_timestamp, x, y, buyStock, sellStock):
-        '''
-            TODO: NEED TO ADD SYMBOL TO POOL before writing new options?
-            TODO: HOW TO UPDATE X AND Y?
-            TODO:
-                NEED TO CALL addSymbol again every day at the start of the day to update t0, t1, x, and y (and buy/sell stock?) for every symbol
+    def list_symbols(self, agent):
+        symbols = self.contract.caller({'from' : agent.address, 'gas': 100000}).listSymbols()
+        return symbols
 
+    def add_symbol(self, agent, udlfeed_address, strike, maturity, current_timestamp, x, y, buyStock, sellStock):
+        '''
+            pool.addSymbol(
+                address(feed),
+                strike,
+                maturity,
+                CALL,
+                time.getNow(),
+                time.getNow() + 1 days,
+                x,
+                y,
+                100 * volumeBase, // buy stock
+                200 * volumeBase  // sell stock
+            );
+        '''
+
+        tx = self.contract.functions.addSymbol(
+            udlfeed_address,
+            strike * 10**18,
+            maturity,
+            current_timestamp,
+            current_timestamp + (60 * 60 * 24),
+            x,
+            y,
+            buyStock,
+            sellStock
+        ).transact({
+            'nonce': get_nonce(agent),
+            'from' : agent.address,
+            'gas': 500000,
+            'gasPrice': Web3.toWei(225, 'gwei'),
+        })
+
+        return tx
+
+    def update_symbol(self, agent, udlfeed_address, strike, maturity, current_timestamp, x, y, buyStock, sellStock):
+        '''
             pool.addSymbol(
                 address(feed),
                 strike,
@@ -1064,6 +1098,8 @@ class Model:
         #randomly have an agent do maintence tasks the epoch
         seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
 
+        available_symbols = self.liquidity_pool.list_symbols(seleted_advancer)
+
         '''
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
             UPDATE SYMBOL PARAMS
@@ -1096,46 +1132,58 @@ class Model:
 
             self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
 
+            for sym in available_symbols:
+                sym_parts = sym.split('-')
 
-            strike = 0
-            maturity = 0
-            days_until_expiry = 1.0
-            num_samples = 2000
-            option_type = 'PUT'
+                '''
+                    * sym is something like: `ETH/USD-EC-13e20-1611964800` which represents an ETH european call option with strike price US$ 1300 and maturity at timestamp `1611964800`.
+                '''
+                # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING STRIKES
+                strike = float(sym_parts[2]) / 10*xSD['decimals']
+                maturity = int(sym_parts[3])
+                days_until_expiry = (maturity - current_timestamp) / self.daily_period
+                num_samples = 2000
+                option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
 
-            '''
-                FIGURE OUT HOW TO NORMALISE INTO FRACTION
-            '''
-            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 100000}).getDailyVolatility(
-                self.daily_vol_period * self.daily_period
-            )
 
-            months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
-            cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
-                self.btcusd_data[self.current_round_id] / 10**xSD['decimals'],
-                vol,
-                strike,
-                num_samples,
-                0.2,
-                months_to_exp,
-                option_type
-            )
+                # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
+                vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 100000}).getDailyVolatility(
+                    self.daily_vol_period * self.daily_period
+                )
 
-            option_params = execute_cmd(cmd).split('\n')
+                months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
 
-            '''
-                TODO: need to feed in pricing params
-            '''
-            x = []
-            y = []
+                '''
+                    EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
+                '''
+                cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
+                    self.btcusd_data[self.current_round_id] / 10**xSD['decimals'],
+                    vol,
+                    strike,
+                    num_samples,
+                    0.2,
+                    months_to_exp,
+                    option_type
+                )
 
-             '''
-                TODO: need to explor 2:1 bs, 1:1 bs and 1:2 bs
-            '''
-            buyStock = 100
-            sellStock = 200
+                option_params = filter(None,execute_cmd(cmd).split('\n'))
 
-            self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+                '''
+                    EXAMPLE:
+                    x: 283.000000,294.000000,305.000000,316.000000,327.000000,338.000000,349.000000,360.000000,371.000000,382.000000,393.000000,404.000000,415.000000,426.000000,437.000000,448.000000,459.000000,470.000000,481.000000,492.000000,503.000000,514.000000,525.000000,536.000000,547.000000,558.000000,569.000000,580.000000,591.000000,602.000000,613.000000,624.000000,635.000000,646.000000,657.000000,668.000000,679.000000
+                    y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
+                    y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
+                '''
+                x = map(float,option_params[0].split('x: ')[-1].split(','))
+                y = map(float,option_params[1].split('y0: ')[-1].split(',')) + map(float,option_params[2].split('y1: ')[-1].split(','))
+
+                 '''
+                    TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
+                '''
+                buyStock = 100
+                sellStock = 200
+
+                self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
             self.prev_timestamp = current_timestamp
@@ -1146,6 +1194,16 @@ class Model:
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
             options = []
+
+            if len(available_symbols) > 0:
+                options.append('write')
+
+            if len(available_symbols) > 0:
+                options.append('buy')
+
+            if len(available_symbols) > 0:
+                options.append('sell')
+
 
             start_tx_count = a.next_tx_count
             commitment = random.random() * 0.1
@@ -1177,12 +1235,24 @@ class Model:
                 
                 if action == "deposit_exchange":
                 elif action == "add_symbol":
+                    option_types = ['PUT', 'CALL']
+                    # if call, write OTM by random amout, to the upside
+                    # if put, write OTM by random amount, to the downside
+                    strike_to_write = self.btcusd_data[self.current_round_id]
+
+                    # chose random maturity length less than the maturity of the pool
+                    maturity = 223
+
+                    self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
                 elif action == "deposit_pool":
                 elif action == "withdraw":
                 elif action == "redeem":
                 elif action == "burn":
                 elif action == "write":
+                    # select from available symbols
+                    available_symbols
                 elif action == "buy":
+                elif action == "sell":
                 elif action == "liquidate":
                 else:
                     raise RuntimeError("Bad action: " + action)
