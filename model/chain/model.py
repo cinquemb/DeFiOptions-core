@@ -229,9 +229,9 @@ def execute_cmd(cmd):
         proc_data = proc.communicate()[0]
         return proc_data
     
-    except Exception, e:
-        print e
-        data = e
+    except Exception as inst:
+        print (inst)
+        data = inst
     return data
 
 # Because token balances need to be accuaate to the atomic unit, we can't store
@@ -753,7 +753,7 @@ class OptionsExchange:
 
         return tx
 
-    def withwdraw(self, agent, amount):
+    def withdraw(self, agent, amount):
         '''
             uint value = 50e18;
             exchange.withdrawTokens(value);
@@ -1246,7 +1246,7 @@ class Model:
                 x = map(float,option_params[0].split('x: ')[-1].split(','))
                 y = map(float,option_params[1].split('y0: ')[-1].split(',')) + map(float,option_params[2].split('y1: ')[-1].split(','))
 
-                 '''
+                '''
                     TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
                 '''
                 buyStock = 100
@@ -1303,6 +1303,7 @@ class Model:
                 
                 
                 if action == "deposit_exchange":
+                    pass
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
                     # if call, write OTM by random amout, to the upside
@@ -1314,15 +1315,22 @@ class Model:
 
                     self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
                 elif action == "deposit_pool":
+                    pass
                 elif action == "withdraw":
+                    pass
                 elif action == "redeem":
+                    pass
                 elif action == "burn":
+                    pass
                 elif action == "write":
                     # select from available symbols
                     available_symbols
                 elif action == "buy":
+                    pass
                 elif action == "sell":
+                    pass
                 elif action == "liquidate":
+                    pass
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
@@ -1367,6 +1375,7 @@ def main():
     """
     Main function: run the simulation.
     """
+    global avax_cchain_nonces
     
     logging.basicConfig(level=logging.INFO)
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
@@ -1377,6 +1386,7 @@ def main():
     linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=LLP["addr"])
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
     btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
+    btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
 
 
     '''
@@ -1391,7 +1401,6 @@ def main():
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
     btcusd_answers = [float(x["open"]) * (10**xSD['decimals']) for x in btcusd_historical_ohlc]
-    btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
 
 
     '''

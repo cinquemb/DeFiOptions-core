@@ -734,7 +734,6 @@ contract OptionsExchange is ManagedContract {
             .mul(volume.toUint120()).div(ord.written).div(volumeBase);
         
 
-        // TODO: is it the intention to only liquidate the writer while the holder retains the exposure?
         orders[ord.id].written = uint(orders[ord.id].written).sub(volume).toUint120();
         totalWritten[ord.owner] = uint(totalWritten[ord.owner]).sub(volume).toUint120();
         
