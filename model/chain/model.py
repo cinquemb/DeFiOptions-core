@@ -571,21 +571,15 @@ class Agent:
     Represents an agent. Tracks all the agent's balances.
     """
     
-    def __init__(self, dao, pangolin_pair, xsd_token, usdt_token, **kwargs):
+    def __init__(self, linear_liquidity_pool, options_exchange, xsd_token, usdt_token, **kwargs):
  
         # xSD TokenProxy
         self.xsd_token = xsd_token
         # USDT TokenProxy 
         self.usdt_token = usdt_token
-        # xSDS (Dao share) balance
-        self.xsds = Balance(0, xSDS["decimals"])
+        
         # avax balance
         self.avax = kwargs.get("starting_avax", Balance(0, 18))
-        
-        # Coupon underlying part by expiration epoch
-        self.underlying_coupons = collections.defaultdict(float)
-        # Coupon premium part by expiration epoch
-        self.premium_coupons = collections.defaultdict(float)
         
         # What's our max faith in the system in USDT?
         self.max_faith = kwargs.get("max_faith", 0.0)
@@ -597,23 +591,13 @@ class Agent:
         # add wallet addr
         self.address = kwargs.get("wallet_address", '0x0000000000000000000000000000000000000000')
 
-        #coupon expirys
-        self.coupon_expirys = []
-        # how many times coupons have been redeemmed
-        self.redeem_count = 0
-
-        self.dao = dao
-
-        # current coupon assigned index of epoch
-        self.max_coupon_epoch_index = 0
-
-        # Pangolin Pair TokenProxy
-        self.pangolin_pair_token = pangolin_pair
+        # Linear Liquidity Pool + Proxy
+        self.linear_liquidity_pool = linear_liquidity_pool
+        # Options Exchange
+        self.options_exchange = options_exchange
 
         # keeps track of latest block seen for nonce tracking/tx
-        self.seen_block = {}
         self.next_tx_count = w3.eth.getTransactionCount(self.address, block_identifier=int(w3.eth.get_block('latest')["number"]))
-        self.current_block = 0
 
         if kwargs.get("is_mint", False):
             # need to mint USDT to the wallets for each agent
@@ -644,25 +628,33 @@ class Agent:
         return self.usdt_token[self]
 
     @property
+    def total_written(self):
+        return self.options_exchange.get_total_owner_written(self)
+
+    @property
+    def total_holding(self):
+        return self.options_exchange.get_total_owner_holding(self)
+
+    @property
     def lp(self):
         """
         Get the current balance in Pangolin LP Shares from the TokenProxy.
         """
-        return self.pangolin_pair_token[self]
+        return self.linear_liquidity_pool[self]
 
     @property
-    def coupons(self):
+    def short_collateral_exposure(self):
         """
-        Get the current balance in of coupons for agent
+        Get the short collateral balance for agent
         """
-        return self.dao.total_coupons_for_agent(self)
+        return self.options_exchange.get_short_collateral_exposure(self)
     
     def __str__(self):
         """
         Turn into a readable string summary.
         """
-        return "Agent(xSD={:.2f}, usdt={:.2f}, avax={}, lp={}, coupons={:.2f})".format(
-            self.xsd, self.usdt, self.avax, self.lp, self.coupons)
+        return "Agent(xSD={:.2f}, usdt={:.2f}, avax={}, lp={}, total_written={}, total_holding={}, short_collateral_exposure={:.2f})".format(
+            self.xsd, self.usdt, self.avax, self.lp, self.total_written, self.total_holding, self.short_collateral_exposure)
 
         
     def get_strategy(self, current_timestamp, price, total_supply, total_coupons, agent_coupons):
@@ -731,11 +723,10 @@ class Agent:
         
         return faith
         
-
 class OptionsExchange:
-    def __init__(self, contract, stablecoin_token, liquidity_pool, **kwargs):
+    def __init__(self, contract, usdt_token, liquidity_pool, **kwargs):
         self.contract = contract
-        self.usdt_token = stablecoin_token
+        self.usdt_token = usdt_token
         self.liquidity_pool = liquidity_pool
 
     def deposit_exchange(self, agent, amount):
@@ -805,7 +796,7 @@ class OptionsExchange:
         return tx
 
     def burn(self, agent, option_token_address, token_amount):
-         '''
+        '''
         uint amount = token_amount * volumeBase;
         token.burn(amount);
         '''
@@ -839,10 +830,41 @@ class OptionsExchange:
         })
         return tx
 
+    def get_short_collateral_exposure(self, agent):
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).calcRawCollateralShortage(agent.address)
+
+    def get_total_short_collateral_exposure(self, agent):
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getOptionsExchangeTotalExposure()
+
+    def get_total_written(self, agent):
+        '''
+            getTotalWritten() public view returns (uint120)
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalWritten()
+
+    def get_total_holding(self, agent):
+        '''
+            getTotalHolding() public view returns (uint120)
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalHolding()
+
+    def get_total_owner_written(self, agent):
+        '''
+            getTotalOwnerWritten(address owner) public view returns (uint120)
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalOwnerWritten(agent.address)
+
+    def get_total_owner_holding(self, agent):
+        '''
+            getTotalOwnerHolding(address owner) public view returns (uint120)
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalOwnerHolding(agent.address)
+
+
 class CreditProvider:
-    def __init__(self, contract, stablecoin_token, **kwargs):
+    def __init__(self, contract, usdt_token, **kwargs):
         self.contract = contract
-        self.usdt_token = stablecoin_token
+        self.usdt_token = usdt_token
 
 
     def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
@@ -850,6 +872,7 @@ class CreditProvider:
 
             First call prefetchDailyPrice passing in the "roundId" of the latest sample you appended to your mock, corresponding to the underlying price for the new day
             Then call prefetchDailyVolatility passing in the volatility period defined in the ProtocolSettings contract (defaults to 90 days)
+            Maybe twap can be updated daily?
         '''
         txr = self.contract.functions.prefetchDailyPrice(
             latest_round_id
@@ -871,14 +894,17 @@ class CreditProvider:
         })
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
 
+    def get_total_balance(self, agent):
+        '''
+            Get total balance of credit tokens issued
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalBalance()
 
-class LinearLiquidityPool:
-    def __init__(self, contract, stablecoin_token, **kwargs):
+class LinearLiquidityPool(TokenProxy):
+    def __init__(self, contract, usdt_token, **kwargs):
         self.contract = contract
-        self.usdt_token = stablecoin_token
-
-    def get_holders_index(self, agent):
-        pass
+        self.usdt_token = usdt_token
+        super(TokenProxy, self).__init__(self.contract)
 
     def deposit_pool(self, agent, amount):
         '''
@@ -902,16 +928,18 @@ class LinearLiquidityPool:
 
     def redeem(self, agent, holders_index):
         '''
+            TODO
             pool.redeem()
         '''
-        self.contract.functions.redeem(
+        tx = self.contract.functions.redeem(
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
             'gas': 500000,
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
-        pass
+
+        return tx
 
     def buy(self, agent, symbol, price, volume):
         '''
@@ -919,7 +947,7 @@ class LinearLiquidityPool:
             pool.buy(symbol, price, volume, address(stablecoin));
         '''
         self.usdt_token.ensure_approved(agent, self.contract.address)
-        self.contract.functions.buy(
+        tx = self.contract.functions.buy(
             symbol,
             price,
             volume,
@@ -930,6 +958,7 @@ class LinearLiquidityPool:
             'gas': 500000,
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
+        return tx
 
     def sell(self, agent, symbol, price, volume, option_token_address):
         '''
@@ -1039,7 +1068,7 @@ class Model:
         self.agents = []
         self.options_exchange = OptionsExchange(options_exchange, **kwargs)
         self.credit_provider = CreditProvider(credit_provider, **kwargs)
-        self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, **kwargs))
+        self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, **kwargs)
         self.btcusd_chainlink_feed = btcusd_chainlink_feed
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
@@ -1060,7 +1089,7 @@ class Model:
         for i in range(len(agents)):
             
             address = agents[i]
-            agent = Agent(self.dao, pangolin, xsd, usdc, starting_axax=0, starting_usdc=0, wallet_address=address, is_mint=is_mint, **kwargs)
+            agent = Agent(self.linear_liquidity_pool, pangolin, xsd, usdc, starting_axax=0, starting_usdc=0, wallet_address=address, is_mint=is_mint, **kwargs)
              
             self.agents.append(agent)
 
@@ -1097,8 +1126,6 @@ class Model:
             'gas': 500000,
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
-
-        #sys.exit()
         
     def log(self, stream, seleted_advancer, header=False):
         """
@@ -1107,14 +1134,14 @@ class Model:
         """
         
         if header:
-            stream.write("#block\twritten\tbought\texposure\tcredit supply\n")#\tfaith\n")
+            stream.write("#block\twritten\tholding\texposure\tcredit supply\n")#\tfaith\n")
         
         stream.write('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
                 w3.eth.get_block('latest')["number"],
-                self.dao.epoch(seleted_advancer.address),
-                self.pangolin.xsd_price(),
-                self.dao.xsd_supply(),
-                self.options_exchange.getTotalBalance()
+                self.options_exchange.get_total_written(seleted_advancer.address),
+                self.options_exchange.get_total_holding(seleted_advancer.address),
+                self.options_exchange.get_total_short_collateral_exposure(seleted_advancer.address),
+                self.credit_provider.get_total_balance(seleted_advancer.address)
             )
         )
        
@@ -1132,6 +1159,7 @@ class Model:
         """
         # Update caches to current chain state for all the tokens
         self.usdt_token.update()
+        self.linear_liquidity_pool.update()
 
         current_timestamp = w3.eth.get_block('latest')['timestamp']
         diff_timestamp = current_timestamp - self.prev_timestamp

@@ -48,10 +48,15 @@ contract OptionsExchange is ManagedContract {
 
     uint256[] private bookOwnerIndecies;
     uint256 private _currentBookOwnerIndex;
+    uint120 private _totalExchangeHolding;
+    uint120 private _totalExchangeWritten;
 
+    
     mapping(uint => OrderData) private orders;
     mapping(address => uint64[]) private book;
     mapping(uint256 => address) private bookOwners;
+    mapping(address => uint120) private totalWritten;
+    mapping(address => uint120) private totalHolding;
     mapping(address => uint256) private reverseBookOwners;
 
     mapping(address => mapping(string => uint64)) private index;
@@ -222,6 +227,7 @@ contract OptionsExchange is ManagedContract {
         
         orders[ord.id].holding = uint(orders[ord.id].holding).sub(volume).toUint120();
 
+
         ensureFunds(ord.owner);
 
         if (shouldRemove(ord.id)) {
@@ -245,6 +251,12 @@ contract OptionsExchange is ManagedContract {
         
         orders[ord.id].written = uint(ord.written).sub(volume).toUint120();
         orders[ord.id].holding = uint(ord.holding).sub(volume).toUint120();
+
+        totalWritten[owner] = uint(totalWritten[owner]).sub(volume).toUint120();
+        totalHolding[owner] = uint(totalHolding[owner]).sub(volume).toUint120();
+
+        _totalExchangeWritten = uint(_totalExchangeWritten).sub(volume).toUint120();
+        _totalExchangeHolding = uint(_totalExchangeHolding).sub(volume).toUint120();
 
         if (shouldRemove(ord.id)) {
             removeOrder(symbol, ord.id);
@@ -354,11 +366,14 @@ contract OptionsExchange is ManagedContract {
             OrderData memory ord = orders[ids[i]];
 
             if (isValid(ord)) {
-                collateral = collateral.add(
-                    calcIntrinsicValue(ord).mul(
-                        int(ord.written).sub(int(ord.holding))
-                    )
-                ).add(int(calcCollateral(ord.upperVol, ord)));
+                // only consider positions where written is greater than holding
+                if (ord.written > ord.holding) {
+                    collateral = collateral.add(
+                        calcIntrinsicValue(ord).mul(
+                            int(ord.written).sub(int(ord.holding))
+                        )
+                    ).add(int(calcCollateral(ord.upperVol, ord)));
+                }
             }
         }
 
@@ -479,6 +494,10 @@ contract OptionsExchange is ManagedContract {
             TODO: NEED TO SEE HOW GAS USAGE IS FOR THIS WHEN SIMULATING
 
             O(n*m)
+
+            this can be reduced if the book was split into epochs such that 
+
+            it will still be O(n1*m1) where n1 << n and m1 << m 
         */
         uint totalShortage = 0;
         for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
@@ -611,6 +630,12 @@ contract OptionsExchange is ManagedContract {
             id = result.id;
             orders[id].written = uint(result.written).add(volume).toUint120();
             orders[id].holding = uint(result.holding).add(volume).toUint120();
+            
+            totalWritten[msg.sender] = uint(totalWritten[msg.sender]).add(volume).toUint120();
+            totalHolding[msg.sender] = uint(totalHolding[msg.sender]).add(volume).toUint120();
+
+            _totalExchangeWritten = uint(_totalExchangeWritten).add(volume).toUint120();
+            _totalExchangeHolding = uint(_totalExchangeHolding).add(volume).toUint120();
         } else {
             id = serial++;
             ord.id = uint64(id);
@@ -708,7 +733,13 @@ contract OptionsExchange is ManagedContract {
         value = calcCollateral(ord.lowerVol, ord).add(iv)
             .mul(volume.toUint120()).div(ord.written).div(volumeBase);
         
+
+        // TODO: is it the intention to only liquidate the writer while the holder retains the exposure?
         orders[ord.id].written = uint(orders[ord.id].written).sub(volume).toUint120();
+        totalWritten[ord.owner] = uint(totalWritten[ord.owner]).sub(volume).toUint120();
+        
+        _totalExchangeWritten = uint(_totalExchangeWritten).sub(volume).toUint120();
+        
         if (shouldRemove(ord.id)) {
             removeOrder(symbol, ord.id);
         }
@@ -829,5 +860,21 @@ contract OptionsExchange is ManagedContract {
     function getUdlNow(OrderData memory ord) private view returns (uint timestamp) {
 
         (timestamp,) = UnderlyingFeed(ord.udlFeed).getLatestPrice();
+    }
+
+    function getTotalWritten() public view returns (uint120) {
+        return _totalExchangeWritten;
+    }
+
+    function getTotalHolding() public view returns (uint120) {
+        return _totalExchangeHolding;
+    }
+
+    function getTotalOwnerWritten(address owner) public view returns (uint120) {
+        return totalWritten[owner];
+    }
+
+    function getTotalOwnerHolding(address owner) public view returns (uint120) {
+        return totalHolding[owner];
     }
 }
