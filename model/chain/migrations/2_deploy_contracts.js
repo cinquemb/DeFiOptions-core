@@ -26,7 +26,7 @@ module.exports = async function(deployer) {
   await deployer.deploy(CreditToken, Deployer4.address);
   await deployer.deploy(GovToken, Deployer4.address);
   const creditProvider = await deployer.deploy(CreditProvider, Deployer4.address);
-  console.log("creditProvider is at: "+ exchange.address);
+  console.log("creditProvider is at: "+ creditProvider.address);
   await deployer.deploy(OptionTokenFactory, Deployer4.address);
   const exchange = await deployer.deploy(OptionsExchange, Deployer4.address);
   console.log("exchange is at: "+ exchange.address);

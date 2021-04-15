@@ -39,28 +39,25 @@ contract OptionsExchange is ManagedContract {
         uint120 strike;
         uint32 maturity;
     }
+
+    struct OptionAccounting {
+        uint120 totalWritten;
+        uint120 totalHolding;
+    }
     
     TimeProvider private time;
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
     OptionTokenFactory private factory;
 
-
-    uint256[] private bookOwnerIndecies;
-    uint256 private _currentBookOwnerIndex;
     uint120 private _totalExchangeHolding;
     uint120 private _totalExchangeWritten;
-
     
     mapping(uint => OrderData) private orders;
     mapping(address => uint64[]) private book;
-    mapping(uint256 => address) private bookOwners;
-    mapping(address => uint120) private totalWritten;
-    mapping(address => uint120) private totalHolding;
-    mapping(address => uint256) private reverseBookOwners;
+    mapping(address => OptionAccounting) private ownerAccounting;
 
     mapping(address => mapping(string => uint64)) private index;
-
 
     mapping(string => address) private tokenAddress;
     mapping(string => uint64[]) private tokenIds;
@@ -219,8 +216,6 @@ contract OptionsExchange is ManagedContract {
             index[to][symbol] = toOrd.id;
             tokenIds[symbol].push(toOrd.id);
 
-            checkAndTrackBookOwner(to);
-
         } else {
             orders[toOrd.id].holding = uint(orders[toOrd.id].holding).add(volume).toUint120();
         }
@@ -252,8 +247,8 @@ contract OptionsExchange is ManagedContract {
         orders[ord.id].written = uint(ord.written).sub(volume).toUint120();
         orders[ord.id].holding = uint(ord.holding).sub(volume).toUint120();
 
-        totalWritten[owner] = uint(totalWritten[owner]).sub(volume).toUint120();
-        totalHolding[owner] = uint(totalHolding[owner]).sub(volume).toUint120();
+        ownerAccounting[owner].totalWritten = uint(ownerAccounting[owner].totalWritten).sub(volume).toUint120();
+        ownerAccounting[owner].totalHolding = uint(ownerAccounting[owner].totalHolding).sub(volume).toUint120();
 
         _totalExchangeWritten = uint(_totalExchangeWritten).sub(volume).toUint120();
         _totalExchangeHolding = uint(_totalExchangeHolding).sub(volume).toUint120();
@@ -387,7 +382,18 @@ contract OptionsExchange is ManagedContract {
 
         return uint(net * -1);
     }
-    
+
+    /*
+    function getOptionsExchangeTotalExposure() public view returns (uint256) {
+        uint totalShortage = 0;
+        for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
+            uint256 b_idx = bookOwnerIndecies[o_idx];
+            uint shortage = calcRawCollateralShortage(bookOwners[b_idx]);
+            totalShortage += shortage;
+        }
+        return totalShortage;
+    }*/
+
     function calcCollateral(address owner) public view returns (uint) {
         
         int collateral;
@@ -450,62 +456,6 @@ contract OptionsExchange is ManagedContract {
         address addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
         return addr;
-    }
-
-    function incrementBookOwnerIndex() private {
-        _currentBookOwnerIndex++;
-    }
-
-    function getCurrentBookOwnerIndex() public view returns (uint256) {
-        return _currentBookOwnerIndex;
-    }
-
-    function checkAndTrackBookOwner(address owner) private returns (bool) {
-        if (book[owner].length > 0) {
-            // already in the book, dont track again;
-            return false;
-        } else {
-            // insert into book tracking;
-            uint256 b_idx = getCurrentBookOwnerIndex();
-            bookOwnerIndecies.push(b_idx);
-            bookOwners[b_idx] = owner;
-            reverseBookOwners[owner] = b_idx;
-            incrementBookOwnerIndex();
-            return true;
-        }
-    }
-
-    function untrackBookOwner(address owner) private returns (bool) {
-        if (book[owner].length == 0) {
-            // not in book tracking;
-            return false;
-        } else {
-            // remove from book tracking;
-            uint256 b_idx = reverseBookOwners[owner];
-            Arrays.removeItem(bookOwnerIndecies, b_idx);
-            delete bookOwners[b_idx];
-            delete reverseBookOwners[owner];
-            return true;
-        }
-    }
-
-    function getOptionsExchangeTotalExposure() public view returns (uint256) {
-        /* 
-            TODO: NEED TO SEE HOW GAS USAGE IS FOR THIS WHEN SIMULATING
-
-            O(n*m)
-
-            this can be reduced if the book was split into epochs such that 
-
-            it will still be O(n1*m1) where n1 << n and m1 << m 
-        */
-        uint totalShortage = 0;
-        for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
-            uint256 b_idx = bookOwnerIndecies[o_idx];
-            uint shortage = calcRawCollateralShortage(bookOwners[b_idx]);
-            totalShortage += shortage;
-        }
-        return totalShortage;
     }
 
     function getBook(address owner)
@@ -630,9 +580,9 @@ contract OptionsExchange is ManagedContract {
             id = result.id;
             orders[id].written = uint(result.written).add(volume).toUint120();
             orders[id].holding = uint(result.holding).add(volume).toUint120();
-            
-            totalWritten[msg.sender] = uint(totalWritten[msg.sender]).add(volume).toUint120();
-            totalHolding[msg.sender] = uint(totalHolding[msg.sender]).add(volume).toUint120();
+
+            ownerAccounting[msg.sender].totalWritten = uint(ownerAccounting[msg.sender].totalWritten).add(volume).toUint120();
+            ownerAccounting[msg.sender].totalHolding = uint(ownerAccounting[msg.sender].totalHolding).add(volume).toUint120();
 
             _totalExchangeWritten = uint(_totalExchangeWritten).add(volume).toUint120();
             _totalExchangeHolding = uint(_totalExchangeHolding).add(volume).toUint120();
@@ -643,8 +593,6 @@ contract OptionsExchange is ManagedContract {
             book[msg.sender].push(ord.id);
             index[msg.sender][symbol] = ord.id;
             tokenIds[symbol].push(ord.id);
-
-            checkAndTrackBookOwner(msg.sender);
         }
 
         address tk = tokenAddress[symbol];
@@ -735,7 +683,7 @@ contract OptionsExchange is ManagedContract {
         
 
         orders[ord.id].written = uint(orders[ord.id].written).sub(volume).toUint120();
-        totalWritten[ord.owner] = uint(totalWritten[ord.owner]).sub(volume).toUint120();
+        ownerAccounting[ord.owner].totalWritten = uint(ownerAccounting[ord.owner].totalWritten).add(volume).toUint120();
         
         _totalExchangeWritten = uint(_totalExchangeWritten).sub(volume).toUint120();
         
@@ -771,10 +719,6 @@ contract OptionsExchange is ManagedContract {
         Arrays.removeItem(book[owner], id);
         delete index[owner][symbol];
         delete orders[id];
-
-        if (book[owner].length == 0) {
-            untrackBookOwner(owner);
-        } 
     }
 
     function getOptionSymbol(OrderData memory ord) private view returns (string memory symbol) {
@@ -870,10 +814,10 @@ contract OptionsExchange is ManagedContract {
     }
 
     function getTotalOwnerWritten(address owner) public view returns (uint120) {
-        return totalWritten[owner];
+        return ownerAccounting[owner].totalWritten;
     }
 
     function getTotalOwnerHolding(address owner) public view returns (uint120) {
-        return totalHolding[owner];
+        return ownerAccounting[owner].totalHolding;
     }
 }

@@ -122,8 +122,6 @@ TimeProviderMockContract = json.loads(open('./build/contracts/TimeProviderMock.j
 def get_addr_from_contract(contract):
     return contract["networks"][str(sorted(map(int,contract["networks"].keys()))[0])]["address"]
 
-StableCoin['addr'] = get_addr_from_contract(ERC20StableCoinContract)
-
 avax_cchain_nonces = None
 mm = None
 def get_nonce(agent):
@@ -781,8 +779,7 @@ class OptionsExchange:
         '''
         tx = self.contract.functions.writeOptions(
             feed_address,
-            amount,
-            StableCoin['decimals'],
+            Balance(amount, 18).to_wei(),
             self.contract.OptionType.CALL,
             strike_price,
             maturity,
@@ -803,7 +800,7 @@ class OptionsExchange:
         option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
 
         tx = option_token.contract.functions.burn(
-            Balance(token_amount, StableCoin['decimals']).to_wei()
+            Balance(token_amount, 18).to_wei()
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -1342,16 +1339,6 @@ class Model:
             end_tx_count = a.next_tx_count
 
             total_tx_submitted += (end_tx_count - start_tx_count)
-
-        if is_try_model_mine:
-            # mine a block after every iteration for every tx sumbitted during round
-            logger.info("{} sumbitted, mining blocks for them now, {} coupon bidders".format(
-                total_tx_submitted, total_coupoun_bidders)
-            )
-        else:
-            logger.info("{} coupon bidders".format(
-                total_coupoun_bidders)
-            )
 
         providerAvax.make_request("avax.issueBlock", {})
         tx_hashes_good = 0

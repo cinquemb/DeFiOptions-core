@@ -51,7 +51,7 @@ module.exports = {
       provider: () => new Web3.providers.HttpProvider('http://127.0.0.1:9545/ext/bc/C/rpc'),
       network_id: "*",
       gas: 8000000,
-      gasPrice: 470000000000
+      gasPrice: 225000000000
    }
 
     // Useful for private networks
