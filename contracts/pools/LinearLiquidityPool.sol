@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../deployment/ManagedContract.sol";
 import "../finance/RedeemableToken.sol";
@@ -11,6 +12,7 @@ import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
+import "../finance/OptionToken.sol";
 
 contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken {
 
@@ -135,7 +137,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
 
     function addSymbol(
-        string calldata optSymbol,
         address udlFeed,
         uint strike,
         uint _mt,
@@ -152,6 +153,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         ensureCaller();
         require(_mt < _maturity, "invalid maturity");
         require(x.length > 0 && x.length.mul(2) == y.length, "invalid pricing surface");
+
+        OptionsExchange.OptionData memory opt = OptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
+        string memory optSymbol = exchange.getOptionSymbol(opt);
 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);

@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";

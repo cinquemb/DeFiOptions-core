@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
@@ -40,10 +41,12 @@ contract OptionsExchange is ManagedContract {
     CreditProvider private creditProvider;
     OptionTokenFactory private factory;
 
+    
     mapping(address => uint) public collateral;
     mapping(address => OptionData) private options;
     mapping(address => FeedData) private feeds;
     mapping(address => address[]) private book;
+
     mapping(string => address) private tokenAddress;
     mapping(address => uint) public nonces;
     
@@ -199,8 +202,7 @@ contract OptionsExchange is ManagedContract {
     )
         external
     {
-        require(tokenAddress[symbol] == msg.sender, "unauthorized ownership transfer");
-        
+        require(tokenAddress[symbol] == msg.sender, "unauthorized ownership transfer");        
         OptionToken tk = OptionToken(msg.sender);
         
         if (tk.writtenVolume(from) == 0 && tk.balanceOf(from) == 0) {
@@ -215,7 +217,6 @@ contract OptionsExchange is ManagedContract {
     }
 
     function cleanUp(address _tk, address owner) public {
-
         OptionToken tk = OptionToken(_tk);
         if (tk.balanceOf(owner) == 0 && tk.writtenVolume(owner) == 0) {
             Arrays.removeItem(book[owner], _tk);
@@ -255,7 +256,7 @@ contract OptionsExchange is ManagedContract {
     
     function calcSurplus(address owner) public view returns (uint) {
         
-        uint coll = calcCollateral(owner);
+        uint coll = calcCollateral(owner, true);
         uint bal = creditProvider.balanceOf(owner);
         if (bal >= coll) {
             return bal.sub(coll);
@@ -265,10 +266,10 @@ contract OptionsExchange is ManagedContract {
 
     function setCollateral(address owner) external {
 
-        collateral[owner] = calcCollateral(owner);
+        collateral[owner] = calcCollateral(owner, true);
     }
-    
-    function calcCollateral(address owner) public view returns (uint) {
+
+    function calcCollateral(address owner, bool is_regular) public view returns (uint) {
         
         int coll;
         address[] memory _book = book[owner];
@@ -282,6 +283,12 @@ contract OptionsExchange is ManagedContract {
             uint written = tk.writtenVolume(owner);
             uint holding = tk.balanceOf(owner);
 
+            if (is_regular == false) {
+                if (written > holding) {
+                    continue;
+                }
+            }
+
             coll = coll.add(
                 calcIntrinsicValue(opt).mul(
                     int(written).sub(int(holding))
@@ -290,6 +297,10 @@ contract OptionsExchange is ManagedContract {
         }
 
         coll = coll.div(int(volumeBase));
+
+        if (is_regular == false) {
+            return uint(coll);
+        }
 
         if (coll < 0)
             return 0;
@@ -394,7 +405,6 @@ contract OptionsExchange is ManagedContract {
     }
 
     function ensureFunds(address owner) private view {
-        
         require(
             creditProvider.balanceOf(owner) >= collateral[owner],
             "insufficient collateral"
@@ -559,7 +569,7 @@ contract OptionsExchange is ManagedContract {
         returns (uint volume)
     {    
         uint bal = creditProvider.balanceOf(owner);
-        uint coll = calcCollateral(owner);
+        uint coll = calcCollateral(owner, true);
         require(coll > bal, "unfit for liquidation");
 
         volume = coll.sub(bal).mul(volumeBase).mul(written).div(
@@ -599,7 +609,7 @@ contract OptionsExchange is ManagedContract {
         );
     }
 
-    function getOptionSymbol(OptionData memory opt) private view returns (string memory symbol) {    
+    function getOptionSymbol(OptionData memory opt) public view returns (string memory symbol) {    
 
         symbol = string(abi.encodePacked(
             UnderlyingFeed(opt.udlFeed).symbol(),

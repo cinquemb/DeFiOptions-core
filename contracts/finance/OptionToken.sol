@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../../contracts/finance/OptionsExchange.sol";
 import "../../contracts/finance/RedeemableToken.sol";
@@ -77,6 +78,10 @@ contract OptionToken is RedeemableToken {
     function writtenVolume(address owner) external view returns (uint) {
 
         return _issued[owner];
+    }
+
+    function totalWrittenVolume() public view returns (uint) {
+        return _unliquidatedVolume;
     }
 
     function redeemAllowed() override public returns (bool) {

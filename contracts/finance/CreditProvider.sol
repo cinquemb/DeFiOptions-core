@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
@@ -9,6 +10,8 @@ import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 import "./CreditToken.sol";
+import "./OptionsExchange.sol";
+
 
 contract CreditProvider is ManagedContract {
 
@@ -18,6 +21,7 @@ contract CreditProvider is ManagedContract {
     TimeProvider private time;
     ProtocolSettings private settings;
     CreditToken private creditToken;
+    OptionsExchange private exchange;
 
     mapping(address => uint) private balances;
     mapping(address => uint) private debts;
@@ -25,6 +29,8 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private callers;
 
     address private ctAddr;
+    uint private _totalBalance;
+    uint private _totalTokenStock;
     uint private _totalAccruedFees;
 
     event TransferBalance(address indexed from, address indexed to, uint value);
@@ -45,9 +51,12 @@ contract CreditProvider is ManagedContract {
         creditToken = CreditToken(deployer.getContractAddress("CreditToken"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
 
+        address exchangeAddress = deployer.getContractAddress("OptionsExchange");
+        exchange = OptionsExchange(exchangeAddress);
+
+        callers[exchangeAddress] = 1;
         callers[address(settings)] = 1;
         callers[deployer.getContractAddress("CreditToken")] = 1;
-        callers[deployer.getContractAddress("OptionsExchange")] = 1;
         callers[deployer.getContractAddress("LinearLiquidityPool")] = 1;
 
         ctAddr = address(creditToken);
@@ -174,13 +183,44 @@ contract CreditProvider is ManagedContract {
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
             balances[owner] = balances[owner].add(v);
+            _totalBalance.add(v);
         }
     }
+
+    function calcRawCollateralShortage(address owner) public view returns (uint) {
+        // this represents the sum of the negative exposure of owner on the exchange from any part of their book where written is greater than holding
+
+        uint bal = balanceOf(owner);
+        uint tcoll = exchange.calcCollateral(owner, false);
+        int coll = int(tcoll);
+        int net = int(bal) - coll;
+
+        if (net >= 0)
+            return 0;
+
+        return uint(net * -1);
+    }
+
+     /*
+    function getOptionsExchangeTotalExposure() public view returns (uint256) {
+        uint totalShortage = 0;
+        for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
+            uint256 b_idx = bookOwnerIndecies[o_idx];
+            uint shortage = calcRawCollateralShortage(bookOwners[b_idx]);
+            totalShortage += shortage;
+        }
+        return totalShortage;
+    }*/
     
     function removeBalance(address owner, uint value) private {
         
         require(balances[owner] >= value, "insufficient balance");
         balances[owner] = balances[owner].sub(value);
+        _totalBalance.sub(value);
+    }
+
+    function getTotalBalance() public view returns (uint) {
+        return _totalBalance;
     }
 
     function burnDebtAndTransferTokens(address to, uint value) private {
