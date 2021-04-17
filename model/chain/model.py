@@ -729,6 +729,10 @@ class OptionsExchange:
         self.usdt_token = usdt_token
         self.option_tokens = []
 
+    def balance(self, agent):
+        bal = self.contract.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
+        return Balance.from_tokens(bal, xSD['decimals'])
+
     def resolve_token(self, agent, symbol):
         '''
             resolveToken(symbol)
@@ -998,8 +1002,8 @@ class LinearLiquidityPool(TokenProxy):
             option_token.approve(address(pool), price * volume / volumeBase)`;
             pool.sell(symbol, price, volume)`;
         '''
-        option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
-        self.usdt_token.ensure_approved(agent, self.contract.address)
+        option_token = TokenProxy(w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address))
+        self.option_token.ensure_approved(agent, self.contract.address)
 
         tx = self.contract.functions.sell(
             symbol,
@@ -1103,7 +1107,7 @@ class Model:
     Full model of the economy.
     """
     
-    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, agents, **kwargs):
+    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, xsd, usdt, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
@@ -1122,6 +1126,7 @@ class Model:
         self.daily_period = 60 * 60 * 24
         self.days_per_year = 365
         self.option_tokens = []
+        self.usdt_token = usdt
 
         is_mint = is_try_model_mine
         if w3.eth.get_block('latest')["number"] == block_offset:
@@ -1133,7 +1138,7 @@ class Model:
         for i in range(len(agents)):
             
             address = agents[i]
-            agent = Agent(self.linear_liquidity_pool, pangolin, xsd, usdc, starting_axax=0, starting_usdc=0, wallet_address=address, is_mint=is_mint, **kwargs)
+            agent = Agent(self.linear_liquidity_pool, pangolin, xsd, usdt, starting_axax=0, starting_usdt=0, wallet_address=address, is_mint=is_mint, **kwargs)
              
             self.agents.append(agent)
 
@@ -1308,14 +1313,38 @@ class Model:
             # TODO: real strategy
             options = []
 
-            if len(available_symbols) > 0:
+            exchange_bal  = self.options_exchange.balance(a)
+
+
+
+            if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
 
-            if len(available_symbols) > 0:
+            if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('buy')
 
             if len(available_symbols) > 0:
                 options.append('sell')
+
+            if a.usdt > 0:
+                options.append('deposit_exchange')
+
+            if a.usdt > 0:
+                options.append('deposit_pool')
+
+            if exchange_bal > 0:
+                options.append('withdraw')
+
+            if a.lp > 0:
+                options.append('redeem')
+
+            # options token bal must be greater than zero
+            if a.usdt > 0:
+                options.append('burn')
+
+            # option position must be short collateral
+            if a:
+                options.append('liquidate')
 
 
             start_tx_count = a.next_tx_count
@@ -1329,9 +1358,9 @@ class Model:
                         advance: to do maintainence functions, payout from dynamic collateral and/or gov token
                     
                     TODO:
-                        redeem, add_symbol                 
+
                     TOTEST:
-                        deposit_exchange, deposit_pool, withdraw, redeem, burn, write, buy, sell, liquidate
+                        deposit_exchange, deposit_pool, withdraw, redeem, burn, write, buy, sell, liquidate, add_symbol
                     WORKS:
                         
                 '''
@@ -1357,7 +1386,7 @@ class Model:
                     # chose random maturity length less than the maturity of the pool
                     maturity = 223
 
-                    self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+                    self.linear_liquidity_pool.add_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
                 elif action == "deposit_pool":
                     pass
                 elif action == "withdraw":
@@ -1512,7 +1541,7 @@ def main():
     # Make a model of the economy
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
+    model = Model(options_exchange, credit_provider, liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
