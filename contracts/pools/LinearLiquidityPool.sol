@@ -260,7 +260,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         price = calcOptPrice(param, Operation.BUY);
         address _tk = exchange.resolveToken(optSymbol);
         volume = MoreMath.min(
-            calcVolume(param, price, Operation.BUY),
+            calcVolume(optSymbol, param, price, Operation.BUY),
             uint(param.buyStock).sub(OptionToken(_tk).writtenVolume(address(this)))
         );
     }
@@ -276,7 +276,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         price = calcOptPrice(param, Operation.SELL);
         address _tk = exchange.resolveToken(optSymbol);
         volume = MoreMath.min(
-            calcVolume(param, price, Operation.SELL),
+            calcVolume(optSymbol, param, price, Operation.SELL),
             uint(param.sellStock).sub(OptionToken(_tk).balanceOf(address(this)))
         );
     }
@@ -349,18 +349,17 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             tk.permit(msg.sender, address(this), volume, deadline, v, r, s);
         }
         tk.transferFrom(msg.sender, address(this), volume);
-
-        uint value = price.mul(volume).div(volumeBase);
-        exchange.transferBalance(msg.sender, value);
-        
-        require(calcFreeBalance() > 0, "excessive volume");
         
         uint _written = tk.writtenVolume(address(this));
-
         if (_written > 0) {
             uint toBurn = MoreMath.min(_written, volume);
             tk.burn(toBurn);
         }
+
+        uint value = price.mul(volume).div(volumeBase);
+        exchange.transferBalance(msg.sender, value);
+        
+        require(calcFreeBalance() > 0, "pool balance too low");
 
         uint _holding = tk.balanceOf(address(this));
         require(_holding <= param.sellStock, "excessive volume");
@@ -441,7 +440,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             to
         );
         
-        require(calcFreeBalance() > 0, "excessive volume");
+        require(calcFreeBalance() > 0, "pool balance too low");
     }
 
     function calcOptPrice(PricingParameters memory p, Operation op)
@@ -501,6 +500,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
 
     function calcVolume(
+        string memory optSymbol,
         PricingParameters memory p,
         uint price,
         Operation op
@@ -512,15 +512,15 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint fb = calcFreeBalance();
         uint r = fractionBase.sub(reserveRatio);
 
-        if (op == Operation.BUY) {
+        uint coll = exchange.calcCollateral(
+            p.udlFeed,
+            volumeBase,
+            p.optType,
+            p.strike,
+            p.maturity
+        );
 
-            uint coll = exchange.calcCollateral(
-                p.udlFeed,
-                volumeBase,
-                p.optType,
-                p.strike,
-                p.maturity
-            );
+        if (op == Operation.BUY) {
 
             volume = coll <= price ? uint(-1) :
                 fb.mul(volumeBase).div(
@@ -531,7 +531,13 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
             uint bal = exchange.balanceOf(address(this));
 
-            uint coll = exchange.collateral(address(this));
+            uint poolColl = exchange.collateral(address(this));
+
+            uint writtenColl = OptionToken(
+                exchange.resolveToken(optSymbol)
+            ).writtenVolume(address(this)).mul(coll);
+
+            poolColl = poolColl > writtenColl ? poolColl.sub(writtenColl) : 0;
             
             uint iv = uint(exchange.calcIntrinsicValue(
                 p.udlFeed,
@@ -541,9 +547,14 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             ));
 
             volume = price <= iv ? uint(-1) :
-                bal.sub(coll.mul(fractionBase).div(r)).mul(volumeBase).div(
+                bal.sub(poolColl.mul(fractionBase).div(r)).mul(volumeBase).div(
                     price.sub(iv)
                 );
+
+            volume = MoreMath.max(
+                volume, 
+                bal.mul(volumeBase).div(price)
+            );
 
             volume = MoreMath.min(
                 volume, 

@@ -841,7 +841,13 @@ class OptionsExchange:
         return tx
 
     def get_total_short_collateral_exposure(self, agent):
-        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getOptionsExchangeTotalExposure()
+
+        '''
+
+        NEED TO FIGURE OUT A BETTER WAY TO TRACK THIS
+            return self.contract.caller({'from' : agent.address, 'gas': 100000}).getOptionsExchangeTotalExposure()
+        '''
+        return 0
 
     def get_total_written(self, agent, option_tokens):
         '''
