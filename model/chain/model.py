@@ -893,6 +893,10 @@ class OptionsExchange:
             oh += ot.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
         return oh
 
+    def calc_collateral_surplus(self, checker, agent):
+        cs = self.contract.caller({'from' : checker.address, 'gas': 100000}).calcSurplus(agent.address)
+        return cs
+
 
 class CreditProvider:
     def __init__(self, contract, usdt_token, **kwargs):
@@ -1027,7 +1031,7 @@ class LinearLiquidityPool(TokenProxy):
         option_tokens = []
         for sym in symbols:
             option_token_address = resolve_token(sym)
-            option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
+            option_token = TokenProxy(w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address))
             option_tokens.append(option_token)
 
         return option_tokens
@@ -1125,7 +1129,7 @@ class Model:
         self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.days_per_year = 365
-        self.option_tokens = []
+        self.option_tokens = {}
         self.usdt_token = usdt
 
         is_mint = is_try_model_mine
@@ -1187,8 +1191,8 @@ class Model:
         
         stream.write('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
                 w3.eth.get_block('latest')["number"],
-                self.options_exchange.get_total_written(seleted_advancer.address, self.option_tokens),
-                self.options_exchange.get_total_holding(seleted_advancer.address, self.option_tokens),
+                self.options_exchange.get_total_written(seleted_advancer.address, self.option_tokens.keys()),
+                self.options_exchange.get_total_holding(seleted_advancer.address, self.option_tokens.keys()),
                 self.options_exchange.get_total_short_collateral_exposure(seleted_advancer.address),
                 self.credit_provider.get_total_balance(seleted_advancer.address)
             )
@@ -1199,6 +1203,12 @@ class Model:
         What target should the system be trying to hit in xSD market cap?
         """
         return self.agents[0].get_faith(w3.eth.get_block('latest')["number"], self.pangolin.xsd_price(), self.dao.xsd_supply())
+
+    def is_positive_option_token_balance(self, agent):
+        for k,v in self.option_tokens.iteritems():
+            if v[k] > 0:
+                return True
+        return False
        
     def step(self):
         """
@@ -1217,6 +1227,7 @@ class Model:
         seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
 
         available_symbols = self.liquidity_pool.list_symbols(seleted_advancer)
+        self.option_tokens = {x.address: x for x in self.get_option_tokens(seleted_advancer)}
 
         '''
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
@@ -1308,14 +1319,16 @@ class Model:
 
 
         logger.info("Clock: {}".format(current_timestamp))
+        random.shuffle(self.agents)
+
+        # return list of addres for agents who are short collateral
+        any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(seleted_advancer, a) <= 0]
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
             options = []
 
             exchange_bal  = self.options_exchange.balance(a)
-
-
 
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
@@ -1338,12 +1351,11 @@ class Model:
             if a.lp > 0:
                 options.append('redeem')
 
-            # options token bal must be greater than zero
-            if a.usdt > 0:
+            if self.is_positive_option_token_balance(agent) > 0:
                 options.append('burn')
 
             # option position must be short collateral
-            if a:
+            if len(any_short_collateral) > 0:
                 options.append('liquidate')
 
 
