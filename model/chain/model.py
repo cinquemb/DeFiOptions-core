@@ -1205,9 +1205,10 @@ class Model:
         return self.agents[0].get_faith(w3.eth.get_block('latest')["number"], self.pangolin.xsd_price(), self.dao.xsd_supply())
 
     def is_positive_option_token_balance(self, agent):
+        tokens = []
         for k,v in self.option_tokens.iteritems():
-            if v[k] > 0:
-                return True
+            if v[agent] > 0:
+                tokens.append(v)
         return False
        
     def step(self):
@@ -1328,6 +1329,8 @@ class Model:
             # TODO: real strategy
             options = []
 
+            open_option_tokens = self.is_positive_option_token_balance(a)
+
             exchange_bal  = self.options_exchange.balance(a)
 
             if exchange_bal > 0 and len(available_symbols) > 0:
@@ -1351,7 +1354,7 @@ class Model:
             if a.lp > 0:
                 options.append('redeem')
 
-            if self.is_positive_option_token_balance(agent) > 0:
+            if not open_option_tokens:
                 options.append('burn')
 
             # option position must be short collateral
@@ -1388,7 +1391,12 @@ class Model:
                 
                 
                 if action == "deposit_exchange":
-                    pass
+                    amount = portion_dedusted(
+                        a.usdt,
+                        commitment
+                    )
+                    dpe_hash = self.options_exchange.deposit_exchange(a, amount)
+                    tx_hashes.append(dpe_hash)
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
                     # if call, write OTM by random amout, to the upside
@@ -1398,15 +1406,33 @@ class Model:
                     # chose random maturity length less than the maturity of the pool
                     maturity = 223
 
-                    self.linear_liquidity_pool.add_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+                    ads_hash = self.linear_liquidity_pool.add_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+                    tx_hashes.append(ads_hash)
                 elif action == "deposit_pool":
-                    pass
+                    amount = portion_dedusted(
+                        a.usdt,
+                        commitment
+                    )
+                    dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
+                    tx_hashes.append(dpp_hash)
                 elif action == "withdraw":
-                    pass
+                    amount = portion_dedusted(
+                        exchange_bal,
+                        commitment
+                    )
+                    wtd_hash = self.options_exchange.withdraw(a, amount)
+                    tx_hashes.append(wtd_hash)
                 elif action == "redeem":
-                    pass
+                    rdm_hash = self.linear_liquidity_pool.redeem(a)
+                    tx_hashes.append(rdm_hash)
                 elif action == "burn":
-                    pass
+                    token_to_burn = open_option_tokens[int(random.random() * (len(open_option_tokens) - 1))]
+                    amount = portion_dedusted(
+                        token_to_burn[a.address],
+                        commitment
+                    )
+                    brn_hash = self.options_exchange.burn(a, token_to_burn.address, token_amount)
+                    tx_hashes.append(brn_hash)
                 elif action == "write":
                     # select from available symbols
                     available_symbols
