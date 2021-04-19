@@ -784,7 +784,7 @@ class OptionsExchange:
 
         return tx
 
-    def write(self, agent, feed_address, amount, strike_price, maturity):
+    def write(self, agent, feed_address, option_type, amount, strike_price, maturity):
         '''
             uint id = exchange.writeOptions(
                 eth_usd_feed, 
@@ -797,7 +797,7 @@ class OptionsExchange:
         tx = self.contract.functions.writeOptions(
             feed_address,
             Balance(amount, 18).to_wei(),
-            self.contract.OptionType.CALL,
+            self.contract.OptionType.CALL if option_type == 'CALL' else self.contract.OptionType.PUT,
             strike_price,
             maturity,
         ).transact({
@@ -830,12 +830,13 @@ class OptionsExchange:
     def get_book_ids(self, agent):
         return self.contract.caller({'from' : agent.address, 'gas': 100000}).getBookIds(agent.address)
 
-    def liquidate(self, agent, _id):
+    def liquidate(self, agent, options_address, owner_address):
         '''
             exchange.liquidateOptions()
         '''
         tx = self.contract.functions.liquidateOptions(
-            _id
+            options_address,
+            owner_address
         ).transact({
             'nonce': get_nonce(agent),
             'from' : agent.address,
@@ -982,6 +983,10 @@ class LinearLiquidityPool(TokenProxy):
 
         return tx
 
+    def query_buy(agent, symbol):
+        price_volume = self.contract.caller({'from' : agent.address, 'gas': 100000}).queryBuy(symbol)
+        return price_volume
+
     def buy(self, agent, symbol, price, volume):
         '''
             stablecoin.approve(address(pool), price * volume / volumeBase);
@@ -1000,6 +1005,10 @@ class LinearLiquidityPool(TokenProxy):
             'gasPrice': Web3.toWei(225, 'gwei'),
         })
         return tx
+
+    def query_sell(agent, symbol):
+        price_volume = self.contract.caller({'from' : agent.address, 'gas': 100000}).querySell(symbol)
+        return price_volume
 
     def sell(self, agent, symbol, price, volume, option_token_address):
         '''
@@ -1228,7 +1237,13 @@ class Model:
         seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
 
         available_symbols = self.liquidity_pool.list_symbols(seleted_advancer)
-        self.option_tokens = {x.address: x for x in self.get_option_tokens(seleted_advancer)}
+
+        buyStock = 100
+        sellStock = 200
+
+        for x in self.get_option_tokens(seleted_advancer):
+            if x.address not in self.option_tokens:
+                self.option_tokens[x.address] = x
 
         '''
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
@@ -1395,8 +1410,11 @@ class Model:
                         a.usdt,
                         commitment
                     )
-                    dpe_hash = self.options_exchange.deposit_exchange(a, amount)
-                    tx_hashes.append(dpe_hash)
+                    try:
+                        dpe_hash = self.options_exchange.deposit_exchange(a, amount)
+                        tx_hashes.append(dpe_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "deposit_exchange", "amount": amount})
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
                     # if call, write OTM by random amout, to the upside
@@ -1413,35 +1431,86 @@ class Model:
                         a.usdt,
                         commitment
                     )
-                    dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
-                    tx_hashes.append(dpp_hash)
+                    try:
+                        dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
+                        tx_hashes.append(dpp_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "deposit_pool", "amount": amount})
                 elif action == "withdraw":
                     amount = portion_dedusted(
                         exchange_bal,
                         commitment
                     )
-                    wtd_hash = self.options_exchange.withdraw(a, amount)
-                    tx_hashes.append(wtd_hash)
+                    try:
+                        wtd_hash = self.options_exchange.withdraw(a, amount)
+                        tx_hashes.append(wtd_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "withdraw", "amount": amount})
                 elif action == "redeem":
-                    rdm_hash = self.linear_liquidity_pool.redeem(a)
-                    tx_hashes.append(rdm_hash)
+                    try:
+                        rdm_hash = self.linear_liquidity_pool.redeem(a)
+                        tx_hashes.append(rdm_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "redeem"})
                 elif action == "burn":
                     token_to_burn = open_option_tokens[int(random.random() * (len(open_option_tokens) - 1))]
                     amount = portion_dedusted(
                         token_to_burn[a.address],
                         commitment
                     )
-                    brn_hash = self.options_exchange.burn(a, token_to_burn.address, token_amount)
-                    tx_hashes.append(brn_hash)
+                    try:
+                        brn_hash = self.options_exchange.burn(a, token_to_burn.address, token_amount)
+                        tx_hashes.append(brn_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "burn", "token_to_burn": token_to_burn, "amount": amount})
                 elif action == "write":
                     # select from available symbols
-                    available_symbols
+                    sym = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    sym_parts = sym.split('-')
+
+                    '''
+                        * sym is something like: `ETH/USD-EC-13e20-1611964800` which represents an ETH european call option with strike price US$ 1300 and maturity at timestamp `1611964800`.
+                    '''
+                    strike_price = int(sym_parts[2])
+                    maturity = int(sym_parts[3])
+                    option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
+                    amount = portion_dedusted(
+                        buyStock,
+                        commitment
+                    )
+                    try:
+                        w_hash = self.options_exchange.write(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
+                        tx_hashes.append(w_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "write", "strike_price": strike_price, "maturity": maturity, "option_type": option_type, "amount": amount})
                 elif action == "buy":
-                    pass
+                    symbol = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    current_price_volume = self.linear_liquidity_pool.query_buy(symbol)
+                    volume = int(random.random() * current_price_volume[1])
+                    price = current_price_volume[0]
+                    try:
+                        buy_hash = self.linear_liquidity_pool.buy(a, symbol, current_price_volume[0], volume)
+                        tx_hashes.append(buy_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
-                    pass
+                    symbol = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    current_price_volume = self.linear_liquidity_pool.query_sell(symbol)
+                    volume = int(random.random() * current_price_volume[1])
+                    price = current_price_volume[0]
+                    try:
+                        sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume)
+                        tx_hashes.append(sell_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
-                    pass
+                    for short_owners in any_short_collateral:
+                        for otk, otv in self.option_tokens.iteritems():
+                            try:
+                                lqd8_hash = self.liquidate(a, otk, short_owners.address)
+                                tx_hashes.append(lqd8_hash)
+                            except Exception as inst:
+                                logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owners.address, "option_token": otk})
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
