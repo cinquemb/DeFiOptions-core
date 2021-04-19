@@ -1138,6 +1138,7 @@ class Model:
         self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.days_per_year = 365
+        self.months_per_year = 12
         self.option_tokens = {}
         self.usdt_token = usdt
 
@@ -1238,6 +1239,11 @@ class Model:
 
         available_symbols = self.liquidity_pool.list_symbols(seleted_advancer)
 
+
+        '''
+            TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
+        '''
+
         buyStock = 100
         sellStock = 200
 
@@ -1321,13 +1327,6 @@ class Model:
                 '''
                 x = map(float,option_params[0].split('x: ')[-1].split(','))
                 y = map(float,option_params[1].split('y0: ')[-1].split(',')) + map(float,option_params[2].split('y1: ')[-1].split(','))
-
-                '''
-                    TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
-                '''
-                buyStock = 100
-                sellStock = 200
-
                 self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
@@ -1417,15 +1416,61 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "deposit_exchange", "amount": amount})
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
-                    # if call, write OTM by random amout, to the upside
-                    # if put, write OTM by random amount, to the downside
-                    strike_to_write = self.btcusd_data[self.current_round_id]
+                    # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING STRIKES
+                    current_price = self.btcusd_data[self.current_round_id]
 
-                    # chose random maturity length less than the maturity of the pool
-                    maturity = 223
+                    """
+                    TODO:
+                        choose random maturity length less than the maturity of the pool? 1 month for now
+                    """
+                    maturity = int(current_timestamp + (self.daily_period * (self.days_per_year / self.months_per_year)))
+                    days_until_expiry = (maturity - current_timestamp) / self.daily_period
+                    num_samples = 2000
+                    option_type = option_types[int(random.random() * (len(option_types) - 1))]
 
-                    ads_hash = self.linear_liquidity_pool.add_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
-                    tx_hashes.append(ads_hash)
+                    if option_type == 'CALL':
+                        # if call, write OTM by random amout, to the upside
+                        strike = current_price * (1 + random.random())
+                    else:
+                        # if put, write OTM by random amount, to the downside
+                        strike = current_price * (1 - random.random())
+
+
+                    # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
+                    vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 100000}).getDailyVolatility(
+                        self.daily_vol_period * self.daily_period
+                    )
+
+                    months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
+
+                    '''
+                        EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
+                    '''
+                    cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
+                        self.btcusd_data[self.current_round_id] / 10**xSD['decimals'],
+                        vol,
+                        strike,
+                        num_samples,
+                        0.2,
+                        months_to_exp,
+                        option_type
+                    )
+
+                    option_params = filter(None,execute_cmd(cmd).split('\n'))
+
+                    '''
+                        EXAMPLE:
+                        x: 283.000000,294.000000,305.000000,316.000000,327.000000,338.000000,349.000000,360.000000,371.000000,382.000000,393.000000,404.000000,415.000000,426.000000,437.000000,448.000000,459.000000,470.000000,481.000000,492.000000,503.000000,514.000000,525.000000,536.000000,547.000000,558.000000,569.000000,580.000000,591.000000,602.000000,613.000000,624.000000,635.000000,646.000000,657.000000,668.000000,679.000000
+                        y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
+                        y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
+                    '''
+                    x = map(float,option_params[0].split('x: ')[-1].split(','))
+                    y = map(float,option_params[1].split('y0: ')[-1].split(',')) + map(float,option_params[2].split('y1: ')[-1].split(','))
+                    try:
+                        ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
+                        tx_hashes.append(ads_hash)
+                    except Exception as inst:
+                        logger.info({"agent": a.address, "error": inst, "action": "add_symbol", "strike": strike, "maturity": maturity, "x": x, "y": y})
                 elif action == "deposit_pool":
                     amount = portion_dedusted(
                         a.usdt,
