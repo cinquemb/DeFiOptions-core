@@ -1010,13 +1010,12 @@ class LinearLiquidityPool(TokenProxy):
         price_volume = self.contract.caller({'from' : agent.address, 'gas': 100000}).querySell(symbol)
         return price_volume
 
-    def sell(self, agent, symbol, price, volume, option_token_address):
+    def sell(self, agent, symbol, price, volume, option_token):
         '''
             option_token.approve(address(pool), price * volume / volumeBase)`;
             pool.sell(symbol, price, volume)`;
         '''
-        option_token = TokenProxy(w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address))
-        self.option_token.ensure_approved(agent, self.contract.address)
+        option_token.ensure_approved(agent, self.contract.address)
 
         tx = self.contract.functions.sell(
             symbol,
@@ -1353,7 +1352,7 @@ class Model:
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('buy')
 
-            if len(available_symbols) > 0:
+            if open_option_tokens:
                 options.append('sell')
 
             if a.usdt > 0:
@@ -1539,12 +1538,13 @@ class Model:
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
-                    symbol = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    token_to_sell = open_option_tokens[int(random.random() * (len(open_option_tokens) - 1))]
+                    symbol = token_to_sell.contract.caller({'from' : agent.address, 'gas': 100000}).symbol()
                     current_price_volume = self.linear_liquidity_pool.query_sell(symbol)
                     volume = int(random.random() * current_price_volume[1])
                     price = current_price_volume[0]
                     try:
-                        sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume)
+                        sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, token_to_sell)
                         tx_hashes.append(sell_hash)
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
