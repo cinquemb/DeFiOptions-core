@@ -70,7 +70,7 @@ STG = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '',
+  "addr": '0xca4705075993B6A625A8368136c0Ef3780D562F7',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -101,20 +101,20 @@ for contract in [BTCUSDc, BTCUSDAgg, LLP, STG, CREDPRO, EXCHG, TPRO]:
 
 
 # token (from Deploy Root on testnet)
-StableCoin = {
+xSD = {
   "addr": '',
   "decimals": 18,
-  "symbol": 'StableCoin',
+  "symbol": 'xSD',
 }
 
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
-ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeedContract.json', 'r+').read())
+ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeed.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
 USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read())
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
-LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPoolContract.json', 'r+').read())
+LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPool.json', 'r+').read())
 ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
 TimeProviderMockContract = json.loads(open('./build/contracts/TimeProviderMock.json', 'r+').read())
 
@@ -136,6 +136,7 @@ def get_nonce(agent):
     current_block = int(w3.eth.get_block('latest')["number"])
 
     while nonce_data['locked'] == '1':
+        mm.seek(0)
         raw_data_cov = mm.read().decode('utf8')
         nonce_data = json.loads(raw_data_cov)
         mm.seek(0)
@@ -153,12 +154,14 @@ def get_nonce(agent):
     nonce_data[agent.address]["seen_block"] = decode_single('uint256', base64.b64decode(nonce_data[agent.address]["seen_block"]))
     nonce_data[agent.address]["next_tx_count"] = decode_single('uint256', base64.b64decode(nonce_data[agent.address]["next_tx_count"]))
     # DECODE END
-    
+
     if current_block != nonce_data[agent.address]["seen_block"]:
+        nonce_data[agent.address]["seen_block"] = current_block
         if (nonce_data[agent.address]["seen_block"] == 0):
             nonce_data[agent.address]["seen_block"] = current_block
             nonce_data[agent.address]["next_tx_count"] = agent.next_tx_count
         else:
+            nonce_data[agent.address]["next_tx_count"] = agent.next_tx_count
             nonce_data[agent.address]["next_tx_count"] += 1
             agent.next_tx_count = nonce_data[agent.address]["next_tx_count"]
     else:
@@ -638,7 +641,7 @@ class Agent:
     @property
     def lp(self):
         """
-        Get the current balance in Pangolin LP Shares from the TokenProxy.
+        Get the current balance in Linear Liquidity Pool LP Shares from the TokenProxy.
         """
         return self.linear_liquidity_pool[self]
 
@@ -657,48 +660,17 @@ class Agent:
             self.xsd, self.usdt, self.avax, self.lp, self.total_written, self.total_holding, self.short_collateral_exposure)
 
         
-    def get_strategy(self, current_timestamp, price, total_supply, total_coupons, agent_coupons):
+    def get_strategy(self, current_timestamp):
         """
         Get weights, as a dict from action to float, as a function of the price.
         """
         
         strategy = collections.defaultdict(lambda: 1.0)
         
-        # TODO: real (learned? adversarial? GA?) model of the agents
-        # TODO: agent preferences/utility function
-
-        # People are fast to coupon bid to get in front of redemption queue
-        strategy["coupon_bid"] = 2.0
-
-
-        strategy["provide_liquidity"] = 0.1
-        strategy["remove_liquidity"] = 1.0
-        
-        
-        if price >= 1.0:
-            # No rewards for expansion by itself
-            strategy["bond"] = 0
-            # And not unbond
-            strategy["unbond"] = 0
-            # Or redeem if possible
-            # strategy["redeem"] = 10000000000000.0 if self.coupons > 0 else 0
-            # incetive to buy above 1 is for more coupons
-            strategy["buy"] = 1.0
-            strategy["sell"] = 1.0
-        else:
-            # We probably want to unbond due to no returns
-            strategy["unbond"] = 0
-            # And not bond
-            strategy["bond"] = 0
        
         if self.use_faith:
-            # Vary our strategy based on how much xSD we think ought to exist
-            if price * total_supply > self.get_faith(current_timestamp, price, total_supply):
-                # There is too much xSD, so we want to sell
-                strategy["sell"] = 10.0 if ((agent_coupons> 0) and (price > 1.0)) else 2.0
-            else:
-                # no faith based buying, just selling
-                pass
+            # Vary our strategy based on  ... ?
+            pass
         
         return strategy
         
@@ -724,7 +696,7 @@ class Agent:
         return faith
         
 class OptionsExchange:
-    def __init__(self, contract, usdt_token, liquidity_pool, **kwargs):
+    def __init__(self, contract, usdt_token, **kwargs):
         self.contract = contract
         self.usdt_token = usdt_token
         self.option_tokens = []
@@ -943,10 +915,9 @@ class CreditProvider:
 
 class LinearLiquidityPool(TokenProxy):
     def __init__(self, contract, usdt_token, options_exchange, **kwargs):
-        self.contract = contract
         self.usdt_token = usdt_token
         self.options_exchange = options_exchange
-        super(TokenProxy, self).__init__(self.contract)
+        super().__init__(contract)
 
     def deposit_pool(self, agent, amount):
         '''
@@ -1125,9 +1096,9 @@ class Model:
         """
 
         self.agents = []
-        self.options_exchange = OptionsExchange(options_exchange, **kwargs)
+        self.options_exchange = OptionsExchange(options_exchange, usdt, **kwargs)
         self.credit_provider = CreditProvider(credit_provider, **kwargs)
-        self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, self.options_exchange, **kwargs)
+        self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, usdt, self.options_exchange, **kwargs)
         self.btcusd_chainlink_feed = btcusd_chainlink_feed
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
@@ -1151,7 +1122,7 @@ class Model:
         for i in range(len(agents)):
             
             address = agents[i]
-            agent = Agent(self.linear_liquidity_pool, pangolin, xsd, usdt, starting_axax=0, starting_usdt=0, wallet_address=address, is_mint=is_mint, **kwargs)
+            agent = Agent(self.linear_liquidity_pool, self.options_exchange, xsd, usdt, starting_axax=0, starting_usdt=0, wallet_address=address, is_mint=is_mint, **kwargs)
              
             self.agents.append(agent)
 
@@ -1209,10 +1180,10 @@ class Model:
        
     def get_overall_faith(self):
         """
-        What target should the system be trying to hit in xSD market cap?
+        Probably should be related to credit token?
         """
-        return self.agents[0].get_faith(w3.eth.get_block('latest')["number"], self.pangolin.xsd_price(), self.dao.xsd_supply())
-
+        pass
+    
     def is_positive_option_token_balance(self, agent):
         tokens = []
         for k,v in self.option_tokens.iteritems():
@@ -1609,23 +1580,34 @@ def main():
     '''
     btcusd_historical_ohlc = []
 
-    with open('data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
+    with open('../../data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
         btcusd_historical_ohlc = json.loads(btcusd_file.read())["chart"]
     
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_answers = [float(x["open"]) * (10**xSD['decimals']) for x in btcusd_historical_ohlc]
+    btcusd_answers = [float(x["open"]) * (10**xSD['decimals']) for x in btcusd_historical_ohlc if x["open"] != 'null']
 
+    avax_cchain_nonces = open(MMAP_FILE, "r+b")
+
+    # temp opx, llp, agent
+    opx = OptionsExchange(options_exchange, usdt)
+    _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
+    agent = Agent(_llp, opx, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
 
     '''
         SETUP POOL:
             All options must have maturities under the pool maturity
     '''
+    tx_hashes = []
+    tx_hashes_good = 0
+    tx_fails = []
+
     pool_spread = 5 * (10**7)
     pool_reserve_ratio = 20 * (10**7)
     pool_maturity = (1000000000 * daily_period) + current_timestamp
-    linear_liquidity_pool.functions.setParameters(
+    
+    sp_hash = linear_liquidity_pool.functions.setParameters(
         pool_spread,
         pool_reserve_ratio,
         pool_maturity
@@ -1635,12 +1617,20 @@ def main():
         'gas': 500000,
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
+    tmp_tx_hash = {'type': 'setParameters', 'hash': sp_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
 
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
 
-    protocol_settings.functions.setOwner(
+    so_hash = protocol_settings.functions.setOwner(
         linear_liquidity_pool.address,
     ).transact({
         'nonce': get_nonce(agent),
@@ -1649,7 +1639,16 @@ def main():
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
 
-    protocol_settings.functions.setAllowedToken(
+    tmp_tx_hash = {'type': 'setOwner', 'hash': so_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
+
+    sat_hash = protocol_settings.functions.setAllowedToken(
         usdt.address,
         1,
         1
@@ -1659,17 +1658,16 @@ def main():
         'gas': 500000,
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
+    tmp_tx_hash = {'type': 'setAllowedToken', 'hash': sat_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
 
-    protocol_settings.functions.setDefaultUdlFeed(
-        btcusd_chainlink_feed.address,
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-
-    protocol_settings.functions.setUdlFeed(
+    suf_hash = protocol_settings.functions.setUdlFeed(
         btcusd_chainlink_feed.address,
         1
     ).transact({
@@ -1678,8 +1676,16 @@ def main():
         'gas': 500000,
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
+    tmp_tx_hash = {'type': 'setUdlFeed', 'hash': suf_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
 
-    protocol_settings.functions.setVolatilityPeriod(
+    svp_hash = protocol_settings.functions.setVolatilityPeriod(
         30 * daily_period
     ).transact({
         'nonce': get_nonce(agent),
@@ -1687,8 +1693,24 @@ def main():
         'gas': 500000,
         'gasPrice': Web3.toWei(225, 'gwei'),
     })
+    tmp_tx_hash = {'type': 'setVolatilityPeriod', 'hash': svp_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
 
-    avax_cchain_nonces = open(MMAP_FILE, "r+b")
+
+    
+    logger.info("total setup tx: {}, successful setup tx: {}, setup tx fails: {}".format(
+            len(tx_hashes), tx_hashes_good, json.dumps(tx_fails)
+        )
+    )
+
+
+    sys.exit()
 
     # Make a model of the economy
     start_init = time.time()

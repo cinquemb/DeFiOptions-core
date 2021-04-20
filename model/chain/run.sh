@@ -3,6 +3,14 @@
 
 set -e
 
+# Have a function to kill off Ganache and clean up the database when we quit.
+function cleanup {
+    echo "Clean Up..."
+    rm *-approvals.json
+    fi
+}
+
+trap cleanup EXIT
 
 echo "Deploying contracts..."
 time truffle migrate -f 2 --to 2 --skip-dry-run --network=development | tee deploy_output.txt
