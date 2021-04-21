@@ -1650,7 +1650,7 @@ def main():
         so_hash = transaction_helper(
             agent,
             protocol_settings.functions.setOwner(
-                linear_liquidity_pool.address,
+                agent.address,
             ),
             500000
         )
@@ -1663,40 +1663,43 @@ def main():
             print(receipt)
             tx_fails.append(tmp_tx_hash['type'])
 
-    sat_hash = transaction_helper(
-        agent,
-        protocol_settings.functions.setAllowedToken(
-            usdt.address,
-            1,
-            1
-        ),
-        500000
-    )
-    tmp_tx_hash = {'type': 'setAllowedToken', 'hash': sat_hash}
-    tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
     
-    suf_hash = transaction_helper(
-        agent,
-        protocol_settings.functions.setUdlFeed(
-            btcusd_chainlink_feed.address,
-            1
-        ),
-        500000
-    )
-    tmp_tx_hash = {'type': 'setUdlFeed', 'hash': suf_hash}
-    tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
+    if not skip:
+        sat_hash = transaction_helper(
+            agent,
+            protocol_settings.functions.setAllowedToken(
+                usdt.address,
+                1,
+                1
+            ),
+            500000
+        )
+        tmp_tx_hash = {'type': 'setAllowedToken', 'hash': sat_hash}
+        tx_hashes.append(tmp_tx_hash)
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes_good += receipt["status"]
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
+    
+    if not skip:
+        suf_hash = transaction_helper(
+            agent,
+            protocol_settings.functions.setUdlFeed(
+                btcusd_chainlink_feed.address,
+                1
+            ),
+            500000
+        )
+        tmp_tx_hash = {'type': 'setUdlFeed', 'hash': suf_hash}
+        tx_hashes.append(tmp_tx_hash)
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes_good += receipt["status"]
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
 
     if not skip:
         svp_hash = transaction_helper(
