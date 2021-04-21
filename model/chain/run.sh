@@ -7,7 +7,6 @@ set -e
 function cleanup {
     echo "Clean Up..."
     rm *-approvals.json
-    fi
 }
 
 trap cleanup EXIT

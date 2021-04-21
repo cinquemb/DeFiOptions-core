@@ -70,7 +70,7 @@ STG = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xca4705075993B6A625A8368136c0Ef3780D562F7',
+  "addr": '0x64398f29129583a5792520daF566AB310f93b23F',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -124,6 +124,21 @@ def get_addr_from_contract(contract):
 
 avax_cchain_nonces = None
 mm = None
+
+def lock_nonce(agent):
+    global mm
+    # DECODE START
+    if not mm:
+        mm = mmap.mmap(avax_cchain_nonces.fileno(), 0)
+
+    mm.seek(0)
+    raw_data_cov = mm.read().decode('utf8')
+    nonce_data = json.loads(raw_data_cov)
+
+    nonce_data['locked'] = '1'
+    out_data = bytes(json.dumps(nonce_data), 'utf8')
+    mm[:] = out_data
+
 def get_nonce(agent):
     global mm
     # DECODE START
@@ -143,39 +158,68 @@ def get_nonce(agent):
         continue
 
     # locked == '1', unlocked == '0'
-
-    # LOCK FILE START
-    nonce_data['locked'] = '1'
-    out_data = bytes(json.dumps(nonce_data), 'utf8')
-    mm[:] = out_data
-    mm.seek(0)
-    # LOCK FILE END
     
     nonce_data[agent.address]["seen_block"] = decode_single('uint256', base64.b64decode(nonce_data[agent.address]["seen_block"]))
     nonce_data[agent.address]["next_tx_count"] = decode_single('uint256', base64.b64decode(nonce_data[agent.address]["next_tx_count"]))
     # DECODE END
 
     if current_block != nonce_data[agent.address]["seen_block"]:
-        nonce_data[agent.address]["seen_block"] = current_block
         if (nonce_data[agent.address]["seen_block"] == 0):
             nonce_data[agent.address]["seen_block"] = current_block
             nonce_data[agent.address]["next_tx_count"] = agent.next_tx_count
         else:
+            nonce_data[agent.address]["seen_block"] = current_block
             nonce_data[agent.address]["next_tx_count"] = agent.next_tx_count
             nonce_data[agent.address]["next_tx_count"] += 1
             agent.next_tx_count = nonce_data[agent.address]["next_tx_count"]
     else:
+        nonce_data[agent.address]["next_tx_count"] = agent.next_tx_count
         nonce_data[agent.address]["next_tx_count"] += 1
         agent.next_tx_count = nonce_data[agent.address]["next_tx_count"]
 
     # ENCODE START
     nonce_data[agent.address]["seen_block"] = base64.b64encode(encode_single('uint256', nonce_data[agent.address]["seen_block"])).decode('ascii')
     nonce_data[agent.address]["next_tx_count"] = base64.b64encode(encode_single('uint256', nonce_data[agent.address]["next_tx_count"])).decode('ascii')
+    
+    # ENCODE END
+    return agent.next_tx_count
+
+def unlock_nonce(agent):
+    global mm
+    # DECODE START
+    if not mm:
+        mm = mmap.mmap(avax_cchain_nonces.fileno(), 0)
+
+    mm.seek(0)
+    raw_data_cov = mm.read().decode('utf8')
+    nonce_data = json.loads(raw_data_cov)
+
     nonce_data['locked'] = '0'
     out_data = bytes(json.dumps(nonce_data), 'utf8')
     mm[:] = out_data
-    # ENCODE END
-    return agent.next_tx_count
+
+def transaction_helper(agent, prepped_function_call, gas):
+    tx_hash = None
+    nonce = get_nonce(agent)
+    while tx_hash is None:
+        try:
+            agent.next_tx_count = nonce
+            lock_nonce(agent)
+            tx_hash = prepped_function_call.transact({
+                'nonce': nonce,
+                'from' : getattr(agent, 'address', agent),
+                'gas': gas,
+                'gasPrice': Web3.toWei(225, 'gwei'),
+            })
+            unlock_nonce(agent)
+        except Exception as inst:
+            if 'nonce too low' in str(inst):
+                # increment tx_hash
+                unlock_nonce(agent)
+                nonce +=1
+            else:
+                print(inst)
+    return tx_hash
 
 def reg_int(value, scale):
     """
@@ -536,12 +580,11 @@ class TokenProxy:
         if (getattr(owner, 'address', owner) not in self.__approved) or (spender not in self.__approved[getattr(owner, 'address', owner)]):
             # Issue an approval
             #logger.info('WAITING FOR APPROVAL {} for {}'.format(getattr(owner, 'address', owner), spender))
-            tx_hash = self.__contract.functions.approve(spender, UINT256_MAX).transact({
-                'nonce': get_nonce(owner),
-                'from' : getattr(owner, 'address', owner),
-                'gas': 500000,
-                'gasPrice': Web3.toWei(470, 'gwei'),
-            })
+            tx_hash = transaction_helper(
+                owner,
+                self.__contract.functions.approve(spender, UINT256_MAX),
+                500000
+            )
             receipt = w3.eth.waitForTransactionReceipt(tx_hash, poll_latency=tx_pool_latency)
             #logger.info('APPROVED')
             if getattr(owner, 'address', owner) not in self.__approved:
@@ -605,14 +648,13 @@ class Agent:
         if kwargs.get("is_mint", False):
             # need to mint USDT to the wallets for each agent
             start_usdt_formatted = kwargs.get("starting_usdt", Balance(0, USDT["decimals"]))
-            tx_hash = self.usdt_token.contract.functions.mint(
-                self.address, start_usdt_formatted.to_wei()
-            ).transact({
-                'nonce': get_nonce(self),
-                'from' : self.address,
-                'gas': 500000,
-                'gasPrice': Web3.toWei(225, 'gwei'),
-            })
+            tx_hash = transaction_helper(
+                self,
+                self.usdt_token.contract.functions.mint(
+                    self.address, start_usdt_formatted.to_wei()
+                ),
+                500000
+            )
             time.sleep(1.1)
             w3.eth.waitForTransactionReceipt(tx_hash, poll_latency=tx_pool_latency)
         
@@ -727,17 +769,15 @@ class OptionsExchange:
             exchange.depositTokens(to, address(stablecoin), value);
         '''
         self.usdt_token.ensure_approved(agent, self.contract.address)
-        tx = self.contract.functions.depositTokens(
-            agent.address,
-            self.usdt_token.address,
-            amount.to_wei()
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.depositTokens(
+                agent.address,
+                self.usdt_token.address,
+                amount.to_wei()
+            ),
+            500000
+        )
         return tx
 
     def withdraw(self, agent, amount):
@@ -745,15 +785,13 @@ class OptionsExchange:
             uint value = 50e18;
             exchange.withdrawTokens(value);
         '''
-        tx = self.contract.functions.withwdraw(
-            amount.to_wei()
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.withwdraw(
+                amount.to_wei()
+            ),
+            500000
+        )
         return tx
 
     def write(self, agent, feed_address, option_type, amount, strike_price, maturity):
@@ -766,19 +804,17 @@ class OptionsExchange:
                 maturity
             );
         '''
-        tx = self.contract.functions.writeOptions(
-            feed_address,
-            Balance(amount, 18).to_wei(),
-            self.contract.OptionType.CALL if option_type == 'CALL' else self.contract.OptionType.PUT,
-            strike_price,
-            maturity,
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.writeOptions(
+                feed_address,
+                Balance(amount, 18).to_wei(),
+                self.contract.OptionType.CALL if option_type == 'CALL' else self.contract.OptionType.PUT,
+                strike_price,
+                maturity,
+            ),
+            500000
+        )
         return tx
 
     def burn(self, agent, option_token_address, token_amount):
@@ -787,16 +823,13 @@ class OptionsExchange:
         token.burn(amount);
         '''
         option_token = w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address)
-
-        tx = option_token.contract.functions.burn(
-            Balance(token_amount, 18).to_wei()
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            option_token.contract.functions.burn(
+                Balance(token_amount, 18).to_wei()
+            ),
+            500000
+        )
         return tx
 
     def get_book_ids(self, agent):
@@ -806,15 +839,14 @@ class OptionsExchange:
         '''
             exchange.liquidateOptions()
         '''
-        tx = self.contract.functions.liquidateOptions(
-            options_address,
-            owner_address
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.liquidateOptions(
+                options_address,
+                owner_address
+            ),
+            500000
+        )
         return tx
 
     def get_total_short_collateral_exposure(self, agent):
@@ -884,24 +916,22 @@ class CreditProvider:
             Then call prefetchDailyVolatility passing in the volatility period defined in the ProtocolSettings contract (defaults to 90 days)
             Maybe twap can be updated daily?
         '''
-        txr = self.contract.functions.prefetchDailyPrice(
-            latest_round_id
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
+        txr = transaction_helper(
+            agent,
+            self.contract.functions.prefetchDailyPrice(
+                latest_round_id
+            ),
+            500000
+        )
         txr_recp = w3.eth.waitForTransactionReceipt(txr, poll_latency=tx_pool_latency)
-
-        txv = self.contract.functions.prefetchDailyVolatility(
-            iv_bin_window
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
+        
+        txv = transaction_helper(
+            agent,
+            self.contract.functions.prefetchDailyVolatility(
+                iv_bin_window
+            ),
+            500000
+        )
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
 
     def get_total_balance(self, agent):
@@ -926,32 +956,28 @@ class LinearLiquidityPool(TokenProxy):
             );
         '''
         self.usdt_token.ensure_approved(agent, self.contract.address)
-        tx = self.contract.functions.depositTokens(
-            agent.address,
-            self.usdt_token.address,
-            amount.to_wei()
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.depositTokens(
+                agent.address,
+                self.usdt_token.address,
+                amount.to_wei()
+            ),
+            500000
+        )
         return tx
 
     def redeem(self, agent):
         '''
             pool.redeem(address)
         '''
-        tx = self.contract.functions.redeem(
-            agent.address
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.redeem(
+                agent.address
+            ),
+            500000
+        )
         return tx
 
     def query_buy(agent, symbol):
@@ -964,17 +990,16 @@ class LinearLiquidityPool(TokenProxy):
             pool.buy(symbol, price, volume, address(stablecoin));
         '''
         self.usdt_token.ensure_approved(agent, self.contract.address)
-        tx = self.contract.functions.buy(
-            symbol,
-            price,
-            volume,
-            self.usdt_token.contract.address
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.buy(
+                symbol,
+                price,
+                volume,
+                self.usdt_token.contract.address
+            ),
+            500000
+        )
         return tx
 
     def query_sell(agent, symbol):
@@ -987,18 +1012,15 @@ class LinearLiquidityPool(TokenProxy):
             pool.sell(symbol, price, volume)`;
         '''
         option_token.ensure_approved(agent, self.contract.address)
-
-        tx = self.contract.functions.sell(
-            symbol,
-            price,
-            volume
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.sell(
+                symbol,
+                price,
+                volume
+            ),
+            500000
+        )
         return tx
 
     def list_symbols(self, agent):
@@ -1030,24 +1052,21 @@ class LinearLiquidityPool(TokenProxy):
                 200 * volumeBase  // sell stock
             );
         '''
-
-        tx = self.contract.functions.addSymbol(
-            udlfeed_address,
-            strike * 10**18,
-            maturity,
-            current_timestamp,
-            current_timestamp + (60 * 60 * 24),
-            x,
-            y,
-            buyStock,
-            sellStock
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.addSymbol(
+                udlfeed_address,
+                strike * 10**18,
+                maturity,
+                current_timestamp,
+                current_timestamp + (60 * 60 * 24),
+                x,
+                y,
+                buyStock,
+                sellStock
+            ),
+            500000
+        )
         return tx
 
     def update_symbol(self, agent, udlfeed_address, strike, maturity, current_timestamp, x, y, buyStock, sellStock):
@@ -1065,24 +1084,21 @@ class LinearLiquidityPool(TokenProxy):
                 200 * volumeBase  // sell stock
             );
         '''
-
-        tx = self.contract.functions.addSymbol(
-            udlfeed_address,
-            strike * 10**18,
-            maturity,
-            current_timestamp,
-            current_timestamp + (60 * 60 * 24),
-            x,
-            y,
-            buyStock,
-            sellStock
-        ).transact({
-            'nonce': get_nonce(agent),
-            'from' : agent.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-
+        tx = transaction_helper(
+            agent,
+            self.contract.functions.addSymbol(
+                udlfeed_address,
+                strike * 10**18,
+                maturity,
+                current_timestamp,
+                current_timestamp + (60 * 60 * 24),
+                x,
+                y,
+                buyStock,
+                sellStock
+            ),
+            500000
+        )
         return tx
 
 class Model:
@@ -1135,30 +1151,29 @@ class Model:
         '''
         current_timestamp = w3.eth.get_block('latest')['timestamp']
         seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
-        self.btcusd_agg.setRoundIds(
-            range(30)
-        ).transact({
-            'nonce': get_nonce(seleted_advancer),
-            'from' : seleted_advancer.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-        self.btcusd_agg.setAnswers(
-            self.btcusd_data[:self.btcusd_data_offset]
-        ).transact({
-            'nonce': get_nonce(seleted_advancer),
-            'from' : seleted_advancer.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
-        self.btcusd_agg.setUpdatedAts(
-            [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
-        ).transact({
-            'nonce': get_nonce(seleted_advancer),
-            'from' : seleted_advancer.address,
-            'gas': 500000,
-            'gasPrice': Web3.toWei(225, 'gwei'),
-        })
+        transaction_helper(
+            seleted_advancer,
+            self.btcusd_agg.setRoundIds(
+                range(30)
+            ),
+            500000
+        )
+
+        transaction_helper(
+            seleted_advancer,
+            self.btcusd_agg.setAnswers(
+                self.btcusd_data[:self.btcusd_data_offset]
+            ),
+            500000
+        )
+
+        transaction_helper(
+            seleted_advancer,
+            self.btcusd_agg.setUpdatedAts(
+                [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
+            ),
+            500000
+        )
         
     def log(self, stream, seleted_advancer, header=False):
         """
@@ -1226,30 +1241,29 @@ class Model:
             UPDATE SYMBOL PARAMS
         '''
         if (diff_timestamp >= daily_period):
-            self.btcusd_agg.appendRoundId(
-                self.current_round_id
-            ).transact({
-                'nonce': get_nonce(seleted_advancer),
-                'from' : seleted_advancer.address,
-                'gas': 500000,
-                'gasPrice': Web3.toWei(225, 'gwei'),
-            })
-            self.btcusd_agg.appendAnswer(
-                self.btcusd_data[self.current_round_id]
-            ).transact({
-                'nonce': get_nonce(seleted_advancer),
-                'from' : seleted_advancer.address,
-                'gas': 500000,
-                'gasPrice': Web3.toWei(225, 'gwei'),
-            })
-            self.btcusd_agg.appendUpdatedAt(
-                current_timestamp
-            ).transact({
-                'nonce': get_nonce(seleted_advancer),
-                'from' : seleted_advancer.address,
-                'gas': 500000,
-                'gasPrice': Web3.toWei(225, 'gwei'),
-            })
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.appendRoundId(
+                    self.current_round_id
+                ),
+                500000
+            )
+
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.appendAnswer(
+                    self.btcusd_data[self.current_round_id]
+                ),
+                500000
+            )
+
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.appendUpdatedAt(
+                    current_timestamp
+                ),
+                500000
+            )
 
             self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
 
@@ -1606,58 +1620,58 @@ def main():
     pool_spread = 5 * (10**7)
     pool_reserve_ratio = 20 * (10**7)
     pool_maturity = (1000000000 * daily_period) + current_timestamp
-    
-    sp_hash = linear_liquidity_pool.functions.setParameters(
-        pool_spread,
-        pool_reserve_ratio,
-        pool_maturity
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-    tmp_tx_hash = {'type': 'setParameters', 'hash': sp_hash}
-    tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
 
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
 
-    so_hash = protocol_settings.functions.setOwner(
-        linear_liquidity_pool.address,
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
+    skip = True
 
-    tmp_tx_hash = {'type': 'setOwner', 'hash': so_hash}
-    tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
+    if not skip:
+        sp_hash = transaction_helper(
+            agent,
+            linear_liquidity_pool.functions.setParameters(
+                pool_spread,
+                pool_reserve_ratio,
+                pool_maturity
+            ),
+            500000
+        )
+        tmp_tx_hash = {'type': 'setParameters', 'hash': sp_hash}
+        tx_hashes.append(tmp_tx_hash)
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes_good += receipt["status"]
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
+    
+    if not skip:
+        so_hash = transaction_helper(
+            agent,
+            protocol_settings.functions.setOwner(
+                linear_liquidity_pool.address,
+            ),
+            500000
+        )
+        tmp_tx_hash = {'type': 'setOwner', 'hash': so_hash}
+        tx_hashes.append(tmp_tx_hash)
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes_good += receipt["status"]
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
 
-    sat_hash = protocol_settings.functions.setAllowedToken(
-        usdt.address,
-        1,
-        1
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
+    sat_hash = transaction_helper(
+        agent,
+        protocol_settings.functions.setAllowedToken(
+            usdt.address,
+            1,
+            1
+        ),
+        500000
+    )
     tmp_tx_hash = {'type': 'setAllowedToken', 'hash': sat_hash}
     tx_hashes.append(tmp_tx_hash)
     print(tmp_tx_hash)
@@ -1666,16 +1680,15 @@ def main():
     if receipt["status"] == 0:
         print(receipt)
         tx_fails.append(tmp_tx_hash['type'])
-
-    suf_hash = protocol_settings.functions.setUdlFeed(
-        btcusd_chainlink_feed.address,
-        1
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
+    
+    suf_hash = transaction_helper(
+        agent,
+        protocol_settings.functions.setUdlFeed(
+            btcusd_chainlink_feed.address,
+            1
+        ),
+        500000
+    )
     tmp_tx_hash = {'type': 'setUdlFeed', 'hash': suf_hash}
     tx_hashes.append(tmp_tx_hash)
     print(tmp_tx_hash)
@@ -1685,22 +1698,22 @@ def main():
         print(receipt)
         tx_fails.append(tmp_tx_hash['type'])
 
-    svp_hash = protocol_settings.functions.setVolatilityPeriod(
-        30 * daily_period
-    ).transact({
-        'nonce': get_nonce(agent),
-        'from' : agent.address,
-        'gas': 500000,
-        'gasPrice': Web3.toWei(225, 'gwei'),
-    })
-    tmp_tx_hash = {'type': 'setVolatilityPeriod', 'hash': svp_hash}
-    tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
+    if not skip:
+        svp_hash = transaction_helper(
+            agent,
+            protocol_settings.functions.setVolatilityPeriod(
+                30 * daily_period
+            ),
+            500000
+        )
+        tmp_tx_hash = {'type': 'setVolatilityPeriod', 'hash': svp_hash}
+        tx_hashes.append(tmp_tx_hash)
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes_good += receipt["status"]
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
 
 
     
