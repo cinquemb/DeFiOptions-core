@@ -218,7 +218,8 @@ def transaction_helper(agent, prepped_function_call, gas):
                 unlock_nonce(agent)
                 nonce +=1
             else:
-                print(inst)
+                pass
+                #print(inst)
     return tx_hash
 
 def reg_int(value, scale):
@@ -738,9 +739,10 @@ class Agent:
         return faith
         
 class OptionsExchange:
-    def __init__(self, contract, usdt_token, **kwargs):
+    def __init__(self, contract, usdt_token, btcusd_chainlink_feed, **kwargs):
         self.contract = contract
         self.usdt_token = usdt_token
+        self.btcusd_chainlink_feed = btcusd_chainlink_feed
         self.option_tokens = []
 
     def balance(self, agent):
@@ -902,13 +904,6 @@ class OptionsExchange:
         cs = self.contract.caller({'from' : checker.address, 'gas': 100000}).calcSurplus(agent.address)
         return cs
 
-
-class CreditProvider:
-    def __init__(self, contract, usdt_token, **kwargs):
-        self.contract = contract
-        self.usdt_token = usdt_token
-
-
     def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
         '''
 
@@ -918,7 +913,7 @@ class CreditProvider:
         '''
         txr = transaction_helper(
             agent,
-            self.contract.functions.prefetchDailyPrice(
+            self.btcusd_chainlink_feed.functions.prefetchDailyPrice(
                 latest_round_id
             ),
             500000
@@ -927,12 +922,17 @@ class CreditProvider:
         
         txv = transaction_helper(
             agent,
-            self.contract.functions.prefetchDailyVolatility(
+            self.btcusd_chainlink_feed.functions.prefetchDailyVolatility(
                 iv_bin_window
             ),
             500000
         )
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
+
+
+class CreditProvider:
+    def __init__(self, contract, **kwargs):
+        self.contract = contract
 
     def get_total_balance(self, agent):
         '''
@@ -1112,7 +1112,7 @@ class Model:
         """
 
         self.agents = []
-        self.options_exchange = OptionsExchange(options_exchange, usdt, **kwargs)
+        self.options_exchange = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed, **kwargs)
         self.credit_provider = CreditProvider(credit_provider, **kwargs)
         self.linear_liquidity_pool = LinearLiquidityPool(linear_liquidity_pool, usdt, self.options_exchange, **kwargs)
         self.btcusd_chainlink_feed = btcusd_chainlink_feed
@@ -1150,10 +1150,10 @@ class Model:
             INIT T-MINUS DATA FOR FEED
         '''
         current_timestamp = w3.eth.get_block('latest')['timestamp']
-        seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+        seleted_advancer = self.agents[0]
         transaction_helper(
             seleted_advancer,
-            self.btcusd_agg.setRoundIds(
+            self.btcusd_agg.functions.setRoundIds(
                 range(30)
             ),
             500000
@@ -1161,7 +1161,7 @@ class Model:
 
         transaction_helper(
             seleted_advancer,
-            self.btcusd_agg.setAnswers(
+            self.btcusd_agg.functions.setAnswers(
                 self.btcusd_data[:self.btcusd_data_offset]
             ),
             500000
@@ -1169,7 +1169,7 @@ class Model:
 
         transaction_helper(
             seleted_advancer,
-            self.btcusd_agg.setUpdatedAts(
+            self.btcusd_agg.functions.setUpdatedAts(
                 [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
             ),
             500000
@@ -1219,10 +1219,14 @@ class Model:
         current_timestamp = w3.eth.get_block('latest')['timestamp']
         diff_timestamp = current_timestamp - self.prev_timestamp
 
-        #randomly have an agent do maintence tasks the epoch
-        seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+        '''
+            TODO:
+                randomly have an agent do maintence tasks the epoch, in order to simulate people using governance tokens to do these task, for now, use initializing agent
+        '''
+        #seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+        seleted_advancer = self.agents[0]
 
-        available_symbols = self.liquidity_pool.list_symbols(seleted_advancer)
+        available_symbols = self.linear_liquidity_pool.list_symbols(seleted_advancer)
 
 
         '''
@@ -1232,7 +1236,7 @@ class Model:
         buyStock = 100
         sellStock = 200
 
-        for x in self.get_option_tokens(seleted_advancer):
+        for x in self.linear_liquidity_pool.get_option_tokens(seleted_advancer):
             if x.address not in self.option_tokens:
                 self.option_tokens[x.address] = x
 
@@ -1240,10 +1244,10 @@ class Model:
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
             UPDATE SYMBOL PARAMS
         '''
-        if (diff_timestamp >= daily_period):
+        if (diff_timestamp >= self.daily_period):
             transaction_helper(
                 seleted_advancer,
-                self.btcusd_agg.appendRoundId(
+                self.btcusd_agg.functions.appendRoundId(
                     self.current_round_id
                 ),
                 500000
@@ -1251,7 +1255,7 @@ class Model:
 
             transaction_helper(
                 seleted_advancer,
-                self.btcusd_agg.appendAnswer(
+                self.btcusd_agg.functions.appendAnswer(
                     self.btcusd_data[self.current_round_id]
                 ),
                 500000
@@ -1259,13 +1263,13 @@ class Model:
 
             transaction_helper(
                 seleted_advancer,
-                self.btcusd_agg.appendUpdatedAt(
+                self.btcusd_agg.functions.appendUpdatedAt(
                     current_timestamp
                 ),
                 500000
             )
 
-            self.credit_provider.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
+            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
 
             for sym in available_symbols:
                 sym_parts = sym.split('-')
@@ -1600,12 +1604,12 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_answers = [float(x["open"]) * (10**xSD['decimals']) for x in btcusd_historical_ohlc if x["open"] != 'null']
+    btcusd_answers = [int(float(x["open"]) * (10**xSD['decimals'])) for x in btcusd_historical_ohlc if x["open"] != 'null']
 
     avax_cchain_nonces = open(MMAP_FILE, "r+b")
 
     # temp opx, llp, agent
-    opx = OptionsExchange(options_exchange, usdt)
+    opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
 
@@ -1625,7 +1629,7 @@ def main():
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
 
-    skip = True
+    skip = False
 
     if not skip:
         sp_hash = transaction_helper(
@@ -1725,13 +1729,10 @@ def main():
         )
     )
 
-
-    sys.exit()
-
-    # Make a model of the economy
+    # Make a model of the options exchnage
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
+    model = Model(options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
