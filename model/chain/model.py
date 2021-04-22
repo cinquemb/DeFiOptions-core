@@ -47,25 +47,29 @@ logger.info(w3.eth.blockNumber)
 logger.info(w3.clientVersion)
 #sys.exit()
 
-
 TPRO = {
     "addr": '',
-    "deploy_slug": "timeProvider is at: "
+    "deploy_slug": "timeProviderAddress is at: "
 }
 
 EXCHG = {
     "addr": '',
-    "deploy_slug": "exchange is at: "
+    "deploy_slug": "OptionsExchangeAddress is at: "
 }
 
 CREDPRO = {
     "addr": '',
-    "deploy_slug": "creditProvider is at: "
+    "deploy_slug": "CreditProviderAddress is at: "
 }
 
 STG = {
     "addr": '',
-    "deploy_slug": "settings is at: "
+    "deploy_slug": "ProtocolSettingsAddress is at: "
+}
+
+DPLY = {
+    "addr": '',
+    "deploy_slug": "Deployer4 is at: "
 }
 
 # USE FROM XSD SIMULATION
@@ -77,7 +81,7 @@ USDT = {
 
 LLP = {
     "addr": '',
-    "deploy_slug": "pool is at: "
+    "deploy_slug": "LinearLiquidityPoolAddress is at: "
 }
 
 BTCUSDAgg = {
@@ -107,6 +111,7 @@ xSD = {
   "symbol": 'xSD',
 }
 
+DeployerContract = json.loads(open('./build/contracts/Deployer.json', 'r+').read())
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
 ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeed.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
@@ -746,7 +751,7 @@ class OptionsExchange:
         self.option_tokens = []
 
     def balance(self, agent):
-        bal = self.contract.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
+        bal = self.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
         return Balance.from_tokens(bal, xSD['decimals'])
 
     def resolve_token(self, agent, symbol):
@@ -1201,7 +1206,7 @@ class Model:
     
     def is_positive_option_token_balance(self, agent):
         tokens = []
-        for k,v in self.option_tokens.iteritems():
+        for k,v in self.option_tokens.items():
             if v[agent] > 0:
                 tokens.append(v)
         return False
@@ -1326,6 +1331,9 @@ class Model:
 
         # return list of addres for agents who are short collateral
         any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(seleted_advancer, a) <= 0]
+        
+        tx_hashes = []
+        total_tx_submitted = 0
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1356,7 +1364,7 @@ class Model:
             if a.lp > 0:
                 options.append('redeem')
 
-            if not open_option_tokens:
+            if open_option_tokens:
                 options.append('burn')
 
             # option position must be short collateral
@@ -1399,7 +1407,7 @@ class Model:
                     )
                     try:
                         dpe_hash = self.options_exchange.deposit_exchange(a, amount)
-                        tx_hashes.append(dpe_hash)
+                        tx_hashes.append({'type': 'deposit_exchange', 'hash': dpe_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "deposit_exchange", "amount": amount})
                 elif action == "add_symbol":
@@ -1539,7 +1547,7 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
                     for short_owners in any_short_collateral:
-                        for otk, otv in self.option_tokens.iteritems():
+                        for otk, otv in self.option_tokens.items():
                             try:
                                 lqd8_hash = self.liquidate(a, otk, short_owners.address)
                                 tx_hashes.append(lqd8_hash)
@@ -1584,6 +1592,7 @@ def main():
     logging.basicConfig(level=logging.INFO)
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
     
+    #deployer = w3.eth.contract(abi=DeployerContract['abi'], address=DPLY["addr"])
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
@@ -1591,7 +1600,6 @@ def main():
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
     btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
-
 
     '''
         INIT FEEDS FOR BTCUSDAGG
@@ -1628,8 +1636,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-
-    skip = False
+    skip = True
 
     if not skip:
         sp_hash = transaction_helper(

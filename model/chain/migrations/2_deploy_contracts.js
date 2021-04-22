@@ -18,6 +18,8 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 module.exports = async function(deployer) {
 
   await deployer.deploy(Deployer4, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000");
+
+  const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
   const timeProvider = await deployer.deploy(TimeProviderMock, Deployer4.address);
   console.log("timeProvider is at: "+ timeProvider.address);
@@ -64,4 +66,16 @@ module.exports = async function(deployer) {
     []
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
+
+  await deployer4.deploy();
+  const timeProviderAddress = await deployer4.getContractAddress("TimeProvider");
+  console.log("timeProviderAddress is at: "+ timeProviderAddress);
+  const ProtocolSettingsAddress = await deployer4.getContractAddress("ProtocolSettings");
+  console.log("ProtocolSettingsAddress is at: "+ ProtocolSettingsAddress);
+  const CreditProviderAddress = await deployer4.getContractAddress("CreditProvider");
+  console.log("CreditProviderAddress is at: "+ CreditProviderAddress);
+  const OptionsExchangeAddress = await deployer4.getContractAddress("OptionsExchange");
+  console.log("OptionsExchangeAddress is at: "+ OptionsExchangeAddress);
+  const LinearLiquidityPoolAddress = await deployer4.getContractAddress("LinearLiquidityPool");
+  console.log("LinearLiquidityPoolAddress is at: "+ LinearLiquidityPoolAddress);
 };
