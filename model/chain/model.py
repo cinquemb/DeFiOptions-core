@@ -218,13 +218,17 @@ def transaction_helper(agent, prepped_function_call, gas):
             })
             unlock_nonce(agent)
         except Exception as inst:
-            if 'nonce too low' in str(inst):
+            err_str = str(inst)
+            if 'nonce too low' in err_str:
+                # increment tx_hash
+                unlock_nonce(agent)
+                nonce +=1
+            elif 'replacement transaction underpriced' in err_str:
                 # increment tx_hash
                 unlock_nonce(agent)
                 nonce +=1
             else:
-                pass
-                #print(inst)
+                print(inst)
     return tx_hash
 
 def reg_int(value, scale):
@@ -794,7 +798,7 @@ class OptionsExchange:
         '''
         tx = transaction_helper(
             agent,
-            self.contract.functions.withwdraw(
+            self.contract.functions.withdrawTokens(
                 amount.to_wei()
             ),
             500000
@@ -1172,6 +1176,7 @@ class Model:
             500000
         )
 
+        print([(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)])
         transaction_helper(
             seleted_advancer,
             self.btcusd_agg.functions.setUpdatedAts(
@@ -1189,12 +1194,20 @@ class Model:
         if header:
             stream.write("#block\twritten\tholding\texposure\tcredit supply\n")#\tfaith\n")
         
-        stream.write('{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
+        print(
+            w3.eth.get_block('latest')["number"],
+            self.options_exchange.get_total_written(seleted_advancer, self.option_tokens.keys()),
+            self.options_exchange.get_total_holding(seleted_advancer, self.option_tokens.keys()),
+            self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
+            self.credit_provider.get_total_balance(seleted_advancer)
+        )
+        
+        stream.write('{}\t{}\t{}\t{:.2f}\t{:.2f}\n'.format(
                 w3.eth.get_block('latest')["number"],
-                self.options_exchange.get_total_written(seleted_advancer.address, self.option_tokens.keys()),
-                self.options_exchange.get_total_holding(seleted_advancer.address, self.option_tokens.keys()),
-                self.options_exchange.get_total_short_collateral_exposure(seleted_advancer.address),
-                self.credit_provider.get_total_balance(seleted_advancer.address)
+                self.options_exchange.get_total_written(seleted_advancer, self.option_tokens.keys()),
+                self.options_exchange.get_total_holding(seleted_advancer, self.option_tokens.keys()),
+                self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
+                self.credit_provider.get_total_balance(seleted_advancer)
             )
         )
        
@@ -1274,7 +1287,7 @@ class Model:
                 500000
             )
 
-            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, 30 * self.daily_period)
+            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
 
             for sym in available_symbols:
                 sym_parts = sym.split('-')
@@ -1348,6 +1361,9 @@ class Model:
 
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('buy')
+
+            if exchange_bal > 0:
+                options.append('add_symbol')
 
             if open_option_tokens:
                 options.append('sell')
@@ -1464,7 +1480,7 @@ class Model:
                     y = map(float,option_params[1].split('y0: ')[-1].split(',')) + map(float,option_params[2].split('y1: ')[-1].split(','))
                     try:
                         ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, current_timestamp, x, y, buyStock, sellStock)
-                        tx_hashes.append(ads_hash)
+                        tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "add_symbol", "strike": strike, "maturity": maturity, "x": x, "y": y})
                 elif action == "deposit_pool":
@@ -1474,7 +1490,7 @@ class Model:
                     )
                     try:
                         dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
-                        tx_hashes.append(dpp_hash)
+                        tx_hashes.append({'type': 'deposit_pool', 'hash': dpp_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "deposit_pool", "amount": amount})
                 elif action == "withdraw":
@@ -1484,13 +1500,13 @@ class Model:
                     )
                     try:
                         wtd_hash = self.options_exchange.withdraw(a, amount)
-                        tx_hashes.append(wtd_hash)
+                        tx_hashes.append({'type': 'withdraw', 'hash': wtd_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "withdraw", "amount": amount})
                 elif action == "redeem":
                     try:
                         rdm_hash = self.linear_liquidity_pool.redeem(a)
-                        tx_hashes.append(rdm_hash)
+                        tx_hashes.append({'type': 'redeem', 'hash': rdm_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "redeem"})
                 elif action == "burn":
@@ -1501,7 +1517,7 @@ class Model:
                     )
                     try:
                         brn_hash = self.options_exchange.burn(a, token_to_burn.address, token_amount)
-                        tx_hashes.append(brn_hash)
+                        tx_hashes.append({'type': 'burn', 'hash': brn_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "burn", "token_to_burn": token_to_burn, "amount": amount})
                 elif action == "write":
@@ -1521,7 +1537,7 @@ class Model:
                     )
                     try:
                         w_hash = self.options_exchange.write(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
-                        tx_hashes.append(w_hash)
+                        tx_hashes.append({'type': 'write', 'hash': w_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "write", "strike_price": strike_price, "maturity": maturity, "option_type": option_type, "amount": amount})
                 elif action == "buy":
@@ -1531,7 +1547,7 @@ class Model:
                     price = current_price_volume[0]
                     try:
                         buy_hash = self.linear_liquidity_pool.buy(a, symbol, current_price_volume[0], volume)
-                        tx_hashes.append(buy_hash)
+                        tx_hashes.append({'type': 'buy', 'hash': buy_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
@@ -1542,7 +1558,7 @@ class Model:
                     price = current_price_volume[0]
                     try:
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, token_to_sell)
-                        tx_hashes.append(sell_hash)
+                        tx_hashes.append({'type': 'sell', 'hash': sell_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
@@ -1550,7 +1566,7 @@ class Model:
                         for otk, otv in self.option_tokens.items():
                             try:
                                 lqd8_hash = self.liquidate(a, otk, short_owners.address)
-                                tx_hashes.append(lqd8_hash)
+                                tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
                             except Exception as inst:
                                 logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owners.address, "option_token": otk})
                 else:
@@ -1568,16 +1584,20 @@ class Model:
         providerAvax.make_request("avax.issueBlock", {})
         tx_hashes_good = 0
         tx_fails = []
+        tx_good = []
         #'''
         for tmp_tx_hash in tx_hashes:
             receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
             tx_hashes_good += receipt["status"]
             if receipt["status"] == 0:
                 tx_fails.append(tmp_tx_hash['type'])
+            else:
+                tx_good.append(tmp_tx_hash['type'])
+
         #'''
 
-        logger.info("total tx: {}, successful tx: {}, tx fails: {}".format(
-                len(tx_hashes), tx_hashes_good, json.dumps(tx_fails)
+        logger.info("total tx: {}, successful tx: {}, tx fails: {}, tx passed: {}".format(
+                len(tx_hashes), tx_hashes_good, json.dumps(tx_fails), json.dumps(tx_good)
             )
         )
 
