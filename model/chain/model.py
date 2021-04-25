@@ -815,12 +815,13 @@ class OptionsExchange:
 
     def write(self, agent, feed_address, option_type, amount, strike_price, maturity):
         '''
-            uint id = exchange.writeOptions(
+            address tkAddr = exchange.writeOptions(
                 eth_usd_feed, 
                 10 * volumeBase, 
                 OptionsExchange.OptionType.CALL, 
                 strikePrice, 
-                maturity
+                maturity,
+                holder
             );
         '''
         tx = transaction_helper(
@@ -831,6 +832,7 @@ class OptionsExchange:
                 0 if option_type == 'CALL' else 1,
                 strike_price,
                 maturity,
+                agent.address
             ),
             500000
         )
@@ -998,7 +1000,8 @@ class LinearLiquidityPool(TokenProxy):
         return tx
 
     def query_buy(self, agent, symbol):
-        price_volume = self.contract.caller({'from' : agent.address, 'gas': 500000}).queryBuy(symbol)
+        print(symbol)
+        price_volume = self.contract.caller({'from' : agent.address, 'gas': 8000000}).queryBuy(symbol)
         return price_volume
 
     def buy(self, agent, symbol, price, volume):
@@ -1042,7 +1045,7 @@ class LinearLiquidityPool(TokenProxy):
 
     def list_symbols(self, agent):
         symbols = self.contract.caller({'from' : agent.address, 'gas': 100000}).listSymbols().split('\n')
-        return symbols
+        return list(filter(None,symbols))
 
     def get_option_tokens(self, agent):
         symbols = self.list_symbols(agent)
@@ -1081,8 +1084,8 @@ class LinearLiquidityPool(TokenProxy):
                 current_timestamp + (60 * 60 * 24),
                 x,
                 y,
-                buyStock,
-                sellStock
+                buyStock * 10**18,
+                sellStock * 10**18
             ),
             500000
         )
@@ -1103,19 +1106,20 @@ class LinearLiquidityPool(TokenProxy):
                 200 * volumeBase  // sell stock
             );
         '''
+        #print(json.dumps([strike * (10**18), maturity, current_timestamp, current_timestamp + (60 * 60 * 24), x, y, buyStock * (10**18), sellStock * (10**18)], indent=4))
         tx = transaction_helper(
             agent,
             self.contract.functions.addSymbol(
                 udlfeed_address,
-                strike * 10**18,
+                strike * (10**18),
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24),
+                current_timestamp + (60 * 60 * 24*2),
                 x,
                 y,
-                buyStock,
-                sellStock
+                buyStock * (10**18),
+                sellStock * (10**18)
             ),
             500000
         )
@@ -1316,6 +1320,7 @@ class Model:
             self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
 
             for sym in available_symbols:
+                print(sym)
                 sym_parts = sym.split('-')
 
                 '''
@@ -1360,9 +1365,11 @@ class Model:
                     y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
                     y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
                 '''
-                x = [int(x0 * 10**xSD['decimals']) for x0 in list(map(float,option_params[0].split('x: ')[-1].split(',')))]
+                x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in list(map(float,option_params[0].split('x: ')[-1].split(',')))]
+                print(x)
                 y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
-                y  = [int(y0 * 10**xSD['decimals']) for y0 in y]
+                y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                print(y)
                 self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
@@ -1378,7 +1385,7 @@ class Model:
         tx_hashes = []
         total_tx_submitted = 0
 
-        unique_available_symbols = list(set([sym.split('-')[1] for asym in available_symbols]))
+        unique_available_symbols = list(set([asym.split('-')[1] for asym in available_symbols]))
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1519,9 +1526,11 @@ class Model:
                         y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
                         y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
                     '''
-                    x = [int(x0 * 10**xSD['decimals']) for x0 in list(map(float,option_params[0].split('x: ')[-1].split(',')))]
+                    x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in list(map(float,option_params[0].split('x: ')[-1].split(',')))]
+                    print(x)
                     y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
-                    y  = [int(y0 * 10**xSD['decimals']) for y0 in y]
+                    y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                    print(y)
                     try:
                         ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
                         tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
@@ -1671,9 +1680,9 @@ def main():
     btcusd_historical_ohlc = []
 
     #pretty(options_exchange.functions.__dict__, indent=4)
-    print(Balance(4.474093538197649, 18).to_wei())
+    #print(Balance(4.474093538197649, 18).to_wei())
 
-    sys.exit()
+    #sys.exit()
 
     with open('../../data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
         btcusd_historical_ohlc = json.loads(btcusd_file.read())["chart"]
