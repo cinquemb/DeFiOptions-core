@@ -142,7 +142,7 @@ def lock_nonce(agent):
 
     nonce_data['locked'] = '1'
     out_data = bytes(json.dumps(nonce_data), 'utf8')
-    mm[:] = out_data
+    mm[0:] = out_data
 
 def get_nonce(agent):
     global mm
@@ -251,15 +251,18 @@ def pretty(d, indent=0):
    """
    Pretty-print a value.
    """
-   for key, value in d.items():
-      print('\t' * indent + str(key))
-      if isinstance(value, dict):
-         pretty(value, indent+1)
-      elif isinstance(value, list):
-        for v in value:
-            pretty(v, indent+1)
-      else:
-         print('\t' * (indent+1) + str(value))
+   if not isinstance(d, dict) and not isinstance(d, list):
+       print('\t' * (indent+1) + str(d))
+   else: 
+       for key, value in d.items():
+          print('\t' * indent + str(key))
+          if isinstance(value, dict):
+             pretty(value, indent+1)
+          elif isinstance(value, list):
+            for v in value:
+                pretty(v, indent+1)
+          else:
+             print('\t' * (indent+1) + str(value))
 
 def portion_dedusted(total, fraction):
     """
@@ -813,6 +816,32 @@ class OptionsExchange:
         )
         return tx
 
+    def calc_collateral(self, agent, feed_address, option_type, amount, strike_price, maturity):
+        '''
+
+        address eth_usd_feed = address(0x987...);
+        uint volumeBase = 1e18;
+        uint strikePrice = 1300e18;
+        uint maturity = now + 30 days;
+
+        uint collateral = exchange.calcCollateral(
+            feed_address, 
+            10 * volumeBase, 
+            OptionsExchange.OptionType.CALL, 
+            strikePrice, 
+            maturity
+        );
+        '''
+
+        cc = self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcCollateral(
+            feed_address,
+            Balance(amount, 18).to_wei(),
+            0 if option_type == 'CALL' else 1,
+            strike_price,
+            maturity
+        )
+        return cc
+
     def write(self, agent, feed_address, option_type, amount, strike_price, maturity):
         '''
             address tkAddr = exchange.writeOptions(
@@ -834,7 +863,7 @@ class OptionsExchange:
                 maturity,
                 agent.address
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -906,7 +935,7 @@ class OptionsExchange:
         '''
         ow = 0
         for ot in self.option_tokens:
-            ow += ot.contract.caller({'from' : agent.address, 'gas': 100000}).writtenVolume(agent.address)
+            ow += ot.contract.caller({'from' : agent.address, 'gas': 8000000}).writtenVolume(agent.address)
         return ow
 
     def get_total_owner_holding(self, agent):
@@ -916,11 +945,11 @@ class OptionsExchange:
         '''
         oh = 0
         for ot in self.option_tokens:
-            oh += ot.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
+            oh += ot.contract.caller({'from' : agent.address, 'gas': 8000000}).balanceOf(agent.address)
         return oh
 
     def calc_collateral_surplus(self, checker, agent):
-        cs = self.contract.caller({'from' : checker.address, 'gas': 100000}).calcSurplus(agent.address)
+        cs = self.contract.caller({'from' : checker.address, 'gas': 8000000}).calcSurplus(agent.address)
         return cs
 
     def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
@@ -947,6 +976,9 @@ class OptionsExchange:
             500000
         )
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
+
+    def prefetch_data(self, agent, symbol):
+        pass
 
 
 class CreditProvider:
@@ -1001,7 +1033,7 @@ class LinearLiquidityPool(TokenProxy):
 
     def query_buy(self, agent, symbol):
         print(symbol)
-        price_volume = self.contract.caller({'from' : agent.address, 'gas': 8000000}).queryBuy(symbol)
+        price_volume = self.contract.caller({'from' : agent.address, 'gas': 100000}).queryBuy(symbol)
         return price_volume
 
     def buy(self, agent, symbol, price, volume):
@@ -1045,7 +1077,7 @@ class LinearLiquidityPool(TokenProxy):
 
     def list_symbols(self, agent):
         symbols = self.contract.caller({'from' : agent.address, 'gas': 100000}).listSymbols().split('\n')
-        return list(filter(None,symbols))
+        return [x for x in list(filter(None,symbols)) if x != '']
 
     def get_option_tokens(self, agent):
         symbols = self.list_symbols(agent)
@@ -1124,6 +1156,10 @@ class LinearLiquidityPool(TokenProxy):
             500000
         )
         return tx
+
+    def pool_free_balance(self, agent):
+        pool_free_balance = self.contract.caller({'from' : agent.address, 'gas': 100000}).calcFreeBalance()
+        return pool_free_balance
 
 class Model:
     """
@@ -1271,7 +1307,7 @@ class Model:
             TODO:
                 randomly have an agent do maintence tasks the epoch, in order to simulate people using governance tokens to do these task, for now, use initializing agent
         '''
-        #seleted_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
+        random_advancer = self.agents[int(random.random() * (len(self.agents) - 1))]
         seleted_advancer = self.agents[0]
 
         available_symbols = self.linear_liquidity_pool.list_symbols(seleted_advancer)
@@ -1380,12 +1416,15 @@ class Model:
         random.shuffle(self.agents)
 
         # return list of addres for agents who are short collateral
-        any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(seleted_advancer, a) <= 0]
+        any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(random_advancer, a) <= 0]
         
         tx_hashes = []
         total_tx_submitted = 0
 
         unique_available_symbols = list(set([asym.split('-')[1] for asym in available_symbols]))
+
+        pool_free_balance = self.linear_liquidity_pool.pool_free_balance(random_advancer)
+        logger.info("pool_free_balance: {}".format(pool_free_balance/10.**6))
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1398,7 +1437,7 @@ class Model:
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
 
-            if exchange_bal > 0 and len(available_symbols) > 0:
+            if exchange_bal > 0 and pool_free_balance > 0 and len(self.option_tokens) > 0:
                 options.append('buy')
 
             if exchange_bal > 0 and len(unique_available_symbols) < 2:
@@ -1407,11 +1446,13 @@ class Model:
             if open_option_tokens:
                 options.append('sell')
 
+            '''
             if a.usdt > 0:
                 options.append('deposit_exchange')
 
             if a.usdt > 0:
                 options.append('deposit_pool')
+            '''
 
             if exchange_bal > 0:
                 options.append('withdraw')
@@ -1440,9 +1481,9 @@ class Model:
                     TODO:
 
                     TOTEST:
-                        withdraw, redeem, burn, write, buy, sell, liquidate, 
+                        withdraw, redeem, burn, buy, sell, liquidate, 
                     WORKS:
-                        deposit_exchange, deposit_pool, add_symbol, update_symbol
+                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write
                         
                 '''
         
@@ -1520,17 +1561,18 @@ class Model:
                     model_ret = str(execute_cmd(cmd))
                     option_params = list(filter(None, model_ret.split('\\n')))
 
+                    x0s = list(filter(None, option_params[0].split('x: ')[-1].split(',')))
+                    if len(x0s) == 0:
+                        continue
                     '''
                         EXAMPLE:
                         x: 283.000000,294.000000,305.000000,316.000000,327.000000,338.000000,349.000000,360.000000,371.000000,382.000000,393.000000,404.000000,415.000000,426.000000,437.000000,448.000000,459.000000,470.000000,481.000000,492.000000,503.000000,514.000000,525.000000,536.000000,547.000000,558.000000,569.000000,580.000000,591.000000,602.000000,613.000000,624.000000,635.000000,646.000000,657.000000,668.000000,679.000000
                         y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
                         y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
                     '''
-                    x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in list(map(float,option_params[0].split('x: ')[-1].split(',')))]
-                    print(x)
+                    x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in list(map(float,x0s))]
                     y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
                     y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
-                    print(y)
                     try:
                         ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
                         tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
@@ -1584,20 +1626,44 @@ class Model:
                     strike_price = int(float(sym_parts[2]))
                     maturity = int(sym_parts[3])
                     option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
-                    amount = portion_dedusted(
+                    amount = int(round(portion_dedusted(
                         buyStock,
                         commitment
-                    )
+                    )))
+
+                    if amount == 0:
+                        amount = 1
+
+                    cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
+                    print(amount, strike_price, cc / 10.**6, exchange_bal / 10.**6)
+
+                    if((cc / 10.**6) > (exchange_bal / 10.**6)):
+                        print('cant write, deposit more')
+                    else:
+                        print('can write')
+                    
                     try:
                         w_hash = self.options_exchange.write(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
                         tx_hashes.append({'type': 'write', 'hash': w_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "write", "strike_price": strike_price, "maturity": maturity, "option_type": option_type, "amount": amount})
                 elif action == "buy":
-                    symbol = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    option_token_to_buy = list(self.option_tokens.values())[int(random.random() * (len(self.option_tokens) - 1))]
+                    symbol = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
+
+                    option_token_balance = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).totalSupply()
+                    print(symbol, option_token_balance)
+                    if option_token_balance == 0:
+                        continue
+                    
                     current_price_volume = self.linear_liquidity_pool.query_buy(a, symbol)
+                    print(current_price_volume)
                     volume = int(random.random() * current_price_volume[1])
                     price = current_price_volume[0]
+
+                    if volume == 0:
+                        continue
+
                     try:
                         buy_hash = self.linear_liquidity_pool.buy(a, symbol, current_price_volume[0], volume)
                         tx_hashes.append({'type': 'buy', 'hash': buy_hash})
@@ -1679,7 +1745,8 @@ def main():
     '''
     btcusd_historical_ohlc = []
 
-    #pretty(options_exchange.functions.__dict__, indent=4)
+    #pretty(options_exchange.functions.resolveToken("BTC/USD-EP-147e18-1623989786").call(), indent=0)
+    #print(btcusd_chainlink_feed.functions.getLatestPrice().call())
     #print(Balance(4.474093538197649, 18).to_wei())
 
     #sys.exit()
