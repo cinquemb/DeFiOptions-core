@@ -1059,10 +1059,10 @@ class LinearLiquidityPool(TokenProxy):
             self.contract.functions.buy(
                 symbol,
                 price,
-                volume,
+                volume * 10**6,
                 self.usdt_token.contract.address
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -1314,6 +1314,7 @@ class Model:
         self.linear_liquidity_pool.update()
 
         current_timestamp = w3.eth.get_block('latest')['timestamp']
+        self.prev_timestamp = current_timestamp
         diff_timestamp = current_timestamp - self.prev_timestamp
 
         '''
@@ -1477,8 +1478,10 @@ class Model:
             if a.usdt > 0:
                 options.append('deposit_exchange')
 
+            '''
             if a.usdt > 0:
                 options.append('deposit_pool')
+            '''
 
             if exchange_bal > 0:
                 options.append('withdraw')
@@ -1507,9 +1510,9 @@ class Model:
                     TODO:
 
                     TOTEST:
-                        withdraw, redeem, burn, buy, sell, liquidate
+                        withdraw, redeem, burn, sell, liquidate
                     WORKS:
-                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol
+                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy
                         
                 '''
         
@@ -1693,12 +1696,19 @@ class Model:
                     symbol = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
                     option_token_balance_of_pool = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(self.linear_liquidity_pool.address)
                     print(symbol, option_token_balance_of_pool)
-                    current_price_volume = self.linear_liquidity_pool.query_buy(a, symbol)
-                    print(symbol, current_price_volume, option_token_balance_of_pool)
-                    volume = int(random.random() * current_price_volume[1])
+                    try:
+                        current_price_volume = self.linear_liquidity_pool.query_buy(a, symbol)
+                    except Exception as inst:
+                        print("\terror querying", inst)
+                        continue
+                    print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal)
+                    volume = int(random.random() * (current_price_volume[1] / 10.**11))
+                    if volume == 0:
+                        volume = 1
                     price = current_price_volume[0]
                     try:
-                        buy_hash = self.linear_liquidity_pool.buy(a, symbol, current_price_volume[0], volume)
+                        logger.info("Before Buy; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
+                        buy_hash = self.linear_liquidity_pool.buy(a, symbol, price, volume)
                         tx_hashes.append({'type': 'buy', 'hash': buy_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
