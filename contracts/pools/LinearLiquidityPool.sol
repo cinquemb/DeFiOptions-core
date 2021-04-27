@@ -176,7 +176,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         emit AddSymbol(optSymbol);
     }
-    
+
     function removeSymbol(string calldata optSymbol) external {
 
         ensureCaller();
@@ -259,6 +259,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         PricingParameters memory param = parameters[optSymbol];
         price = calcOptPrice(param, Operation.BUY);
         address _tk = exchange.resolveToken(optSymbol);
+        volume = 0;
         volume = MoreMath.min(
             calcVolume(optSymbol, param, price, Operation.BUY),
             uint(param.buyStock).sub(OptionToken(_tk).writtenVolume(address(this)))
@@ -451,16 +452,22 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
         
         (uint j, uint xp) = findUdlPrice(p);
-
         uint _now = time.getNow();
         uint dt = uint(p.t1).sub(uint(p.t0));
-        require(_now >= p.t0 && _now <= p.t1, "invalid pricing parameters");
+        require(_now >= p.t0, "calcOptPrice: _now < p.t0");
+        require(_now <= p.t1, "calcOptPrice: _now > p.t1");
+        require(_now >= p.t0 && _now <= p.t1, "calcOptPrice: invalid pricing parameters");
+        
         uint t = _now.sub(p.t0);
         uint p0 = calcOptPriceAt(p, 0, j, xp);
         uint p1 = calcOptPriceAt(p, p.x.length, j, xp);
 
+        uint dp0p1 = uint(MoreMath.abs(int(p0).sub(int(p1))));
+
+        //require(p0 >= p1, "calcOptPrice: p1 < p0");
+        
         price = p0.mul(dt).sub(
-            t.mul(p0.sub(p1))
+            t.mul(dp0p1)
         ).mul(f).div(fractionBase).div(dt);
     }
 
@@ -468,13 +475,19 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         UnderlyingFeed feed = UnderlyingFeed(p.udlFeed);
         (,int udlPrice) = feed.getLatestPrice();
+        xp = uint(udlPrice);
         
         j = 0;
-        xp = uint(udlPrice);
-        while (p.x[j] < xp && j < p.x.length) {
-            j++;
+
+        for(uint x = 0; x < p.x.length; x++) {
+            if(p.x[x] < xp) {
+                j = x;
+            } else {
+                break;
+            }
         }
-        require(j > 0 && j < p.x.length, "invalid pricing parameters");
+
+        require(j > 0 && j < p.x.length, "findUdlPrice: invalid pricing parameters");
     }
 
     function calcOptPriceAt(
@@ -488,13 +501,19 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         returns (uint price)
     {
         uint k = offset.add(j);
+        require(k < p.y.length, "error calcOptPriceAt: k >= p.y.length");
         int yA = int(p.y[k]);
         int yB = int(p.y[k - 1]);
+        int xN = int(xp.sub(p.x[j - 1]));
+        int xD = int(p.x[j]).sub(int(p.x[j - 1]));
+
+        require(xD != 0, "error calcOptPriceAt: xD == 0");
+
         price = uint(
             yA.sub(yB).mul(
-                int(xp.sub(p.x[j - 1]))
+                xN
             ).div(
-                int(p.x[j]).sub(int(p.x[j - 1]))
+                xD
             ).add(yB)
         );
     }
