@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x64398f29129583a5792520daF566AB310f93b23F',
+  "addr": '0x074c312A86502337eC34DA4E0343238877A6c3B9',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -894,9 +894,6 @@ class OptionsExchange:
         )
         return tx
 
-    def get_book_ids(self, agent):
-        return self.contract.caller({'from' : agent.address, 'gas': 100000}).getBookIds(agent.address)
-
     def liquidate(self, agent, options_address, owner_address):
         '''
             exchange.liquidateOptions()
@@ -989,8 +986,13 @@ class OptionsExchange:
         )
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
 
-    def prefetch_data(self, agent, symbol):
-        pass
+    def prefetch_sample(self, agent):
+        txr = transaction_helper(
+            agent,
+            self.btcusd_chainlink_feed.functions.prefetchSample(),
+            500000
+        )
+        txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
 
 
 class CreditProvider:
@@ -1067,7 +1069,7 @@ class LinearLiquidityPool(TokenProxy):
         return tx
 
     def query_sell(self, agent, symbol):
-        price_volume = self.contract.caller({'from' : agent.address, 'gas': 100000}).querySell(symbol)
+        price_volume = self.contract.caller({'from' : agent.address, 'gas': 80000000}).querySell(symbol)
         return price_volume
 
     def sell(self, agent, symbol, price, volume, option_token):
@@ -1091,8 +1093,23 @@ class LinearLiquidityPool(TokenProxy):
         symbols = self.contract.caller({'from' : agent.address, 'gas': 8000000}).listSymbols().split('\n')
         return [x for x in list(filter(None,symbols)) if x != '']
 
+    def list_expired_symbols(self, agent):
+        symbols = self.contract.caller({'from' : agent.address, 'gas': 8000000}).listExpiredSymbols().split('\n')
+        return [x for x in list(filter(None,symbols)) if x != '']
+
     def get_option_tokens(self, agent):
         symbols = self.list_symbols(agent)
+        option_tokens = []
+        for sym in symbols:
+            option_token_address = self.options_exchange.resolve_token(agent, sym)
+            if option_token_address:
+                option_token = TokenProxy(w3.eth.contract(abi=OptionTokenContract['abi'], address=option_token_address))
+                option_tokens.append(option_token)
+
+        return option_tokens
+
+    def get_option_tokens_expired(self, agent):
+        symbols = self.list_expired_symbols(agent)
         option_tokens = []
         for sym in symbols:
             option_token_address = self.options_exchange.resolve_token(agent, sym)
@@ -1159,7 +1176,7 @@ class LinearLiquidityPool(TokenProxy):
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24*2),
+                current_timestamp + (60 * 60 * 24 * 2),
                 x,
                 y,
                 buyStock * (10**18),
@@ -1195,9 +1212,11 @@ class Model:
         self.daily_vol_period = 30
         self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
+        self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
         self.months_per_year = 12
         self.option_tokens = {}
+        self.option_tokens_expired = {}
         self.usdt_token = usdt
         self.symbol_created = {}
 
@@ -1222,46 +1241,48 @@ class Model:
         '''
             INIT T-MINUS DATA FOR FEED
         '''
-        current_timestamp = w3.eth.get_block('latest')['timestamp']
-        seleted_advancer = self.agents[0]
-        transaction_helper(
-            seleted_advancer,
-            self.btcusd_agg.functions.setRoundIds(
-                range(30)
-            ),
-            500000
-        )
 
-        transaction_helper(
-            seleted_advancer,
-            self.btcusd_agg.functions.setAnswers(
-                self.btcusd_data[:self.btcusd_data_offset]
-            ),
-            500000
-        )
+        if self.prev_timestamp == 0:
+            current_timestamp = w3.eth.get_block('latest')['timestamp']
+            seleted_advancer = self.agents[0]
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.functions.setRoundIds(
+                    range(30)
+                ),
+                500000
+            )
 
-        timestamps = [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
-        transaction_helper(
-            seleted_advancer,
-            self.btcusd_agg.functions.setUpdatedAts(
-                timestamps
-            ),
-            500000
-        )
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.functions.setAnswers(
+                    self.btcusd_data[:self.btcusd_data_offset]
+                ),
+                500000
+            )
 
-        print(timestamps)
-        print(self.btcusd_data[:self.btcusd_data_offset])
+            timestamps = [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
+            transaction_helper(
+                seleted_advancer,
+                self.btcusd_agg.functions.setUpdatedAts(
+                    timestamps
+                ),
+                500000
+            )
 
-        tx = transaction_helper(
-            seleted_advancer,
-            self.btcusd_chainlink_feed.functions.initialize(
-                timestamps,
-                self.btcusd_data[:self.btcusd_data_offset]
-            ),
-            8000000
-        )
-        receipt = w3.eth.waitForTransactionReceipt(tx, poll_latency=tx_pool_latency)
-        print(receipt)
+            print(timestamps)
+            print(self.btcusd_data[:self.btcusd_data_offset])
+
+            tx = transaction_helper(
+                seleted_advancer,
+                self.btcusd_chainlink_feed.functions.initialize(
+                    timestamps,
+                    self.btcusd_data[:self.btcusd_data_offset]
+                ),
+                8000000
+            )
+            receipt = w3.eth.waitForTransactionReceipt(tx, poll_latency=tx_pool_latency)
+            print(receipt)
 
         
     def log(self, stream, seleted_advancer, header=False):
@@ -1295,10 +1316,21 @@ class Model:
         Probably should be related to credit token?
         """
         pass
+
+    def is_positve_option_token_expired_balance(self, agent):
+        tokens = []
+        for k,v in self.option_tokens_expired.items():
+            if v[agent] > 0:
+                tokens.append(v)
+        return False
     
     def is_positive_option_token_balance(self, agent):
         tokens = []
         for k,v in self.option_tokens.items():
+            if v[agent] > 0:
+                tokens.append(v)
+
+        for k,v in self.option_tokens_expired.items():
             if v[agent] > 0:
                 tokens.append(v)
         return False
@@ -1314,7 +1346,6 @@ class Model:
         self.linear_liquidity_pool.update()
 
         current_timestamp = w3.eth.get_block('latest')['timestamp']
-        self.prev_timestamp = current_timestamp
         diff_timestamp = current_timestamp - self.prev_timestamp
 
         '''
@@ -1334,9 +1365,13 @@ class Model:
         buyStock = 100
         sellStock = 200
 
-        for x in self.linear_liquidity_pool.get_option_tokens(seleted_advancer):
+        for x in self.linear_liquidity_pool.get_option_tokens(random_advancer):
             if x.address not in self.option_tokens:
                 self.option_tokens[x.address] = x
+
+        for x in self.linear_liquidity_pool.get_option_tokens_expired(random_advancer):
+            if x.address not in self.option_tokens_expired:
+                self.option_tokens_expired[x.address] = x
 
         self.options_exchange.option_tokens = self.option_tokens
 
@@ -1370,7 +1405,6 @@ class Model:
             )
 
             self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
-
             for sym in available_symbols:
                 print('update symbol:', sym)
                 sym_parts = sym.split('-')
@@ -1388,11 +1422,15 @@ class Model:
 
 
                 # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
-                vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
-                    self.daily_vol_period * self.daily_period
-                )
+                try:
+                    vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                        self.daily_vol_period * self.daily_period
+                    )
+                except Exception as inst:
+                    print(inst, "bad vol calc")
+                    continue
                 normed_vol = vol / (10.**xSD['decimals']) / (10.)
-                months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
+                months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
 
                 '''
                     EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
@@ -1419,22 +1457,40 @@ class Model:
                     y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
                     y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
                 '''
-                x = [int(round(x0,2) * 10**xSD['decimals']) for x0 in list(map(float, x0s))]
+                try:
+                    x = [int(round(x0,2) * 10**xSD['decimals']) for x0 in list(map(float, x0s))]
+                except Exception as inst:
+                    print(inst, "no timestamp data to update")
+                    continue
+                
                 print(x)
                 y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
                 y  = [int(round(y0,2) * 10**xSD['decimals']) for y0 in y]
                 print(y)
+                current_timestamp = w3.eth.get_block('latest')['timestamp']
                 self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
 
             self.current_round_id += 1
+            '''
+                TODO: NEED TO DUMP TO FILE AND LOAD FROM FILE IN ORDER TO BE ABLE TO START AND STOP MORE ROBUSTLY SANS NUKING CONTRACTS
+            '''
             self.prev_timestamp = current_timestamp
+
+            print("current prev_timestamp daily:", self.prev_timestamp)
 
 
         logger.info("Clock: {}".format(current_timestamp))
         random.shuffle(self.agents)
 
         # return list of addres for agents who are short collateral
-        any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(random_advancer, a) <= 0]
+        while True:
+            try:
+                any_short_collateral = [a for a in self.agents if self.options_exchange.calc_collateral_surplus(random_advancer, a) <= 0]
+                break
+            except Exception as inst:
+                print(inst, 'trying to pretetch sample')
+                self.options_exchange.prefetch_sample(random_advancer)
+
         
         tx_hashes = []
         total_tx_submitted = 0
@@ -1447,6 +1503,9 @@ class Model:
         any_calls = any([ts for ts in available_symbols if '-EC-' in ts])
         any_puts = any([ts for ts in available_symbols if '-EP-' in ts])
 
+        print("available_symbols:", available_symbols)
+        print((not any_calls or not any_puts))
+
         self.has_tried_liquidating = False
 
         for agent_num, a in enumerate(self.agents):            
@@ -1454,8 +1513,23 @@ class Model:
             options = []
 
             open_option_tokens = self.is_positive_option_token_balance(a)
+            open_option_expired_tokens = self.is_positve_option_token_expired_balance(a)
 
             exchange_bal  = self.options_exchange.balance(a)
+
+
+            '''
+            TODO: NEED A BETTER WAY TO FIGURE THIS OUT FOR SYMBOLS THAT FAIL TO UPDATE/HAVE ANY POS TXs
+            available_symbols = self.linear_liquidity_pool.list_symbols(seleted_advancer)
+            any_calls = any([ts for ts in available_symbols if '-EC-' in ts])
+            any_puts = any([ts for ts in available_symbols if '-EP-' in ts])
+
+            if len(available_symbols) != len(self.option_tokens):
+                #TRY AND UPDATE OPTION TOKENS AVAILABLE
+                for x in self.linear_liquidity_pool.get_option_tokens(seleted_advancer):
+                    if x.address not in self.option_tokens:
+                        self.option_tokens[x.address] = x
+            '''
 
             '''
                 WORKS BUT, TODO: NEED TO FIND A WAY TO SYM ECONOMY WITH THIS, CANNOT BUY DIRECT ON EXCHANGE
@@ -1466,22 +1540,20 @@ class Model:
             if (exchange_bal > 0 or pool_free_balance > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
                 options.append('buy')
 
-            if (exchange_bal > 0 or pool_free_balance > 0) and (not any_calls or not any_puts):
+            if (exchange_bal > 0 or pool_free_balance > 0) and ((not any_calls or not any_puts) or len(available_symbols) ==0):
                 options.append('add_symbol')
 
             if len(available_symbols) != len(self.option_tokens):
                 options.append('create_symbol')
 
-            if open_option_tokens:
+            if (exchange_bal > 0 or pool_free_balance > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
                 options.append('sell')
 
-            if a.usdt > 0:
+            if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
                 options.append('deposit_exchange')
 
-            '''
-            if a.usdt > 0:
+            if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
                 options.append('deposit_pool')
-            '''
 
             if exchange_bal > 0:
                 options.append('withdraw')
@@ -1495,6 +1567,10 @@ class Model:
             # option position must be short collateral
             if len(any_short_collateral) > 0 and not self.has_tried_liquidating:
                 options.append('liquidate')
+
+            # option position must be short collateral
+            if open_option_expired_tokens:
+                options.append('liquidate_self')
 
 
             start_tx_count = a.next_tx_count
@@ -1510,7 +1586,7 @@ class Model:
                     TODO:
 
                     TOTEST:
-                        withdraw, redeem, burn, sell, liquidate
+                        sell, withdraw, redeem, burn, liquidate, liquidate_self
                     WORKS:
                         deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy
                         
@@ -1545,10 +1621,11 @@ class Model:
                     TODO:
                         choose random maturity length less than the maturity of the pool? 1 month for now
                     """
+                    current_timestamp = w3.eth.get_block('latest')['timestamp']
                     maturity = int(current_timestamp + (self.daily_period * (self.days_per_year / self.months_per_year)))
                     days_until_expiry = (maturity - current_timestamp) / self.daily_period
                     num_samples = 2000
-                    option_type = option_types[int(random.random() * (len(option_types) - 1))]
+                    option_type = option_types[0 if random.random() > 0.5 else 1]
 
                     if option_type == 'CALL':
                         if any([ts for ts in available_symbols if '-EC-' in ts]):
@@ -1570,13 +1647,16 @@ class Model:
 
 
                     # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
-                    vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
-                        self.daily_vol_period * self.daily_period
-                    )
+                    try:
+                        vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                            self.daily_vol_period * self.daily_period
+                        )
+                    except:
+                        continue
                     normed_vol = vol / (10.**xSD['decimals']) / (10.)
                     #print(normed_vol)
                     #sys.exit()
-                    months_to_exp = (self.days_per_year / 12.0) / days_until_expiry
+                    months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
 
                     '''
                         EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
@@ -1614,7 +1694,9 @@ class Model:
                     y  = [int(round(y0,2) * 10**xSD['decimals']) for y0 in y]
                     print('x', x, 'y', y)
                     try:
+                        current_timestamp = w3.eth.get_block('latest')['timestamp']
                         ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                        receipt = w3.eth.waitForTransactionReceipt(ads_hash, poll_latency=tx_pool_latency)
                         tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "add_symbol", "strike": strike, "maturity": maturity, "x": x, "y": y, "normed_vol": normed_vol, "vol": vol})
@@ -1622,6 +1704,7 @@ class Model:
                     for sym in available_symbols:
                         try:
                             cs_hash = self.options_exchange.create_symbol(a, sym, self.btcusd_chainlink_feed)
+                            receipt = w3.eth.waitForTransactionReceipt(cs_hash, poll_latency=tx_pool_latency)
                             tx_hashes.append({'type': 'create_symbol', 'hash': cs_hash})
                         except Exception as inst:
                             logger.info({"agent": a.address, "error": inst, "action": "create_symbol", "sym": sym })
@@ -1699,7 +1782,7 @@ class Model:
                     try:
                         current_price_volume = self.linear_liquidity_pool.query_buy(a, symbol)
                     except Exception as inst:
-                        print("\terror querying", inst)
+                        print("\terror querying buy", inst)
                         continue
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal)
                     volume = int(random.random() * (current_price_volume[1] / 10.**11))
@@ -1713,13 +1796,20 @@ class Model:
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
-                    token_to_sell = open_option_tokens[int(random.random() * (len(open_option_tokens) - 1))]
-                    symbol = token_to_sell.contract.caller({'from' : agent.address, 'gas': 100000}).symbol()
-                    current_price_volume = self.linear_liquidity_pool.query_sell(a, symbol)
-                    volume = int(random.random() * current_price_volume[1])
+                    option_token_to_sell = list(self.option_tokens.values())[int(random.random() * (len(self.option_tokens) - 1))]
+                    symbol = option_token_to_sell.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
+                    try:
+                        current_price_volume = self.linear_liquidity_pool.query_sell(a, symbol)
+                    except Exception as inst:
+                        print("\terror querying sell", inst)
+                        continue
+                    volume = int(random.random() * (current_price_volume[1] / 10.**15))
+                    if volume == 0:
+                        volume = 1
                     price = current_price_volume[0]
                     try:
-                        sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, token_to_sell)
+                        logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
+                        sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
                         tx_hashes.append({'type': 'sell', 'hash': sell_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
@@ -1731,6 +1821,13 @@ class Model:
                                 tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
                             except Exception as inst:
                                 logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owners.address, "option_token": otk})
+                elif action == "liquidate_self":
+                    for otv in open_option_expired_tokens:
+                        try:
+                            lqd8_hash = self.options_exchange.liquidate(a, otv.address, a.address)
+                            tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
+                        except Exception as inst:
+                            logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "option_token": otv.address})
 
                     self.has_tried_liquidating = True
                 else:
@@ -1765,7 +1862,7 @@ class Model:
             )
         )
 
-        return anyone_acted, seleted_advancer
+        return anyone_acted, random_advancer
 
 def main():
     """
@@ -1793,7 +1890,11 @@ def main():
     '''
     btcusd_historical_ohlc = []
 
-    
+    '''
+    for acc in w3.eth.accounts[:max_accounts]:
+        cs = options_exchange.caller({'from' : acc, 'gas': 8000000}).calcSurplus(acc)
+        print(acc, cs)
+        '''
 
     #pretty(options_exchange.functions.resolveToken("BTC/USD-EP-147e18-1623989786").call(), indent=0)
     #print(btcusd_chainlink_feed.functions.getLatestPrice().call())
@@ -1972,6 +2073,10 @@ def main():
         logger.info('iter: %s, sys time %s' % (i, end_iter-start_iter))
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
+
+        if ((i % 2) == 0) and (i != 0):
+            provider.make_request("debug_increaseTime", [3600 * 12])
+        #sys.exit()
         
 if __name__ == "__main__":
     main()

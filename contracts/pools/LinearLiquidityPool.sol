@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 import "../deployment/ManagedContract.sol";
 import "../finance/RedeemableToken.sol";
 import "../governance/ProtocolSettings.sol";
-import "../interfaces/TimeProvider.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/ERC20.sol";
@@ -41,7 +40,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint value;
     }
 
-    TimeProvider private time;
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
 
@@ -57,8 +55,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     string[] private optSymbols;
     Deposit[] private deposits;
 
-    uint private timeBase;
-    uint private sqrtTimeBase;
     uint private volumeBase;
     uint private fractionBase;
 
@@ -70,13 +66,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     function initialize(Deployer deployer) override internal {
 
         owner = deployer.getOwner();
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
 
-        timeBase = 1e18;
-        sqrtTimeBase = 1e9;
         volumeBase = exchange.volumeBase();
         fractionBase = 1e9;
     }
@@ -104,7 +97,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function redeemAllowed() override public returns (bool) {
         
-        return time.getNow() >= _maturity;
+        return exchange.exchangeTime() >= _maturity;
     }
 
     function maturity() override external view returns (uint) {
@@ -118,7 +111,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         if (deposits.length > 0) {
             
-            uint _now = time.getNow();
+            uint _now = exchange.exchangeTime();
             uint start = _now.sub(dt);
             
             uint i = 0;
@@ -210,7 +203,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         int po = exchange.calcExpectedPayout(address(this));
         
         deposits.push(
-            Deposit(time.getNow().toUint32(), uint(int(b0).add(po)), b1.sub(b0))
+            Deposit(exchange.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0))
         );
 
         uint ts = _totalSupply;
@@ -237,16 +230,29 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
     
     function listSymbols() override external view returns (string memory available) {
-
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > time.getNow()) {
-                if (bytes(available).length == 0) {
-                    available = optSymbols[i];
-                } else {
-                    available = string(abi.encodePacked(available, "\n", optSymbols[i]));
-                }
+            if (parameters[optSymbols[i]].maturity > exchange.exchangeTime()) {
+                available = listSymbolHelper(available, optSymbols[i]);
             }
         }
+    }
+
+    function listExpiredSymbols() external view returns (string memory available) {
+        for (uint i = 0; i < optSymbols.length; i++) {
+            if (parameters[optSymbols[i]].maturity < exchange.exchangeTime()) {
+                available = listSymbolHelper(available, optSymbols[i]);
+            }
+        }
+    }
+
+    function listSymbolHelper(string memory buffer, string memory optSymbol) internal pure returns (string memory) {
+        if (bytes(buffer).length == 0) {
+            buffer = optSymbol;
+        } else {
+            buffer = string(abi.encodePacked(buffer, "\n", optSymbol));
+        }
+
+        return buffer;
     }
 
     function queryBuy(string memory optSymbol)
@@ -255,15 +261,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         view
         returns (uint price, uint volume)
     {
-        ensureValidSymbol(optSymbol);
-        PricingParameters memory param = parameters[optSymbol];
-        price = calcOptPrice(param, Operation.BUY);
-        address _tk = exchange.resolveToken(optSymbol);
-        volume = 0;
-        volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, Operation.BUY),
-            uint(param.buyStock).sub(OptionToken(_tk).writtenVolume(address(this)))
-        );
+        (price, volume) = queryHelper(optSymbol, Operation.BUY);
     }
 
     function querySell(string memory optSymbol)
@@ -271,14 +269,19 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         public
         view
         returns (uint price, uint volume)
-    {    
+    {
+        (price, volume) = queryHelper(optSymbol, Operation.SELL);
+    }
+
+    function queryHelper(string memory optSymbol, Operation op) internal view returns (uint price, uint volume) {
         ensureValidSymbol(optSymbol);
         PricingParameters memory param = parameters[optSymbol];
-        price = calcOptPrice(param, Operation.SELL);
+        price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
+        uint optBal = (op == Operation.SELL) ? OptionToken(_tk).balanceOf(address(this)) : OptionToken(_tk).writtenVolume(address(this));
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, Operation.SELL),
-            uint(param.sellStock).sub(OptionToken(_tk).balanceOf(address(this)))
+            calcVolume(optSymbol, param, price, op),
+            (op == Operation.SELL) ? uint(param.sellStock).sub(optBal) : uint(param.buyStock).sub(optBal)
         );
     }
     
@@ -452,7 +455,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
         
         (uint j, uint xp) = findUdlPrice(p);
-        uint _now = time.getNow();
+        uint _now = exchange.exchangeTime();
         uint dt = uint(p.t1).sub(uint(p.t0));
         require(_now >= p.t0, "calcOptPrice: _now < p.t0");
         require(_now <= p.t1, "calcOptPrice: _now > p.t1");
@@ -464,11 +467,15 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         uint dp0p1 = uint(MoreMath.abs(int(p0).sub(int(p1))));
 
-        //require(p0 >= p1, "calcOptPrice: p1 < p0");
-        
-        price = p0.mul(dt).sub(
-            t.mul(dp0p1)
-        ).mul(f).div(fractionBase).div(dt);
+        if (p0 >= p1) {
+            price = p0.mul(dt).sub(
+                t.mul(dp0p1)
+            ).mul(f).div(fractionBase).div(dt);
+        } else {
+            price = p0.mul(dt).add(
+                t.mul(dp0p1)
+            ).mul(f).div(fractionBase).div(dt);
+        }
     }
 
     function findUdlPrice(PricingParameters memory p) private view returns (uint j, uint xp) {
@@ -509,12 +516,22 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         require(xD != 0, "error calcOptPriceAt: xD == 0");
 
+        (int nY, int ny1) = (0, 0);
+        
+        if (yA >= yB) {
+            nY = yA.sub(yB);
+            ny1 = yB;
+        } else {
+            nY = yB.sub(yA);
+            ny1 = yA;
+        }
+
         price = uint(
-            yA.sub(yB).mul(
+            nY.mul(
                 xN
             ).div(
                 xD
-            ).add(yB)
+            ).add(ny1)
         );
     }
 
@@ -586,7 +603,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         uint t0 = deposits[index - 1].date;
         uint t1 = index < deposits.length ?
-            deposits[index].date : time.getNow();
+            deposits[index].date : exchange.exchangeTime();
 
         int v0 = int(deposits[index - 1].value.add(deposits[index - 1].balance));
         int v1 = index < deposits.length ? 

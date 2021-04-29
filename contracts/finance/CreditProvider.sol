@@ -18,7 +18,6 @@ contract CreditProvider is ManagedContract {
     using SafeMath for uint;
     using SignedSafeMath for int;
     
-    TimeProvider private time;
     ProtocolSettings private settings;
     CreditToken private creditToken;
     OptionsExchange private exchange;
@@ -47,10 +46,8 @@ contract CreditProvider is ManagedContract {
 
     function initialize(Deployer deployer) override internal {
 
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         creditToken = CreditToken(deployer.getContractAddress("CreditToken"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-
         address exchangeAddress = deployer.getContractAddress("OptionsExchange");
         exchange = OptionsExchange(exchangeAddress);
 
@@ -259,7 +256,7 @@ contract CreditProvider is ManagedContract {
     function setDebt(address owner, uint value)  private {
         
         debts[owner] = value;
-        debtsDate[owner] = time.getNow();
+        debtsDate[owner] = exchange.exchangeTime();
     }
 
     function transferTokens(address to, uint value) private returns (uint) {
