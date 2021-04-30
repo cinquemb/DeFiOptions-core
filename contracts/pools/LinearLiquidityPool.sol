@@ -97,7 +97,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function redeemAllowed() override public returns (bool) {
         
-        return exchange.exchangeTime() >= _maturity;
+        return settings.exchangeTime() >= _maturity;
     }
 
     function maturity() override external view returns (uint) {
@@ -111,7 +111,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         if (deposits.length > 0) {
             
-            uint _now = exchange.exchangeTime();
+            uint _now = settings.exchangeTime();
             uint start = _now.sub(dt);
             
             uint i = 0;
@@ -171,7 +171,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
 
     function removeSymbol(string calldata optSymbol) external {
-
+        // need addtional check so it can only be done after opex and token no longer exists?
         ensureCaller();
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
@@ -203,7 +203,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         int po = exchange.calcExpectedPayout(address(this));
         
         deposits.push(
-            Deposit(exchange.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0))
+            Deposit(settings.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0))
         );
 
         uint ts = _totalSupply;
@@ -231,7 +231,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     
     function listSymbols() override external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > exchange.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity > settings.exchangeTime()) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
@@ -239,7 +239,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function listExpiredSymbols() external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity < exchange.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity < settings.exchangeTime()) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
@@ -455,7 +455,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
         
         (uint j, uint xp) = findUdlPrice(p);
-        uint _now = exchange.exchangeTime();
+        uint _now = settings.exchangeTime();
         uint dt = uint(p.t1).sub(uint(p.t0));
         require(_now >= p.t0, "calcOptPrice: _now < p.t0");
         require(_now <= p.t1, "calcOptPrice: _now > p.t1");
@@ -483,12 +483,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         UnderlyingFeed feed = UnderlyingFeed(p.udlFeed);
         (,int udlPrice) = feed.getLatestPrice();
         xp = uint(udlPrice);
-        
-        j = 0;
 
-        for(uint x = 0; x < p.x.length; x++) {
-            if(p.x[x] < xp) {
-                j = x;
+        for(uint i = 0; i < p.x.length; i++) {
+            if(p.x[i] < xp) {
+                j = i;
             } else {
                 break;
             }
@@ -516,22 +514,22 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         require(xD != 0, "error calcOptPriceAt: xD == 0");
 
-        (int nY, int ny1) = (0, 0);
+        (int y1, int y2) = (0, 0);
         
         if (yA >= yB) {
-            nY = yA.sub(yB);
-            ny1 = yB;
+            y1 = yA.sub(yB);
+            y2 = yB;
         } else {
-            nY = yB.sub(yA);
-            ny1 = yA;
+            y1 = yB.sub(yA);
+            y2 = yA;
         }
 
         price = uint(
-            nY.mul(
+            y1.mul(
                 xN
             ).div(
                 xD
-            ).add(ny1)
+            ).add(y2)
         );
     }
 
@@ -603,7 +601,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         uint t0 = deposits[index - 1].date;
         uint t1 = index < deposits.length ?
-            deposits[index].date : exchange.exchangeTime();
+            deposits[index].date : settings.exchangeTime();
 
         int v0 = int(deposits[index - 1].value.add(deposits[index - 1].balance));
         int v1 = index < deposits.length ? 

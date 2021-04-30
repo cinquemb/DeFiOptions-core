@@ -147,7 +147,7 @@ contract ProtocolSettings is ManagedContract {
     function setDebtInterestRate(uint i, uint b) external {
         
         ensureWritePriviledge();
-        debtInterestRates[debtInterestRates.length - 1].date = time.getNow();
+        debtInterestRates[debtInterestRates.length - 1].date = exchangeTime();
         debtInterestRates.push(Rate(i, b, MAX_UINT));
     }
 
@@ -176,7 +176,7 @@ contract ProtocolSettings is ManagedContract {
     function setCreditInterestRate(uint i, uint b) external {
         
         ensureWritePriviledge();
-        creditInterestRates[creditInterestRates.length - 1].date = time.getNow();
+        creditInterestRates[creditInterestRates.length - 1].date = exchangeTime();
         creditInterestRates.push(Rate(i, b, MAX_UINT));
     }
 
@@ -219,7 +219,7 @@ contract ProtocolSettings is ManagedContract {
         
         do {
             r = getRate(rates, date);
-            uint dt = MoreMath.min(r.date, time.getNow()).sub(date).div(1 hours);
+            uint dt = MoreMath.min(r.date, exchangeTime()).sub(date).div(1 hours);
             if (dt > 0) {
                 value = MoreMath.powAndMultiply(r.value, r.base, dt, value);
                 date = r.date;
@@ -248,5 +248,9 @@ contract ProtocolSettings is ManagedContract {
             require(govToken.isRegisteredProposal(msg.sender), "proposal not registered");
             require(p.isExecutionAllowed(), "execution not allowed");
         }
+    }
+
+    function exchangeTime() public view returns (uint256) {
+        return time.getNow();
     }
 }

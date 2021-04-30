@@ -5,7 +5,6 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
-import "../interfaces/TimeProvider.sol";
 import "../utils/SafeMath.sol";
 import "../utils/MoreMath.sol";
 import "./CreditProvider.sol";
@@ -20,7 +19,6 @@ contract CreditToken is ManagedContract, ERC20 {
         address nextAddr;
     }
 
-    TimeProvider private time;
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
 
@@ -41,7 +39,6 @@ contract CreditToken is ManagedContract, ERC20 {
 
     function initialize(Deployer deployer) override internal {
         
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         issuer = deployer.getContractAddress("CreditIssuer");
@@ -121,7 +118,7 @@ contract CreditToken is ManagedContract, ERC20 {
         uint nb = balanceOf(owner);
         _totalSupply = _totalSupply.add(nb).sub(balances[owner]);
         balances[owner] = nb;
-        creditDates[owner] = time.getNow();
+        creditDates[owner] = settings.exchangeTime();
     }
 
     function enqueueWithdraw(address owner, uint value) private {

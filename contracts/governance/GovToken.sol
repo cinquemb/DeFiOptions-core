@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../utils/ERC20.sol";
-import "../interfaces/TimeProvider.sol";
 import "../utils/Arrays.sol";
 import "../utils/SafeMath.sol";
 import "./Proposal.sol";
@@ -14,7 +13,6 @@ contract GovToken is ManagedContract, ERC20 {
 
     using SafeMath for uint;
 
-    TimeProvider private time;
     ProtocolSettings private settings;
 
     mapping(uint => Proposal) private proposalsMap;
@@ -33,7 +31,6 @@ contract GovToken is ManagedContract, ERC20 {
     
     function initialize(Deployer deployer) override internal {
 
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         serial = 1;
     }
@@ -57,7 +54,7 @@ contract GovToken is ManagedContract, ERC20 {
     function registerProposal(address addr) public returns (uint id) {
         
         require(
-            proposingDate[addr] == 0 || time.getNow() - proposingDate[addr] > 1 days,
+            proposingDate[addr] == 0 || settings.exchangeTime() - proposingDate[addr] > 1 days,
             "minimum interval between proposals not met"
         );
 
@@ -68,7 +65,7 @@ contract GovToken is ManagedContract, ERC20 {
         id = serial++;
         p.open(id);
         proposalsMap[id] = p;
-        proposingDate[addr] = time.getNow();
+        proposingDate[addr] = settings.exchangeTime();
         proposals.push(id);
     }
 

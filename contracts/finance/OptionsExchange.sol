@@ -5,7 +5,6 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
-import "../interfaces/TimeProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
@@ -36,7 +35,6 @@ contract OptionsExchange is ManagedContract {
         uint120 upperVol;
     }
     
-    TimeProvider private time;
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
     OptionTokenFactory private factory;
@@ -103,7 +101,6 @@ contract OptionsExchange is ManagedContract {
 
     function initialize(Deployer deployer) override internal {
 
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         factory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
@@ -426,7 +423,7 @@ contract OptionsExchange is ManagedContract {
     )
         private
     {
-        require(deadline >= block.timestamp, "permit expired");
+        require(deadline >= settings.exchangeTime(), "permit expired");
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -453,7 +450,7 @@ contract OptionsExchange is ManagedContract {
     {
         require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         require(volume > 0, "invalid volume");
-        require(maturity > exchangeTime(), "invalid maturity");
+        require(maturity > settings.exchangeTime(), "invalid maturity");
 
         (OptionData memory opt, string memory symbol) =
             createOptionInMemory(udlFeed, optType, strike, maturity);
@@ -678,7 +675,7 @@ contract OptionsExchange is ManagedContract {
 
     function getUdlPrice(OptionData memory opt) private view returns (int answer) {
 
-        if (opt.maturity > exchangeTime()) {
+        if (opt.maturity > settings.exchangeTime()) {
             (,answer) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
         } else {
             (,answer) = UnderlyingFeed(opt.udlFeed).getPrice(opt.maturity);
@@ -688,9 +685,5 @@ contract OptionsExchange is ManagedContract {
     function getUdlNow(OptionData memory opt) private view returns (uint timestamp) {
 
         (timestamp,) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
-    }
-
-    function exchangeTime() public view returns (uint256) {
-        return time.getNow();
     }
 }

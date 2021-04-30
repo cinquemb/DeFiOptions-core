@@ -22,7 +22,7 @@ IS_DEBUG = False
 is_try_model_mine = False
 max_accounts = 40
 block_offset = 19 + max_accounts
-tx_pool_latency = 0.01
+tx_pool_latency = 1
 
 DEADLINE_FROM_NOW = 60 * 60 * 24 * 7 * 52
 UINT256_MAX = 2**256 - 1
@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x074c312A86502337eC34DA4E0343238877A6c3B9',
+  "addr": '0xd2fFcFdEbc27d8347bc1C4538f650AB1e67FF15E',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -111,7 +111,6 @@ xSD = {
   "symbol": 'xSD',
 }
 
-DeployerContract = json.loads(open('./build/contracts/Deployer.json', 'r+').read())
 AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.json', 'r+').read())
 ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeed.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
@@ -228,6 +227,8 @@ def transaction_helper(agent, prepped_function_call, gas):
                 unlock_nonce(agent)
                 nonce +=1
             else:
+                unlock_nonce(agent)
+                nonce +=1
                 print(inst)
     return tx_hash
 
@@ -810,9 +811,9 @@ class OptionsExchange:
         tx = transaction_helper(
             agent,
             self.contract.functions.withdrawTokens(
-                amount.to_wei()
+                amount * 10**18
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -890,7 +891,7 @@ class OptionsExchange:
             option_token.contract.functions.burn(
                 Balance(token_amount, 18).to_wei()
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -904,7 +905,7 @@ class OptionsExchange:
                 options_address,
                 owner_address
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -992,7 +993,7 @@ class OptionsExchange:
             self.btcusd_chainlink_feed.functions.prefetchSample(),
             500000
         )
-        txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency)
+        txv_recp = w3.eth.waitForTransactionReceipt(txr, poll_latency=tx_pool_latency)
 
 
 class CreditProvider:
@@ -1041,7 +1042,7 @@ class LinearLiquidityPool(TokenProxy):
             self.contract.functions.redeem(
                 agent.address
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -1083,9 +1084,9 @@ class LinearLiquidityPool(TokenProxy):
             self.contract.functions.sell(
                 symbol,
                 price,
-                volume
+                volume * 10**18
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -1182,7 +1183,7 @@ class LinearLiquidityPool(TokenProxy):
                 buyStock * (10**18),
                 sellStock * (10**18)
             ),
-            500000
+            8000000
         )
         return tx
 
@@ -1210,7 +1211,7 @@ class Model:
         self.btcusd_data_offset = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1622743734
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1362,8 +1363,8 @@ class Model:
             TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
         '''
 
-        buyStock = 100
-        sellStock = 200
+        buyStock = 1000
+        sellStock = 1000
 
         for x in self.linear_liquidity_pool.get_option_tokens(random_advancer):
             if x.address not in self.option_tokens:
@@ -1468,7 +1469,8 @@ class Model:
                 y  = [int(round(y0,2) * 10**xSD['decimals']) for y0 in y]
                 print(y)
                 current_timestamp = w3.eth.get_block('latest')['timestamp']
-                self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency)
 
             self.current_round_id += 1
             '''
@@ -1516,10 +1518,11 @@ class Model:
             open_option_expired_tokens = self.is_positve_option_token_expired_balance(a)
 
             exchange_bal  = self.options_exchange.balance(a)
+            exchange_free_bal = self.options_exchange.calc_collateral_surplus(a, a) / * 10.**6
 
 
-            '''
-            TODO: NEED A BETTER WAY TO FIGURE THIS OUT FOR SYMBOLS THAT FAIL TO UPDATE/HAVE ANY POS TXs
+            #'''
+            #TODO: NEED A BETTER WAY TO FIGURE THIS OUT FOR SYMBOLS THAT FAIL TO UPDATE/HAVE ANY POS TXs
             available_symbols = self.linear_liquidity_pool.list_symbols(seleted_advancer)
             any_calls = any([ts for ts in available_symbols if '-EC-' in ts])
             any_puts = any([ts for ts in available_symbols if '-EP-' in ts])
@@ -1529,7 +1532,7 @@ class Model:
                 for x in self.linear_liquidity_pool.get_option_tokens(seleted_advancer):
                     if x.address not in self.option_tokens:
                         self.option_tokens[x.address] = x
-            '''
+            #'''
 
             '''
                 WORKS BUT, TODO: NEED TO FIND A WAY TO SYM ECONOMY WITH THIS, CANNOT BUY DIRECT ON EXCHANGE
@@ -1546,7 +1549,7 @@ class Model:
             if len(available_symbols) != len(self.option_tokens):
                 options.append('create_symbol')
 
-            if (exchange_bal > 0 or pool_free_balance > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
+            if a.total_holding > 0:
                 options.append('sell')
 
             if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
@@ -1555,21 +1558,22 @@ class Model:
             if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
                 options.append('deposit_pool')
 
-            if exchange_bal > 0:
+            if exchange_free_bal > 0:
                 options.append('withdraw')
 
             if a.lp > 0:
                 options.append('redeem')
 
-            if open_option_tokens:
-                options.append('burn')
-
             # option position must be short collateral
+            '''
+            TODO:
+                Test later, since only book positions are pretty much have the pool as the owner for options issued
             if len(any_short_collateral) > 0 and not self.has_tried_liquidating:
                 options.append('liquidate')
+            '''
 
-            # option position must be short collateral
-            if open_option_expired_tokens:
+            # liquidate expired positons
+            if open_option_expired_tokens  or len(self.option_tokens_expired) > 0:
                 options.append('liquidate_self')
 
 
@@ -1586,9 +1590,11 @@ class Model:
                     TODO:
 
                     TOTEST:
-                        sell, withdraw, redeem, burn, liquidate, liquidate_self
+                        sell, withdraw, redeem
+                    TOTESTLATER:
+                        burn (may not be needed, handled by liquidation of option token)
                     WORKS:
-                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy
+                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy, liquidate_self, liquidate
                         
                 '''
         
@@ -1696,6 +1702,7 @@ class Model:
                     try:
                         current_timestamp = w3.eth.get_block('latest')['timestamp']
                         ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                        providerAvax.make_request("avax.issueBlock", {})
                         receipt = w3.eth.waitForTransactionReceipt(ads_hash, poll_latency=tx_pool_latency)
                         tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
                     except Exception as inst:
@@ -1704,6 +1711,7 @@ class Model:
                     for sym in available_symbols:
                         try:
                             cs_hash = self.options_exchange.create_symbol(a, sym, self.btcusd_chainlink_feed)
+                            providerAvax.make_request("avax.issueBlock", {})
                             receipt = w3.eth.waitForTransactionReceipt(cs_hash, poll_latency=tx_pool_latency)
                             tx_hashes.append({'type': 'create_symbol', 'hash': cs_hash})
                         except Exception as inst:
@@ -1720,11 +1728,12 @@ class Model:
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "deposit_pool", "amount": amount})
                 elif action == "withdraw":
-                    amount = portion_dedusted(
-                        exchange_bal,
+                    amount = int(portion_dedusted(
+                        exchange_free_bal,
                         commitment
-                    )
+                    ))
                     try:
+                        logger.info("Before Withdraw; volume: {}".format(amount))
                         wtd_hash = self.options_exchange.withdraw(a, amount)
                         tx_hashes.append({'type': 'withdraw', 'hash': wtd_hash})
                     except Exception as inst:
@@ -1735,17 +1744,6 @@ class Model:
                         tx_hashes.append({'type': 'redeem', 'hash': rdm_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "redeem"})
-                elif action == "burn":
-                    token_to_burn = open_option_tokens[int(random.random() * (len(open_option_tokens) - 1))]
-                    amount = portion_dedusted(
-                        token_to_burn[a.address],
-                        commitment
-                    )
-                    try:
-                        brn_hash = self.options_exchange.burn(a, token_to_burn.address, token_amount)
-                        tx_hashes.append({'type': 'burn', 'hash': brn_hash})
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "burn", "token_to_burn": token_to_burn, "amount": amount})
                 elif action == "write":
                     # select from available symbols
                     sym = available_symbols[int(random.random() * (len(available_symbols) - 1))]
@@ -1784,7 +1782,7 @@ class Model:
                     except Exception as inst:
                         print("\terror querying buy", inst)
                         continue
-                    print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal)
+                    print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
                     volume = int(random.random() * (current_price_volume[1] / 10.**11))
                     if volume == 0:
                         volume = 1
@@ -1792,24 +1790,39 @@ class Model:
                     try:
                         logger.info("Before Buy; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         buy_hash = self.linear_liquidity_pool.buy(a, symbol, price, volume)
+                        providerAvax.make_request("avax.issueBlock", {})
                         tx_hashes.append({'type': 'buy', 'hash': buy_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
-                    option_token_to_sell = list(self.option_tokens.values())[int(random.random() * (len(self.option_tokens) - 1))]
+                    option_token_to_sell = None
+                    volume_to_sell = 0
+                    for k, ot in self.option_tokens.items():
+                        volume_to_sell = ot.contract.caller({'from' : a.address, 'gas': 8000000}).balanceOf(a.address) 
+                        if volume_to_sell > 0:
+                            option_token_to_sell = ot
+                            break
+                    
+                    if not option_token_to_sell:
+                        continue
                     symbol = option_token_to_sell.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
                     try:
                         current_price_volume = self.linear_liquidity_pool.query_sell(a, symbol)
                     except Exception as inst:
                         print("\terror querying sell", inst)
                         continue
-                    volume = int(random.random() * (current_price_volume[1] / 10.**15))
+                    print(symbol, current_price_volume, volume_to_sell, 'SELL')
+                    volume = int(round(portion_dedusted(
+                        volume_to_sell / 10.**18,
+                        commitment
+                    )))
                     if volume == 0:
                         volume = 1
                     price = current_price_volume[0]
                     try:
                         logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
+                        providerAvax.make_request("avax.issueBlock", {})
                         tx_hashes.append({'type': 'sell', 'hash': sell_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
@@ -1822,9 +1835,9 @@ class Model:
                             except Exception as inst:
                                 logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owners.address, "option_token": otk})
                 elif action == "liquidate_self":
-                    for otv in open_option_expired_tokens:
+                    for otk, otv in self.option_tokens_expired.items():
                         try:
-                            lqd8_hash = self.options_exchange.liquidate(a, otv.address, a.address)
+                            lqd8_hash = self.options_exchange.liquidate(a, otk, self.linear_liquidity_pool.address)
                             tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
                         except Exception as inst:
                             logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "option_token": otv.address})
@@ -1858,7 +1871,7 @@ class Model:
         #'''
 
         logger.info("total tx: {}, successful tx: {}, tx fails: {}, tx passed: {}".format(
-                len(tx_hashes), tx_hashes_good, json.dumps(tx_fails), json.dumps(tx_good)
+                len(tx_hashes), tx_hashes_good, json.dumps(list(set(tx_fails))), json.dumps(list(set(tx_good)))
             )
         )
 
@@ -1873,7 +1886,6 @@ def main():
     logging.basicConfig(level=logging.INFO)
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
     
-    #deployer = w3.eth.contract(abi=DeployerContract['abi'], address=DPLY["addr"])
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
@@ -1895,7 +1907,7 @@ def main():
         cs = options_exchange.caller({'from' : acc, 'gas': 8000000}).calcSurplus(acc)
         print(acc, cs)
         '''
-
+    #print(linear_liquidity_pool.caller({'from' : w3.eth.accounts[:max_accounts][0], 'gas': 8000000}).listExpiredSymbols())
     #pretty(options_exchange.functions.resolveToken("BTC/USD-EP-147e18-1623989786").call(), indent=0)
     #print(btcusd_chainlink_feed.functions.getLatestPrice().call())
     #print(Balance(4.474093538197649, 18).to_wei())
@@ -1932,7 +1944,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = False
+    skip = True
 
     if not skip:
         mt_hash = transaction_helper(

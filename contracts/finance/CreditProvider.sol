@@ -5,7 +5,6 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
-import "../interfaces/TimeProvider.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
@@ -256,7 +255,7 @@ contract CreditProvider is ManagedContract {
     function setDebt(address owner, uint value)  private {
         
         debts[owner] = value;
-        debtsDate[owner] = exchange.exchangeTime();
+        debtsDate[owner] = settings.exchangeTime();
     }
 
     function transferTokens(address to, uint value) private returns (uint) {
