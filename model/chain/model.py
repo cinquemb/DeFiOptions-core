@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xd2fFcFdEbc27d8347bc1C4538f650AB1e67FF15E',
+  "addr": '0xd00Fef6b5F7B016E944Cf4C72Fc530E3a69D360d',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -811,7 +811,7 @@ class OptionsExchange:
         tx = transaction_helper(
             agent,
             self.contract.functions.withdrawTokens(
-                amount * 10**18
+                amount * 10**6
             ),
             8000000
         )
@@ -1084,7 +1084,7 @@ class LinearLiquidityPool(TokenProxy):
             self.contract.functions.sell(
                 symbol,
                 price,
-                volume * 10**18
+                volume * 10**6
             ),
             8000000
         )
@@ -1211,7 +1211,7 @@ class Model:
         self.btcusd_data_offset = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1622743734
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1518,7 +1518,7 @@ class Model:
             open_option_expired_tokens = self.is_positve_option_token_expired_balance(a)
 
             exchange_bal  = self.options_exchange.balance(a)
-            exchange_free_bal = self.options_exchange.calc_collateral_surplus(a, a) / * 10.**6
+            exchange_free_bal = self.options_exchange.calc_collateral_surplus(a, a) / 10.**6
 
 
             #'''
@@ -1590,11 +1590,11 @@ class Model:
                     TODO:
 
                     TOTEST:
-                        sell, withdraw, redeem
+                        sell, redeem
                     TOTESTLATER:
                         burn (may not be needed, handled by liquidation of option token)
                     WORKS:
-                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy, liquidate_self, liquidate
+                        deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy, liquidate_self, liquidate, withdraw
                         
                 '''
         
@@ -1746,7 +1746,7 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "redeem"})
                 elif action == "write":
                     # select from available symbols
-                    sym = available_symbols[int(random.random() * (len(available_symbols) - 1))]
+                    sym = available_symbols[0 if random.random() > 0.5 else 1]
                     sym_parts = sym.split('-')
 
                     '''
@@ -1773,7 +1773,7 @@ class Model:
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "write", "strike_price": strike_price, "maturity": maturity, "option_type": option_type, "amount": amount})
                 elif action == "buy":
-                    option_token_to_buy = list(self.option_tokens.values())[int(random.random() * (len(self.option_tokens) - 1))]
+                    option_token_to_buy = list(self.option_tokens.values())[0 if random.random() > 0.5 else 1]
                     symbol = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
                     option_token_balance_of_pool = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(self.linear_liquidity_pool.address)
                     print(symbol, option_token_balance_of_pool)
@@ -1819,10 +1819,11 @@ class Model:
                     if volume == 0:
                         volume = 1
                     price = current_price_volume[0]
+                    price -= (price * 0.0001)
+                    price = int(price)
                     try:
                         logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
-                        providerAvax.make_request("avax.issueBlock", {})
                         tx_hashes.append({'type': 'sell', 'hash': sell_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
@@ -1944,7 +1945,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
