@@ -12,7 +12,7 @@ function cleanup {
 trap cleanup EXIT
 
 echo "Deploying contracts..."
-time truffle migrate -f 2 --to 2 --skip-dry-run --network=development | tee deploy_output.txt
+time truffle migrate --reset -f 2 --to 2 --skip-dry-run --network=development | tee deploy_output.txt
 
 
 #'

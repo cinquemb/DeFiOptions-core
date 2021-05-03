@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xd00Fef6b5F7B016E944Cf4C72Fc530E3a69D360d',
+  "addr": '0x009eAbFd0255A0b6a0D80b8A648069d3f23Be474',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -1219,7 +1219,7 @@ class Model:
         self.btcusd_data_offset = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1931,8 +1931,8 @@ def main():
 
     '''
     print(credit_provider.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).balanceOf(linear_liquidity_pool.address))
-    print("tx-input -> 0xa606b94a00000000000000000000000031ca456799587d509447d590b81b455dde3a51320000000000000000000000007ba91f2131dd73369edff1ca207c6ddb87a5d83a000000000000000000000000000000000000000000000000000000000281b77b")
-    print(credit_provider.decode_function_input("0xa606b94a00000000000000000000000031ca456799587d509447d590b81b455dde3a51320000000000000000000000007ba91f2131dd73369edff1ca207c6ddb87a5d83a000000000000000000000000000000000000000000000000000000000281b77b"))
+    print("tx-input -> 0xa606b94a000000000000000000000000bc177dc5f5d910069e6eda3f12d26a5f4dc3fe200000000000000000000000009f7d9386dc282417ffaac588e65e828be809e4ba00000000000000000000000000000000000000000000000000000000007ac0ad")
+    print(credit_provider.decode_function_input("0xa606b94a000000000000000000000000bc177dc5f5d910069e6eda3f12d26a5f4dc3fe200000000000000000000000009f7d9386dc282417ffaac588e65e828be809e4ba00000000000000000000000000000000000000000000000000000000007ac0ad"))
     sys.exit()
     '''
 

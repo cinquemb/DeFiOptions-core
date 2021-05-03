@@ -362,7 +362,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         uint value = price.mul(volume).div(volumeBase);
         exchange.transferBalance(msg.sender, value);
-        
+
         require(calcFreeBalance() > 0, "pool balance too low");
 
         uint _holding = tk.balanceOf(address(this));
@@ -484,7 +484,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         (,int udlPrice) = feed.getLatestPrice();
         xp = uint(udlPrice);
 
-        while(p.x[j] < xp && j < p.x.length){
+        while (p.x[j] < xp && j < p.x.length) {
             j++;
         }
 

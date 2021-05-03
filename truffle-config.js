@@ -18,6 +18,14 @@ module.exports = {
       timeoutBlocks: 200
     },*/
 
+    //for eth
+    /*development: {
+      host: "127.0.0.1",     // Localhost (default: none)
+      port: 7545,            // Standard Ethereum port (default: none)
+      network_id: "*",       // Any network (default: none)
+      gas: 8000000,
+    }*/
+
     development: {
       provider: () => new Web3.providers.HttpProvider('http://127.0.0.1:9545/ext/bc/C/rpc'),
       network_id: "*",

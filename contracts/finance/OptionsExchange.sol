@@ -270,6 +270,10 @@ contract OptionsExchange is ManagedContract {
         collateral[owner] = calcCollateral(owner, true);
     }
 
+    function getCachedCollateral(address owner) public view returns (uint) {
+        return collateral[owner];
+    }
+
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
         
         int coll;

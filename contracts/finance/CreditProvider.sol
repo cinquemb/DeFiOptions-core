@@ -90,8 +90,9 @@ contract CreditProvider is ManagedContract {
     }
 
     function transferBalance(address from, address to, uint value) public {
-
+        
         ensureCaller();
+        
         removeBalance(from, value);
         addBalance(to, value);
         emit TransferBalance(from, to, value);
@@ -179,7 +180,7 @@ contract CreditProvider is ManagedContract {
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
             balances[owner] = balances[owner].add(v);
-            _totalBalance.add(v);
+            _totalBalance =_totalBalance.add(v);
         }
     }
 
@@ -212,7 +213,10 @@ contract CreditProvider is ManagedContract {
         
         require(balances[owner] >= value, "insufficient balance");
         balances[owner] = balances[owner].sub(value);
-        _totalBalance.sub(value);
+
+        if (value > 0) {
+            _totalBalance = _totalBalance.sub(value);
+        } 
     }
 
     function getTotalBalance() public view returns (uint) {
