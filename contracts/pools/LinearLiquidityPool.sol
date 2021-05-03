@@ -484,12 +484,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         (,int udlPrice) = feed.getLatestPrice();
         xp = uint(udlPrice);
 
-        for(uint i = 0; i < p.x.length; i++) {
-            if(p.x[i] < xp) {
-                j = i;
-            } else {
-                break;
-            }
+        while(p.x[j] < xp && j < p.x.length){
+            j++;
         }
 
         require(j > 0 && j < p.x.length, "findUdlPrice: invalid pricing parameters");
