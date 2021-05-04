@@ -182,10 +182,10 @@ contract OptionsExchange is ManagedContract {
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string memory nameSuffix, string memory symbolSuffix, address owner, address settings) public returns (address pool) {
+    function createPool(string memory nameSuffix, string memory symbolSuffix, address settings) public returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
-        pool = poolFactory.create(nameSuffix, symbolSuffix, owner, settings, address(creditProvider));
+        pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender, settings, address(creditProvider));
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
         emit CreatePool(pool, msg.sender);
