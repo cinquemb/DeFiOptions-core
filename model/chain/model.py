@@ -880,7 +880,7 @@ class OptionsExchange:
         return tx
 
 
-    def burn(self, agent, option_token_address, token_amount):
+    def burn_token(self, agent, option_token_address, token_amount):
         '''
         uint amount = token_amount * volumeBase;
         token.burn(amount);
@@ -1233,13 +1233,14 @@ class Model:
         self.btcusd_data_offset = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1623039171
+        self.prev_timestamp = 1623395489
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
         self.months_per_year = 12
         self.option_tokens = {}
         self.option_tokens_expired = {}
+        self.option_tokens_expired_to_burn = {}
         self.usdt_token = usdt
         self.symbol_created = {}
 
@@ -1394,7 +1395,10 @@ class Model:
 
         for x in self.linear_liquidity_pool.get_option_tokens_expired(random_advancer):
             if x.address not in self.option_tokens_expired:
-                self.option_tokens_expired[x.address] = x
+                if x.totalSupply == 0:
+                    self.option_tokens_expired_to_burn[x.address] = x
+                else:
+                    self.option_tokens_expired[x.address] = x
 
         self.options_exchange.option_tokens = self.option_tokens
 
@@ -1612,6 +1616,11 @@ class Model:
                 options.append('liquidate_self')
                 options.append('redeem_token')
 
+            '''
+            if len(self.option_tokens_expired_to_burn) > 0:
+                options.append('burn_token')
+            '''
+
 
             start_tx_count = a.next_tx_count
             commitment = random.random() * 0.01
@@ -1624,11 +1633,13 @@ class Model:
                         advance: to do maintainence functions, payout from dynamic collateral and/or gov token
                     
                     TODO:
+                        burn_pool?
 
                     TOTEST:
+                        burn_pool?
 
                     TOTESTLATER:
-                        burn (may not be needed, handled by liquidation of option token), redeem_pool (can only reedeem after expiration)
+                        burn_token (may not be needed, handled by liquidation of option token), redeem_pool (can only reedeem after expiration)
                     WORKS:
                         deposit_exchange, deposit_pool, add_symbol, update_symbol, write, create_symbol, buy, liquidate_self, liquidate, withdraw, sell, redeem_token
                         
@@ -1784,11 +1795,19 @@ class Model:
                 elif action == "redeem_token":
                     for otk, otv in self.option_tokens_expired.items():
                         try:
-                            logger.info("Before Redeem Option: {}".format(otk))
+                            logger.info("Before Redeem Option: {}, {}".format(otv.symbol, otv.totalSupply))
                             rdmt_hash = self.options_exchange.redeem_token(a, otk)
                             tx_hashes.append({'type': 'redeem_token', 'hash': rdmt_hash})
                         except Exception as inst:
                             logger.info({"agent": a.address, "error": inst, "action": "redeem_token", "option_token": otv.address})
+                elif action == "burn_token":
+                    for otk, otv in self.option_tokens_expired_to_burn.items():
+                        try:
+                            logger.info("Before Burn Option: {}".format(otv.symbol))
+                            rdmt_hash = self.options_exchange.redeem_token(a, otk)
+                            tx_hashes.append({'type': 'burn_token', 'hash': rdmt_hash})
+                        except Exception as inst:
+                            logger.info({"agent": a.address, "error": inst, "action": "burn_token", "option_token": otv.address})
 
                 elif action == "write":
                     # select from available symbols
