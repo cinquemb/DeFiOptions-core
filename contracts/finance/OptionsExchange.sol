@@ -14,6 +14,7 @@ import "../utils/SignedSafeMath.sol";
 import "./CreditProvider.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
+import "./LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ManagedContract {
 
@@ -37,7 +38,8 @@ contract OptionsExchange is ManagedContract {
     
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
-    OptionTokenFactory private factory;
+    OptionTokenFactory private optionTokenFactory;
+    LinearLiquidityPoolFactory private poolFactory;
 
     
     mapping(address => uint) public collateral;
@@ -45,6 +47,7 @@ contract OptionsExchange is ManagedContract {
     mapping(address => FeedData) private feeds;
     mapping(address => address[]) private book;
 
+    mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
     mapping(address => uint) public nonces;
     
@@ -56,7 +59,9 @@ contract OptionsExchange is ManagedContract {
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
 
+    event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
+
 
     event WriteOptions(
         address indexed token,
@@ -103,7 +108,8 @@ contract OptionsExchange is ManagedContract {
 
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        factory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
+        optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
+        poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
 
         volumeBase = 1e18;
         timeBase = 1e18;
@@ -170,10 +176,19 @@ contract OptionsExchange is ManagedContract {
     function createSymbol(string memory symbol, address udlFeed) public returns (address tk) {
 
         require(tokenAddress[symbol] == address(0), "already created");
-        tk = factory.create(symbol, udlFeed);
+        tk = optionTokenFactory.create(symbol, udlFeed);
         tokenAddress[symbol] = tk;
         prefetchFeedData(udlFeed);
         emit CreateSymbol(tk, msg.sender);
+    }
+
+    function createPool(string memory nameSuffix, string memory symbolSuffix, address owner, address settings) public returns (address pool) {
+
+        require(poolAddress[symbolSuffix] == address(0), "already created");
+        pool = poolFactory.create(nameSuffix, symbolSuffix, owner, settings, address(creditProvider));
+        poolAddress[symbolSuffix] = pool;
+        creditProvider.insertPoolCaller(pool);
+        emit CreatePool(pool, msg.sender);
     }
 
     function writeOptions(

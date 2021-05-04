@@ -26,6 +26,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         OptionsExchange.OptionType optType;
         uint120 strike;
         uint32 maturity;
+        uint32 updateFrequency;
+        uint256 lastUpdateTime;
         uint32 t0;
         uint32 t1;
         uint120 buyStock;
@@ -45,8 +47,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     mapping(string => PricingParameters) private parameters;
 
-    string private constant _name = "Linear Liquidity Pool Redeemable Token";
-    string private constant _symbol = "LLPTK";
+    string private constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
+    string private constant _symbol_prefix = "LLPTK-";
+    string private _symbol;
+    string private _name;
 
     address private owner;
     uint private spread;
@@ -58,28 +62,32 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     uint private volumeBase;
     uint private fractionBase;
 
+    /*
     constructor(address deployer) ERC20(_name) public {
 
         Deployer(deployer).setContractAddress("LinearLiquidityPool");
-    }
+    }*/
 
-    function initialize(Deployer deployer) override internal {
-
-        owner = deployer.getOwner();
-        exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
-
+    constructor(string memory _name, string memory _sb, address _ownerAddr, address _settings, address _credPrv, address _exchg)
+        ERC20(string(abi.encodePacked(_name_prefix, _name)))
+        public
+    {    
+        _symbol = _sb;
+        owner = _ownerAddr;
+        exchange = OptionsExchange(_exchg);
+        settings = ProtocolSettings(_settings);
+        creditProvider = CreditProvider(_credPrv);
         volumeBase = exchange.volumeBase();
         fractionBase = 1e9;
     }
 
     function name() override external view returns (string memory) {
-        return _name;
+        return string(abi.encodePacked(_name_prefix, _name));
     }
 
     function symbol() override external view returns (string memory) {
-        return _symbol;
+
+        return string(abi.encodePacked(_symbol_prefix, _symbol));
     }
 
     function setParameters(
@@ -133,6 +141,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         address udlFeed,
         uint strike,
         uint _mt,
+        uint _up8freq,
         OptionsExchange.OptionType optType,
         uint t0,
         uint t1,
@@ -145,6 +154,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     {
         ensureCaller();
         require(_mt < _maturity, "invalid maturity");
+        require(_up8freq > 0, "invalid update frequency");
         require(x.length > 0 && x.length.mul(2) == y.length, "invalid pricing surface");
 
         OptionsExchange.OptionData memory opt = OptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
@@ -152,6 +162,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
+        } else {
+            uint256 diffUpdateTime = exchange.exchangeTime().sub(parameters[optSymbol].lastUpdateTime);
+            require(diffUpdateTime >= parameters[optSymbol].updateFrequency, "cannot update yet");
         }
 
         parameters[optSymbol] = PricingParameters(
@@ -159,6 +172,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             optType,
             strike.toUint120(),
             _mt.toUint32(),
+            _up8freq.toUint32(),
+            settings.exchangeTime(),
             t0.toUint32(),
             t1.toUint32(),
             buyStock.toUint120(),
@@ -171,8 +186,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
 
     function removeSymbol(string calldata optSymbol) external {
-        // need addtional check so it can only be done after opex and token no longer exists?
         ensureCaller();
+        require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy be for maturity");
+        
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
         Arrays.removeItem(optSymbols, optSymbol);

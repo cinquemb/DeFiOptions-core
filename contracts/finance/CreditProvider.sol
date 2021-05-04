@@ -53,7 +53,6 @@ contract CreditProvider is ManagedContract {
         callers[exchangeAddress] = 1;
         callers[address(settings)] = 1;
         callers[deployer.getContractAddress("CreditToken")] = 1;
-        callers[deployer.getContractAddress("LinearLiquidityPool")] = 1;
 
         ctAddr = address(creditToken);
     }
@@ -289,6 +288,11 @@ contract CreditProvider is ManagedContract {
             value = value.mul(r).div(b);
         }
         creditToken.issue(to, value);
+    }
+
+    function insertPoolCaller(address llp) external {
+        ensureCaller();
+        callers[llp] = 1;
     }
 
     function ensureCaller()  private view {
