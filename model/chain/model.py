@@ -22,7 +22,7 @@ IS_DEBUG = False
 is_try_model_mine = False
 max_accounts = 40
 block_offset = 19 + max_accounts
-tx_pool_latency = 1
+tx_pool_latency = 0.25
 
 DEADLINE_FROM_NOW = 60 * 60 * 24 * 7 * 52
 UINT256_MAX = 2**256 - 1
@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x2C15323e0AF6C5C466adF8aB851A5f19C6aEB62d',
+  "addr": '0x41802923d17Ff634b61De8A9971eDAa884Abb97D',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -1088,9 +1088,7 @@ class LinearLiquidityPool(TokenProxy):
             option_token.approve(address(pool), price * volume / volumeBase)`;
             pool.sell(symbol, price, volume, 0, 0)`;
         '''
-
         '''
-        option_token.ensure_approved(agent, self.contract.address)
         txc = transaction_helper(
             agent,
             self.options_exchange.contract.functions.setCollateral(
@@ -1101,6 +1099,7 @@ class LinearLiquidityPool(TokenProxy):
         w3.eth.waitForTransactionReceipt(txc, poll_latency=tx_pool_latency)
         '''
 
+        option_token.ensure_approved(agent, self.contract.address)
         tx = transaction_helper(
             agent,
             self.contract.functions.sell(
@@ -1218,7 +1217,7 @@ class Model:
     Full model of the economy.
     """
     
-    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, xsd, usdt, agents, **kwargs):
+    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, btcusd_data_offset, xsd, usdt, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
@@ -1230,10 +1229,11 @@ class Model:
         self.btcusd_chainlink_feed = btcusd_chainlink_feed
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
-        self.btcusd_data_offset = 30
+        self.btcusd_data_init_bins = 30
+        self.btcusd_data_offset = btcusd_data_offset
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1623395489
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1280,12 +1280,12 @@ class Model:
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.setAnswers(
-                    self.btcusd_data[:self.btcusd_data_offset]
+                    self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins]
                 ),
                 500000
             )
 
-            timestamps = [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_offset, 0, -1)]
+            timestamps = [(x* self.daily_period * -1) + current_timestamp for x in range(self.btcusd_data_init_bins, 0, -1)]
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.setUpdatedAts(
@@ -1295,13 +1295,13 @@ class Model:
             )
 
             print(timestamps)
-            print(self.btcusd_data[:self.btcusd_data_offset])
+            print(self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins])
 
             tx = transaction_helper(
                 seleted_advancer,
                 self.btcusd_chainlink_feed.functions.initialize(
                     timestamps,
-                    self.btcusd_data[:self.btcusd_data_offset]
+                    self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins]
                 ),
                 8000000
             )
@@ -1386,8 +1386,8 @@ class Model:
             TODO: need to explore 2:1 bs, 1:1 bs and 1:2 bs
         '''
 
-        buyStock = 1000
-        sellStock = 1000
+        buyStock = 100000
+        sellStock = 100000
 
         for x in self.linear_liquidity_pool.get_option_tokens(random_advancer):
             if x.address not in self.option_tokens:
@@ -1395,10 +1395,11 @@ class Model:
 
         for x in self.linear_liquidity_pool.get_option_tokens_expired(random_advancer):
             if x.address not in self.option_tokens_expired:
-                if x.totalSupply == 0:
-                    self.option_tokens_expired_to_burn[x.address] = x
-                else:
+                if x.totalSupply >= 1:
                     self.option_tokens_expired[x.address] = x
+
+                else:
+                    self.option_tokens_expired_to_burn[x.address] = x
 
         self.options_exchange.option_tokens = self.option_tokens
 
@@ -1407,6 +1408,11 @@ class Model:
             UPDATE SYMBOL PARAMS
         '''
         if (diff_timestamp >= self.daily_period):
+            
+            if self.prev_timestamp > 0:
+                # increment round id
+                self.current_round_id += 1
+
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendRoundId(
@@ -1418,7 +1424,7 @@ class Model:
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendAnswer(
-                    self.btcusd_data[self.current_round_id]
+                    self.btcusd_data[self.btcusd_data_offset+self.current_round_id]
                 ),
                 500000
             )
@@ -1432,76 +1438,110 @@ class Model:
             )
 
             self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
-            for sym in available_symbols:
-                print('update symbol:', sym)
-                sym_parts = sym.split('-')
 
-                '''
-                    * sym is something like: `ETH/USD-EC-13e20-1611964800` which represents an ETH european call option with strike price US$ 1300 and maturity at timestamp `1611964800`.
-                '''
-                # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING STRIKES
+            '''
+                Prepare JSON data
 
-                strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
-                maturity = int(sym_parts[3])
-                days_until_expiry = (maturity - current_timestamp) / self.daily_period
-                num_samples = 2000
-                option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
+                {
+                    "BTC/USD": {
+                        "vol": 0.04,
+                        "data": [
+                            {"strike": 1234, "option_type": "PUT", vol}
+                        ],
+                    }
+                }
+            '''
+
+            with open('mcmc_symbol_params.json', 'w+') as f:
+                mcmc_data = {}
+                for sym in available_symbols:
+                    print('update symbol param file:', sym)
+                    sym_parts = sym.split('-')
+
+                    strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
+                    maturity = int(sym_parts[3])
+                    days_until_expiry = (maturity - current_timestamp) / self.daily_period
+                    months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
+                    num_samples = 2000
+                    option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
+
+                    if sym_parts[0] in mcmc_data:
+                        # just append new strike data
+                        mcmc_data[sym_parts[0]]["data"].append({
+                            "strike": strike, 
+                            "option_type": option_type,
+                            "symbol": sym
+                        })
+                    else:
+                        # need to calc feed vol
+                        # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
+                        try:
+                            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                                self.daily_vol_period * self.daily_period
+                            )
+                        except Exception as inst:
+                            print(inst, "bad vol calc")
+                            continue
+
+                        normed_vol = vol / (10.**xSD['decimals']) / (10.)
+
+                        mcmc_data[sym_parts[0]] = {}
+                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data[sym_parts[0]]["vol"] = normed_vol
+                        mcmc_data[sym_parts[0]]["data"] = [{
+                            "strike": strike, 
+                            "option_type": option_type,
+                            "symbol": sym
+                        }]
+
+                f.write(json.dumps(mcmc_data, indent=4))
 
 
-                # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
-                try:
-                    vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
-                        self.daily_vol_period * self.daily_period
-                    )
-                except Exception as inst:
-                    print(inst, "bad vol calc")
-                    continue
-                normed_vol = vol / (10.**xSD['decimals']) / (10.)
-                months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
+            '''
+                EXECUTE MODEL HERE FOR ALL DATA
+            '''
 
-                '''
-                    EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
-                '''
-                cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
-                    self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals'],
-                    normed_vol,
-                    strike,
-                    num_samples,
-                    0.2,
-                    months_to_exp,
-                    option_type
-                )
-                model_ret = str(execute_cmd(cmd))
+            '''
+                EXAMPLE: ./op_model "2000" "0.2" "3.0"
+            '''
+            cmd = './op_model "%s" "%s" "%s"' % (
+                num_samples,
+                0.2,
+                months_to_exp,
+            )
+            model_ret = str(execute_cmd(cmd))
 
-                option_params = list(filter(None, model_ret.split('\\n')))
-                x0s = list(filter(None, option_params[0].split('x: ')[-1].split(',')))
-                if len(x0s) == 0:
-                    continue
 
-                '''
-                    EXAMPLE:
-                    x: 283.000000,294.000000,305.000000,316.000000,327.000000,338.000000,349.000000,360.000000,371.000000,382.000000,393.000000,404.000000,415.000000,426.000000,437.000000,448.000000,459.000000,470.000000,481.000000,492.000000,503.000000,514.000000,525.000000,536.000000,547.000000,558.000000,569.000000,580.000000,591.000000,602.000000,613.000000,624.000000,635.000000,646.000000,657.000000,668.000000,679.000000
-                    y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
-                    y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
-                '''
-                try:
-                    x = [int(round(x0,2) * 10**xSD['decimals']) for x0 in list(map(float, x0s))]
-                    y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
-                    y  = [int(round(y0,2) * 10**xSD['decimals']) for y0 in y]
-                    print(x)
-                    print(y)
-                except Exception as inst:
-                    print(inst, "no timestamp data to update")
-                    x = [0, 0]
-                    y = [0, 0, 0, 0]
-                
-                
-                
-                current_timestamp = w3.eth.get_block('latest')['timestamp']
-                sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
-                receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency, timeout=600)
+            '''
+                LOAD IN FILE AND MAP DATA TO PAIR
+            '''
+            with open('mcmc_symbol_computation.json', 'r+') as f:
+                mcmc_symbol_computation = json.loads(f.read())
+                for sym in available_symbols:
+                    print('update symbol:', sym)
+                    sym_parts = sym.split('-')
 
-            self.current_round_id += 1
+                    if mcmc_symbol_computation[sym]:
+                        x0s = mcmc_symbol_computation[sym]['x']
+                        if len(x0s) == 0:
+                            continue
+
+                        try:
+                            x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
+                            y = mcmc_symbol_computation[sym]['y0'] + mcmc_symbol_computation[sym]['y1']
+                            y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                            print(x)
+                            print(y)
+                        except Exception as inst:
+                            print(inst, "no timestamp data to update")
+                            x = [0, 0]
+                            y = [0, 0, 0, 0]
+                        
+                        current_timestamp = w3.eth.get_block('latest')['timestamp']
+                        sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                        receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency, timeout=600)
+
+            
             '''
                 TODO: NEED TO DUMP TO FILE AND LOAD FROM FILE IN ORDER TO BE ABLE TO START AND STOP MORE ROBUSTLY SANS NUKING CONTRACTS
             '''
@@ -1541,6 +1581,8 @@ class Model:
 
         self.has_tried_liquidating = False
 
+        max_symbols_per_type = 1
+
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
             options = []
@@ -1559,8 +1601,8 @@ class Model:
             #'''
             #TODO: NEED A BETTER WAY TO FIGURE THIS OUT FOR SYMBOLS THAT FAIL TO UPDATE/HAVE ANY POS TXs
             available_symbols = self.linear_liquidity_pool.list_symbols(seleted_advancer)
-            any_calls = any([ts for ts in available_symbols if '-EC-' in ts])
-            any_puts = any([ts for ts in available_symbols if '-EP-' in ts])
+            any_calls = [ts for ts in available_symbols if '-EC-' in ts]
+            any_puts = [ts for ts in available_symbols if '-EP-' in ts]
 
             if len(available_symbols) != len(self.option_tokens):
                 #TRY AND UPDATE OPTION TOKENS AVAILABLE
@@ -1569,16 +1611,13 @@ class Model:
                         self.option_tokens[x.address] = x
             #'''
 
-            '''
-                WORKS BUT, TODO: NEED TO FIND A WAY TO SYM ECONOMY WITH THIS, CANNOT BUY DIRECT ON EXCHANGE
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
-            '''
 
             if (exchange_bal > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
                 options.append('buy')
 
-            if (exchange_bal > 0 or pool_free_balance > 0) and ((not any_calls or not any_puts) or len(available_symbols) ==0):
+            if (exchange_bal > 0 or pool_free_balance > 0) and ((len(any_calls) < max_symbols_per_type or len(any_puts) < max_symbols_per_type) or len(available_symbols) ==0):
                 options.append('add_symbol')
 
             if len(available_symbols) != len(self.option_tokens):
@@ -1668,7 +1707,7 @@ class Model:
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
                     # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING STRIKES
-                    current_price = self.btcusd_data[self.current_round_id] / (10.**BTCUSDAgg['decimals'])
+                    current_price = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / (10.**BTCUSDAgg['decimals'])
 
                     """
                     TODO:
@@ -1680,80 +1719,79 @@ class Model:
                     num_samples = 2000
                     option_type = option_types[0 if random.random() > 0.5 else 1]
 
-                    if option_type == 'CALL':
-                        if any([ts for ts in available_symbols if '-EC-' in ts]):
-                            # call already exists
-                            continue
-
-                    if option_type == 'PUT':
-                        if any([ts for ts in available_symbols if '-EP-' in ts]):
-                            # put already exists
-                            continue
-
-                    otm = max(0.0, random.random())
-                    if option_type == 'CALL':
-                        # if call, write OTM by random amout, to the upside
-                        strike = round(current_price * (1 + otm))
+                    moneyness = max(0.0, random.random())
+                    if random.random() > 0.5:
+                        strike = round(current_price * (1 + moneyness))
                     else:
-                        # if put, write OTM by random amount, to the downside
-                        strike = round(current_price * (1 - otm))
+                        strike = round(current_price * (1 - moneyness))
 
+                    with open('mcmc_symbol_params.json', 'w+') as f:
+                        mcmc_data = {}
+                        # need to calc feed vol
+                        # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
+                        try:
+                            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                                self.daily_vol_period * self.daily_period
+                            )
+                        except Exception as inst:
+                            print(inst, "bad vol calc")
+                            continue
 
-                    # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
-                    try:
-                        vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
-                            self.daily_vol_period * self.daily_period
-                        )
-                    except:
-                        continue
-                    normed_vol = vol / (10.**xSD['decimals']) / (10.)
-                    #print(normed_vol)
-                    #sys.exit()
-                    months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
+                        normed_vol = vol / (10.**xSD['decimals']) / (10.)
+
+                        mcmc_data["pending"] = {}
+                        mcmc_data["pending"]["curr_price"] = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data["pending"]["vol"] = normed_vol
+                        mcmc_data["pending"]["data"] = [{
+                            "strike": strike, 
+                            "option_type": option_type,
+                            "symbol": "pending"
+                        }]
+
+                        f.write(json.dumps(mcmc_data, indent=4))
 
                     '''
-                        EXAMPLE: ./op_model "321.00" "0.4" "350" "2000" "0.2" "3.0" "CALL"
+                        EXECUTE MODEL HERE FOR ALL DATA
                     '''
-                    cmd = './op_model "%s" "%s" "%s" "%s" "%s" "%s" "%s"' % (
-                        self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals'],
-                        normed_vol,
-                        strike,
+
+                    '''
+                        EXAMPLE: ./op_model "2000" "0.2" "3.0"
+                    '''
+                    cmd = './op_model "%s" "%s" "%s"' % (
                         num_samples,
                         0.2,
                         months_to_exp,
-                        option_type
                     )
                     model_ret = str(execute_cmd(cmd))
-                    option_params = list(filter(None, model_ret.split('\\n')))
 
-                    x0s = list(filter(None, option_params[0].split('x: ')[-1].split(',')))
-                    len_x0s = len(x0s)
-                    if len_x0s == 0:
-                        print('no x0s')
-                        continue
-
-                    if len_x0s < 10:
-                        print('too few x0s')
-                        continue
 
                     '''
-                        EXAMPLE:
-                        x: 283.000000,294.000000,305.000000,316.000000,327.000000,338.000000,349.000000,360.000000,371.000000,382.000000,393.000000,404.000000,415.000000,426.000000,437.000000,448.000000,459.000000,470.000000,481.000000,492.000000,503.000000,514.000000,525.000000,536.000000,547.000000,558.000000,569.000000,580.000000,591.000000,602.000000,613.000000,624.000000,635.000000,646.000000,657.000000,668.000000,679.000000
-                        y0: 0.003759,0.002401,0.296976,0.332279,1.509792,2.329366,6.977463,12.941716,22.072626,29.251028,45.252636,52.544646,63.085901,78.237451,88.115777,99.479040,110.793800,118.115267,129.575667,141.164501,153.272401,162.125617,174.258685,184.612053,194.424776,205.632488,218.769968,232.852854,236.105212,254.479568,266.482429,274.897736,283.868532,295.262663,303.870996,319.351030,328.705660
-                        y1: 0.020394,0.021601,0.219137,0.257914,1.210875,2.614407,7.834423,13.922812,22.323261,31.743059,45.731665,53.577131,66.643052,73.091227,87.247594,100.274300,106.781679,119.894730,131.333429,142.715132,152.197227,161.508955,173.117760,185.550314,194.692905,209.250423,216.986668,227.148755,237.249729,250.351358,264.505492,272.567784,287.580319,295.292984,307.545487,316.111073,325.065843
+                        LOAD IN FILE AND MAP DATA TO PAIR
                     '''
-                    x = [int(round(x0,2) * 10**xSD['decimals']) for x0 in list(map(float,x0s))]
-                    y = list(map(float,option_params[1].split('y0: ')[-1].split(','))) + list(map(float,option_params[2].split('y1: ')[-1].split(',')))
-                    y  = [int(round(y0,2) * 10**xSD['decimals']) for y0 in y]
-                    print('x', x, 'y', y)
-                    try:
-                        current_timestamp = w3.eth.get_block('latest')['timestamp']
-                        ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
-                        providerAvax.make_request("avax.issueBlock", {})
-                        receipt = w3.eth.waitForTransactionReceipt(ads_hash, poll_latency=tx_pool_latency, timeout=600)
-                        tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
-                    except Exception as inst:
-                        logger.info({"agent": a.address, "error": inst, "action": "add_symbol", "strike": strike, "maturity": maturity, "x": x, "y": y, "normed_vol": normed_vol, "vol": vol})
+                    with open('mcmc_symbol_computation.json', 'r+') as f:
+                        mcmc_symbol_computation = json.loads(f.read())
+                        if mcmc_symbol_computation["pending"]:
+                            x0s = mcmc_symbol_computation["pending"]['x']
+                            if len(x0s) == 0:
+                                continue
+
+                            try:
+                                x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
+                                y = mcmc_symbol_computation["pending"]['y0'] + mcmc_symbol_computation["pending"]['y1']
+                                y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                                print(x)
+                                print(y)
+                            except Exception as inst:
+                                continue
+
+                            try:
+                                current_timestamp = w3.eth.get_block('latest')['timestamp']
+                                ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                                providerAvax.make_request("avax.issueBlock", {})
+                                receipt = w3.eth.waitForTransactionReceipt(ads_hash, poll_latency=tx_pool_latency, timeout=600)
+                                tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
+                            except Exception as inst:
+                                logger.info({"agent": a.address, "error": inst, "action": "add_symbol", "strike": strike, "maturity": maturity, "x": x, "y": y, "normed_vol": normed_vol, "vol": vol})
                 elif action == "create_symbol":
                     for sym in available_symbols:
                         try:
@@ -1811,7 +1849,7 @@ class Model:
 
                 elif action == "write":
                     # select from available symbols
-                    sym = available_symbols[0 if random.random() > 0.5 else 1]
+                    sym = available_symbols[int(random.random() * (len(available_symbols) - 1))]
                     sym_parts = sym.split('-')
 
                     '''
@@ -1828,7 +1866,10 @@ class Model:
                     if amount == 0:
                         amount = 1
 
-                    cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
+                    try:
+                        cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
+                    except:
+                        continue
                     if((cc / 10.**6) > (exchange_bal / 10.**6)):
                         continue
                     
@@ -1853,7 +1894,7 @@ class Model:
                         continue
                     
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
-                    volume = int(random.random() * (current_price_volume[1] / 10.**11))
+                    volume = int(random.random() * (current_price_volume[1] / 10.**10))
                     if volume == 0:
                         volume = 1
                     price = current_price_volume[0]#int(math.ceil(current_price_volume[0] / 10**18)) * 10**18
@@ -1895,10 +1936,11 @@ class Model:
                     )))
                     '''
 
-                    volume = int(random.random() * (current_price_volume[1] / 10.**14))
+                    volume = int(random.random() * (current_price_volume[1] / 10.**12))
                     if volume == 0:
                         volume = 1
-                    price = current_price_volume[0]
+                    price = current_price_volume[0] - (int(current_price_volume[0] * 0.001))
+                    
                     try:
                         logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
@@ -2017,7 +2059,22 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
-    btcusd_answers = [int(float(x["open"]) * (10**BTCUSDAgg['decimals'])) for x in btcusd_historical_ohlc if x["open"] != 'null']
+    btcusd_answers = []
+    start_date = "2017-12-17"
+    btcusd_data_offset = 0
+    for xidx, x in enumerate(btcusd_historical_ohlc):
+
+        if x['date'] == start_date:
+            start_data_parsing = True
+            btcusd_data_offset = xidx
+        else:
+            continue
+
+        if start_data_parsing:
+            if x["open"] != 'null':
+                btcusd_answers.append(int(float(x["open"]) * (10**BTCUSDAgg['decimals'])))
+
+    print('btcusd_data_offset', btcusd_data_offset, start_date)
 
     avax_cchain_nonces = open(MMAP_FILE, "r+b")
 
@@ -2041,7 +2098,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2161,7 +2218,7 @@ def main():
     # Make a model of the options exchnage
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
+    model = Model(options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, btcusd_data_offset, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 
