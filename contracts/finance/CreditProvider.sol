@@ -28,7 +28,6 @@ contract CreditProvider is ManagedContract {
 
     address private ctAddr;
     uint private _totalBalance;
-    uint private _totalTokenStock;
     uint private _totalAccruedFees;
 
     event TransferBalance(address indexed from, address indexed to, uint value);

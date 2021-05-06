@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-project_name = "cinquemb:xsd-protocol"
+project_name = "DefiOptions:defiOptions-core"
 """
 plot.py: plot log of % system behavior
 """ % (project_name)
@@ -49,27 +49,30 @@ def main():
         
     for column_number in range(len(columns)):
 
-        if headings[column_number] == 'epoch':
-            continue
-        
-        if column_number == x_column_number:
-            # Don't plot against self
-            continue
+        try:
+            if headings[column_number] == 'epoch':
+                continue
             
-        # Plot this column against the designated x
-        ax = axes[axis_cursor]
-        ax.plot(columns[x_column_number], columns[column_number], '-')
-        ax.set_xlabel(headings[x_column_number])
-        ax.set_ylabel(headings[column_number])
-        
-        if headings[column_number] == "price":
-            # Special axes here so we can see 1.0
-            ax.set_ylim(0, 1.3)
-            ax.set_yticks([0, 0.35, 0.7, 1.05, 1.3])
-            ax.hlines(1.0, min(columns[x_column_number]), max(columns[x_column_number]))
-        
-        # Make the next plot on the next axes
-        axis_cursor += 1
+            if column_number == x_column_number:
+                # Don't plot against self
+                continue
+                
+            # Plot this column against the designated x
+            ax = axes[axis_cursor]
+            ax.plot(columns[x_column_number], columns[column_number], '-')
+            ax.set_xlabel(headings[x_column_number])
+            ax.set_ylabel(headings[column_number])
+            
+            if headings[column_number] == "price":
+                # Special axes here so we can see 1.0
+                ax.set_ylim(0, 1.3)
+                ax.set_yticks([0, 0.35, 0.7, 1.05, 1.3])
+                ax.hlines(1.0, min(columns[x_column_number]), max(columns[x_column_number]))
+            
+            # Make the next plot on the next axes
+            axis_cursor += 1
+        except:
+            pass
             
     # Show all the plots
     plt.show()

@@ -690,11 +690,11 @@ class Agent:
 
     @property
     def total_written(self):
-        return self.options_exchange.get_total_owner_written(self)
+        return Balance(self.options_exchange.get_total_owner_written(self), USDT['decimals'])
 
     @property
     def total_holding(self):
-        return self.options_exchange.get_total_owner_holding(self)
+        return Balance(self.options_exchange.get_total_owner_holding(self), USDT['decimals'])
 
     @property
     def lp(self):
@@ -724,6 +724,11 @@ class Agent:
         """
         
         strategy = collections.defaultdict(lambda: 1.0)
+
+        #strategy["buy"] = 2.0
+        strategy["sell"] = 5
+        strategy["write"] = 5
+        strategy["deposit_exchange"] = 10
         
        
         if self.use_faith:
@@ -836,7 +841,7 @@ class OptionsExchange:
 
         cc = self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcCollateral(
             feed_address,
-            Balance(amount, 18).to_wei(),
+            Balance.from_tokens(amount, USDT['decimals']).to_wei(),
             0 if option_type == 'CALL' else 1,
             strike_price,
             maturity
@@ -858,7 +863,7 @@ class OptionsExchange:
             agent,
             self.contract.functions.writeOptions(
                 feed_address,
-                Balance(amount, 18).to_wei(),
+                Balance.from_tokens(amount, USDT['decimals']).to_wei(),
                 0 if option_type == 'CALL' else 1,
                 strike_price,
                 maturity,
@@ -1012,9 +1017,16 @@ class CreditProvider:
 
     def get_total_balance(self, agent):
         '''
-            Get total balance of credit tokens issued
+            Get total balance of stable coins assinged to agents
         '''
         return self.contract.caller({'from' : agent.address, 'gas': 100000}).getTotalBalance()
+
+    def get_token_stock(self, agent):
+        '''
+            Get total balance erc20 stables coins deposited into credit provider
+        '''
+        return self.contract.caller({'from' : agent.address, 'gas': 100000}).totalTokenStock()
+
 
     def get_short_collateral_exposure(self, agent):
         return self.contract.caller({'from' : agent.address, 'gas': 100000}).calcRawCollateralShortage(agent.address)
@@ -1217,7 +1229,7 @@ class Model:
     Full model of the economy.
     """
     
-    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, btcusd_data_offset, xsd, usdt, agents, **kwargs):
+    def __init__(self, options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_data, xsd, usdt, agents, **kwargs):
         """
         Takes in experiment parameters and forwards them on to all components.
         """
@@ -1230,10 +1242,9 @@ class Model:
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
         self.btcusd_data_init_bins = 30
-        self.btcusd_data_offset = btcusd_data_offset
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1628805460
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1280,7 +1291,7 @@ class Model:
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.setAnswers(
-                    self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins]
+                    self.btcusd_data[:self.btcusd_data_init_bins]
                 ),
                 500000
             )
@@ -1295,13 +1306,13 @@ class Model:
             )
 
             print(timestamps)
-            print(self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins])
+            print(self.btcusd_data[:self.btcusd_data_init_bins])
 
             tx = transaction_helper(
                 seleted_advancer,
                 self.btcusd_chainlink_feed.functions.initialize(
                     timestamps,
-                    self.btcusd_data[self.btcusd_data_offset:self.btcusd_data_offset+self.btcusd_data_init_bins]
+                    self.btcusd_data[:self.btcusd_data_init_bins]
                 ),
                 8000000
             )
@@ -1316,22 +1327,24 @@ class Model:
         """
         
         if header:
-            stream.write("#block\twritten\tholding\texposure\tcredit supply\n")#\tfaith\n")
+            stream.write("#block\twritten\tholding\texposure\ttotal credit balance\ttotal stablecoin balance\n")#\tfaith\n")
         
         print(
             w3.eth.get_block('latest')["number"],
             self.options_exchange.get_total_written(seleted_advancer),
             self.options_exchange.get_total_holding(seleted_advancer),
             self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
-            self.credit_provider.get_total_balance(seleted_advancer)
+            self.credit_provider.get_total_balance(seleted_advancer),
+            self.credit_provider.get_token_stock(seleted_advancer)
         )
         
-        stream.write('{}\t{}\t{}\t{:.2f}\t{:.2f}\n'.format(
+        stream.write('{}\t{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
                 w3.eth.get_block('latest')["number"],
                 self.options_exchange.get_total_written(seleted_advancer),
                 self.options_exchange.get_total_holding(seleted_advancer),
                 self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
-                self.credit_provider.get_total_balance(seleted_advancer)
+                self.credit_provider.get_total_balance(seleted_advancer),
+                self.credit_provider.get_token_stock(seleted_advancer)
             )
         )
        
@@ -1389,17 +1402,21 @@ class Model:
         buyStock = 100000
         sellStock = 100000
 
+        
         for x in self.linear_liquidity_pool.get_option_tokens(random_advancer):
             if x.address not in self.option_tokens:
                 self.option_tokens[x.address] = x
 
         for x in self.linear_liquidity_pool.get_option_tokens_expired(random_advancer):
-            if x.address not in self.option_tokens_expired:
-                if x.totalSupply >= 1:
-                    self.option_tokens_expired[x.address] = x
+            if x.totalSupply >= 1:
+                self.option_tokens_expired[x.address] = x
 
-                else:
-                    self.option_tokens_expired_to_burn[x.address] = x
+            else:
+                self.option_tokens_expired_to_burn[x.address] = x
+
+            # need to remove expired tokens from reset for long running sims
+            if x.address in self.option_tokens:
+                del self.option_tokens[x.address]
 
         self.options_exchange.option_tokens = self.option_tokens
 
@@ -1424,7 +1441,7 @@ class Model:
             transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendAnswer(
-                    self.btcusd_data[self.btcusd_data_offset+self.current_round_id]
+                    self.btcusd_data[self.current_round_id]
                 ),
                 500000
             )
@@ -1451,7 +1468,7 @@ class Model:
                     }
                 }
             '''
-
+            maturity = None
             with open('mcmc_symbol_params.json', 'w+') as f:
                 mcmc_data = {}
                 for sym in available_symbols:
@@ -1460,9 +1477,7 @@ class Model:
 
                     strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
                     maturity = int(sym_parts[3])
-                    days_until_expiry = (maturity - current_timestamp) / self.daily_period
-                    months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
-                    num_samples = 2000
+                    
                     option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
 
                     if sym_parts[0] in mcmc_data:
@@ -1486,7 +1501,7 @@ class Model:
                         normed_vol = vol / (10.**xSD['decimals']) / (10.)
 
                         mcmc_data[sym_parts[0]] = {}
-                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals']
                         mcmc_data[sym_parts[0]]["vol"] = normed_vol
                         mcmc_data[sym_parts[0]]["data"] = [{
                             "strike": strike, 
@@ -1497,49 +1512,56 @@ class Model:
                 f.write(json.dumps(mcmc_data, indent=4))
 
 
-            '''
-                EXECUTE MODEL HERE FOR ALL DATA
-            '''
+            
 
-            '''
-                EXAMPLE: ./op_model "2000" "0.2" "3.0"
-            '''
-            cmd = './op_model "%s" "%s" "%s"' % (
-                num_samples,
-                0.2,
-                months_to_exp,
-            )
-            model_ret = str(execute_cmd(cmd))
+            if maturity != None:
+                '''
+                    EXECUTE MODEL HERE FOR ALL DATA
+                    EXAMPLE: ./op_model "2000" "0.2" "3.0"
+                '''
+                days_until_expiry = (maturity - current_timestamp) / self.daily_period
+                months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
+                num_samples = 2000
+
+                cmd = './op_model "%s" "%s" "%s"' % (
+                    num_samples,
+                    0.2,
+                    months_to_exp,
+                )
+                model_ret = str(execute_cmd(cmd))
 
 
-            '''
-                LOAD IN FILE AND MAP DATA TO PAIR
-            '''
-            with open('mcmc_symbol_computation.json', 'r+') as f:
-                mcmc_symbol_computation = json.loads(f.read())
-                for sym in available_symbols:
-                    print('update symbol:', sym)
-                    sym_parts = sym.split('-')
+                '''
+                    LOAD IN FILE AND MAP DATA TO PAIR
+                '''
+                with open('mcmc_symbol_computation.json', 'r+') as f:
+                    mcmc_symbol_computation = json.loads(f.read())
+                    for sym in available_symbols:
+                        print('update symbol:', sym)
+                        sym_parts = sym.split('-')
 
-                    if mcmc_symbol_computation[sym]:
-                        x0s = mcmc_symbol_computation[sym]['x']
-                        if len(x0s) == 0:
-                            continue
+                        if mcmc_symbol_computation[sym]:
+                            x0s = mcmc_symbol_computation[sym]['x']
+                            if len(x0s) == 0:
+                                continue
 
-                        try:
-                            x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
-                            y = mcmc_symbol_computation[sym]['y0'] + mcmc_symbol_computation[sym]['y1']
-                            y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
-                            print(x)
-                            print(y)
-                        except Exception as inst:
-                            print(inst, "no timestamp data to update")
-                            x = [0, 0]
-                            y = [0, 0, 0, 0]
-                        
-                        current_timestamp = w3.eth.get_block('latest')['timestamp']
-                        sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
-                        receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency, timeout=600)
+                            try:
+                                x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
+                                y = mcmc_symbol_computation[sym]['y0'] + mcmc_symbol_computation[sym]['y1']
+                                y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                                print(x)
+                                print(y)
+                            except Exception as inst:
+                                print(inst, "no timestamp data to update")
+                                x = [0, 0]
+                                y = [0, 0, 0, 0]
+
+                            strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
+                            option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
+                            
+                            current_timestamp = w3.eth.get_block('latest')['timestamp']
+                            sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, int(sym_parts[3]), option_type, current_timestamp, x, y, buyStock, sellStock)
+                            receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency, timeout=600)
 
             
             '''
@@ -1581,7 +1603,7 @@ class Model:
 
         self.has_tried_liquidating = False
 
-        max_symbols_per_type = 1
+        max_symbols_per_type = 10
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1595,7 +1617,7 @@ class Model:
             try:
                 exchange_free_bal = self.options_exchange.calc_collateral_surplus(a, a) / 10.**6
             except Exception as inst:
-                print(inst, 'FAIL FREE BAL')
+                pass
 
 
             #'''
@@ -1614,8 +1636,12 @@ class Model:
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
 
+
+            '''
             if (exchange_bal > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
                 options.append('buy')
+
+            '''
 
             if (exchange_bal > 0 or pool_free_balance > 0) and ((len(any_calls) < max_symbols_per_type or len(any_puts) < max_symbols_per_type) or len(available_symbols) ==0):
                 options.append('add_symbol')
@@ -1623,13 +1649,14 @@ class Model:
             if len(available_symbols) != len(self.option_tokens):
                 options.append('create_symbol')
 
-            if (a.total_holding > 0) and (pool_free_balance > 0):
+            if (a.total_holding > 1) and (pool_free_balance > 0):
                 options.append('sell')
 
-            if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
+            if a.usdt > 0 and a.total_written < 1 and a.total_holding < 1:
                 options.append('deposit_exchange')
 
-            if a.usdt > 0 and a.total_written == 0 and a.total_holding == 0:
+            #len(available_symbols) != len(self.option_tokens) is to limit deposits to pool
+            if a.usdt > 0 and a.total_written < 1 and a.total_holding < 1 and len(available_symbols) != len(self.option_tokens):
                 options.append('deposit_pool')
 
             if exchange_free_bal > 0:
@@ -1651,7 +1678,7 @@ class Model:
             '''
 
             # liquidate expired positons
-            if open_option_expired_tokens  or len(self.option_tokens_expired) > 0:
+            if open_option_expired_tokens or len(self.option_tokens_expired) > 0:
                 options.append('liquidate_self')
                 options.append('redeem_token')
 
@@ -1707,7 +1734,7 @@ class Model:
                 elif action == "add_symbol":
                     option_types = ['PUT', 'CALL']
                     # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING STRIKES
-                    current_price = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / (10.**BTCUSDAgg['decimals'])
+                    current_price = self.btcusd_data[self.current_round_id] / (10.**BTCUSDAgg['decimals'])
 
                     """
                     TODO:
@@ -1716,14 +1743,27 @@ class Model:
                     current_timestamp = w3.eth.get_block('latest')['timestamp']
                     maturity = int(current_timestamp + (self.daily_period * (self.days_per_year / self.months_per_year)))
                     days_until_expiry = (maturity - current_timestamp) / self.daily_period
+                    months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
                     num_samples = 2000
                     option_type = option_types[0 if random.random() > 0.5 else 1]
 
+                    is_otm_only = False
+
                     moneyness = max(0.0, random.random())
-                    if random.random() > 0.5:
-                        strike = round(current_price * (1 + moneyness))
+
+                    if not is_otm_only:
+                        if random.random() > 0.5:
+                            strike = round(current_price * (1 + moneyness))
+                        else:
+                            strike = round(current_price * (1 - moneyness))
+
                     else:
-                        strike = round(current_price * (1 - moneyness))
+                        if option_type == 'CALL':
+                            # if call, write OTM by random amout, to the upside
+                            strike = round(current_price * (1 + moneyness))
+                        else:
+                            # if put, write OTM by random amount, to the downside
+                            strike = round(current_price * (1 - moneyness))
 
                     with open('mcmc_symbol_params.json', 'w+') as f:
                         mcmc_data = {}
@@ -1740,7 +1780,7 @@ class Model:
                         normed_vol = vol / (10.**xSD['decimals']) / (10.)
 
                         mcmc_data["pending"] = {}
-                        mcmc_data["pending"]["curr_price"] = self.btcusd_data[self.btcusd_data_offset+self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data["pending"]["curr_price"] = self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals']
                         mcmc_data["pending"]["vol"] = normed_vol
                         mcmc_data["pending"]["data"] = [{
                             "strike": strike, 
@@ -1874,13 +1914,14 @@ class Model:
                         continue
                     
                     try:
+                        logger.info("Before Write; symbol: {}, strike_price: {}, volume: {}".format(sym, strike_price, amount))
                         w_hash = self.options_exchange.write(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
                         tx_hashes.append({'type': 'write', 'hash': w_hash})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "write", "strike_price": strike_price, "maturity": maturity, "option_type": option_type, "amount": amount})
                 elif action == "buy":
                     tks_list = list(self.option_tokens.values())
-                    option_token_to_buy = tks_list[0 if random.random() > 0.5 else len(tks_list) - 1]
+                    option_token_to_buy = tks_list[int(random.random() * (len(tks_list) - 1))]
                     symbol = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
                     option_token_balance_of_pool = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(self.linear_liquidity_pool.address)
                     print(symbol, option_token_balance_of_pool)
@@ -1894,7 +1935,7 @@ class Model:
                         continue
                     
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
-                    volume = int(random.random() * (current_price_volume[1] / 10.**10))
+                    volume = min(100, int(random.random() * (current_price_volume[1] / 10.**10)))
                     if volume == 0:
                         volume = 1
                     price = current_price_volume[0]#int(math.ceil(current_price_volume[0] / 10**18)) * 10**18
@@ -1927,7 +1968,7 @@ class Model:
                         continue
 
 
-                    print(symbol, current_price_volume, volume_to_sell, 'SELL')
+                    print(symbol, current_price_volume, volume_to_sell, a.total_holding, 'SELL')
                     
                     '''
                     volume = int(round(portion_dedusted(
@@ -1936,7 +1977,7 @@ class Model:
                     )))
                     '''
 
-                    volume = int(random.random() * (current_price_volume[1] / 10.**12))
+                    volume = min(100, int(random.random() * (current_price_volume[1] / 10.**10)))
                     if volume == 0:
                         volume = 1
                     price = current_price_volume[0] - (int(current_price_volume[0] * 0.001))
@@ -2062,17 +2103,24 @@ def main():
     btcusd_answers = []
     start_date = "2017-12-17"
     btcusd_data_offset = 0
+    btcusd_data_subtraction_set = 30
+    start_data_parsing = True
     for xidx, x in enumerate(btcusd_historical_ohlc):
 
-        if x['date'] == start_date:
-            start_data_parsing = True
-            btcusd_data_offset = xidx
-        else:
-            continue
 
-        if start_data_parsing:
-            if x["open"] != 'null':
-                btcusd_answers.append(int(float(x["open"]) * (10**BTCUSDAgg['decimals'])))
+        if start_data_parsing is False:
+            if x['date'] == start_date:
+                start_data_parsing = True
+                btcusd_data_offset = xidx
+
+
+        if x["open"] != 'null':
+            btcusd_answers.append(int(float(x["open"]) * (10**BTCUSDAgg['decimals'])))
+
+    if btcusd_data_offset <  btcusd_data_subtraction_set:
+        btcusd_data_subtraction_set = btcusd_data_offset
+
+    btcusd_answers = btcusd_answers[btcusd_data_offset-btcusd_data_subtraction_set:]
 
     print('btcusd_data_offset', btcusd_data_offset, start_date)
 
@@ -2091,14 +2139,14 @@ def main():
     tx_hashes_good = 0
     tx_fails = []
 
-    pool_spread = 5 * (10**7)
-    pool_reserve_ratio = 20 * (10**7)
+    pool_spread = 5 * (10**7) #5% 
+    pool_reserve_ratio = 0 * (10**7) # 20% default
     pool_maturity = (1000000000 * daily_period) + current_timestamp
 
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = False
+    skip = True
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2218,7 +2266,7 @@ def main():
     # Make a model of the options exchnage
     start_init = time.time()
     logger.info('INIT STARTED')
-    model = Model(options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, btcusd_data_offset, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
+    model = Model(options_exchange, credit_provider, linear_liquidity_pool, btcusd_chainlink_feed, btcusd_agg, btcusd_answers, None, usdt, w3.eth.accounts[:max_accounts], min_faith=0.5E6, max_faith=1E6, use_faith=False)
     end_init = time.time()
     logger.info('INIT FINISHED {} (s)'.format(end_init - start_init))
 

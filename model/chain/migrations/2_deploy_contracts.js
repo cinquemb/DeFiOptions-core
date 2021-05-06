@@ -32,6 +32,10 @@ module.exports = async function(deployer) {
   await deployer.deploy(OptionTokenFactory, Deployer4.address);
   const exchange = await deployer.deploy(OptionsExchange, Deployer4.address);
   console.log("exchange is at: "+ exchange.address);
+  /*
+    TODO:
+      NEED TO DEPLOY POOL FACTORY
+  */
   const pool = await deployer.deploy(LinearLiquidityPool, Deployer4.address);
 
   console.log("pool is at: "+ pool.address);
