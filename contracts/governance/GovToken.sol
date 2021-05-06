@@ -30,7 +30,7 @@ contract GovToken is ManagedContract, ERC20 {
     }
     
     function initialize(Deployer deployer) override internal {
-
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         serial = 1;
     }
@@ -54,7 +54,7 @@ contract GovToken is ManagedContract, ERC20 {
     function registerProposal(address addr) public returns (uint id) {
         
         require(
-            proposingDate[addr] == 0 || settings.exchangeTime() - proposingDate[addr] > 1 days,
+            proposingDate[addr] == 0 || settings.exchangeTime().sub(proposingDate[addr]) > 1 days,
             "minimum interval between proposals not met"
         );
 

@@ -5,17 +5,20 @@ import "../interfaces/AggregatorV3Interface.sol";
 import "../interfaces/TimeProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/MoreMath.sol";
+import "../utils/SafeCast.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 contract ChainlinkFeed is UnderlyingFeed {
 
+    using SafeCast for int;
+    using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
 
     struct Sample {
-        uint timestamp;
-        int price;
+        uint32 timestamp;
+        int128 price;
     }
 
     AggregatorV3Interface private aggregator;
@@ -50,34 +53,9 @@ contract ChainlinkFeed is UnderlyingFeed {
     function initialize(uint[] memory _timestamps, int[] memory _prices) public {
 
         require(samples.length == 0, "already initialized");
-
-        int exchangeDecimals = 18;
-        int diff = exchangeDecimals.sub(int(aggregator.decimals()));
-        require(-18 <= diff && diff <= 18, "invalid decimals");
-        if (diff > 0) {
-            priceN = int(10 ** uint(diff));
-            priceD = 1;
-        } else {
-            priceN = 1;
-            priceD = int(10 ** uint(-diff));
-        }
-
-        for (uint i = 0; i < _timestamps.length; i++) {
-
-            uint ts = _timestamps[i];
-            int pc = _prices[i];
-            Sample memory s = Sample(ts, rescalePrice(pc));
-
-            if (ts.mod(1 days) == 0) {
-                dailyPrices[ts] = s;
-            }
-            
-            samples.push(s);
-        }
-    }
-
-    function initializeDecimals() private {
-
+        
+        initializeDecimals();
+        initializeSamples(_timestamps, _prices);
     }
 
     function symbol() override external view returns (string memory) {
@@ -88,7 +66,7 @@ contract ChainlinkFeed is UnderlyingFeed {
     function getLatestPrice() override external view returns (uint timestamp, int price) {
 
         (, price,, timestamp,) = aggregator.latestRoundData();
-        price = rescalePrice(price);
+        price = int(rescalePrice(price));
     }
 
     function getPrice(uint position) 
@@ -193,7 +171,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         (, int price,, uint timestamp,) = aggregator.latestRoundData();
         price = rescalePrice(price);
         require(timestamp > samples[samples.length - 1].timestamp, "already up to date");
-        samples.push(Sample(timestamp, price));
+        samples.push(Sample(timestamp.toUint32(), price.toInt128()));
     }
 
     function prefetchDailyPrice(uint roundId) external {
@@ -209,7 +187,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         price = rescalePrice(price);
 
         uint key = timestamp.div(1 days).mul(1 days);
-        Sample memory s = Sample(timestamp, price);
+        Sample memory s = Sample(timestamp.toUint32(), price.toInt128());
 
         require(
             dailyPrices[key].timestamp == 0 || dailyPrices[key].timestamp > s.timestamp,
@@ -217,7 +195,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         );
         dailyPrices[key] = s;
 
-        if (samples.length == 0 || samples[samples.length - 1].timestamp < timestamp) {
+        if (samples.length == 0 || samples[samples.length - 1].timestamp < s.timestamp) {
             samples.push(s);
         }
     }
@@ -233,9 +211,41 @@ contract ChainlinkFeed is UnderlyingFeed {
         }
     }
 
-    function rescalePrice(int price) private view returns (int) {
+    function initializeDecimals() private {
 
-        return price.mul(priceN).div(priceD);
+        int exchangeDecimals = 18;
+        int diff = exchangeDecimals.sub(int(aggregator.decimals()));
+
+        require(-18 <= diff && diff <= 18, "invalid decimals");
+
+        if (diff > 0) {
+            priceN = int(10 ** uint(diff));
+            priceD = 1;
+        } else {
+            priceN = 1;
+            priceD = int(10 ** uint(-diff));
+        }
+    }
+
+    function initializeSamples(uint[] memory _timestamps, int[] memory _prices) private {
+
+        for (uint i = 0; i < _timestamps.length; i++) {
+
+            uint ts = _timestamps[i];
+            int pc = _prices[i];
+            Sample memory s = Sample(ts.toUint32(), rescalePrice(pc));
+
+            if (ts.mod(1 days) == 0) {
+                dailyPrices[ts] = s;
+            }
+            
+            samples.push(s);
+        }
+    }
+
+    function rescalePrice(int price) private view returns (int128) {
+
+        return price.mul(priceN).div(priceD).toInt128();
     }
 
     function encodeValue(uint v) private pure returns (uint) {

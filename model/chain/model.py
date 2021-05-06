@@ -1906,6 +1906,8 @@ class Model:
                     if amount == 0:
                         amount = 1
 
+                    logger.info("Looking to write Write; symbol: {}, strike_price: {}, volume: {}".format(sym, strike_price, amount))
+
                     try:
                         cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
                     except:
