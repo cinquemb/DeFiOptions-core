@@ -42,7 +42,7 @@ def main():
     if x_column_number == -1:
         raise RuntimeError("No column: " + x_heading)
         
-    fig, axes = plt.subplots(len(columns) - 2, 1, sharex=True)
+    fig, axes = plt.subplots(len(columns), 1, sharex=True)
     fig.suptitle('%s Simulation Results' % (project_name))
 
     axis_cursor = 0
@@ -62,6 +62,21 @@ def main():
             ax.plot(columns[x_column_number], columns[column_number], '-')
             ax.set_xlabel(headings[x_column_number])
             ax.set_ylabel(headings[column_number])
+
+            #print(headings[column_number])
+
+            if 'total stablecoin balance' in headings[column_number]:
+                # plot diff 'total credit balance' 'total stablecoin balanace'
+                axis_cursor += 1
+
+
+                # Plot this column against the designated x
+                ax = axes[axis_cursor]
+                ncoldata = [(cB - sB) / 10.**6 for (cB,sB) in zip(columns[column_number - 1], columns[column_number])]
+
+                ax.plot(columns[x_column_number], ncoldata, '-')
+                ax.set_xlabel(headings[x_column_number])
+                ax.set_ylabel('diff_creditB_stableB')
             
             if headings[column_number] == "price":
                 # Special axes here so we can see 1.0
@@ -71,7 +86,8 @@ def main():
             
             # Make the next plot on the next axes
             axis_cursor += 1
-        except:
+        except Exception as inst:
+            print inst
             pass
             
     # Show all the plots
