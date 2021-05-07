@@ -1230,7 +1230,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1631227208
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1727,7 +1727,7 @@ class Model:
                 if action == "deposit_exchange":
                     amount = portion_dedusted(
                         a.usdt,
-                        commitment
+                        commitment * 0.01
                     )
                     try:
                         dpe_hash = self.options_exchange.deposit_exchange(a, amount)
@@ -1848,7 +1848,7 @@ class Model:
                 elif action == "deposit_pool":
                     amount = portion_dedusted(
                         a.usdt,
-                        commitment
+                        commitment * 0.01
                     )
                     try:
                         dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
@@ -2163,7 +2163,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
