@@ -1,7 +1,8 @@
 - regular pool, two AnyTM options (1) [Done - no credit tokens]
 - lower pool reserve to 1%, ~10 AnyTM options (2) [Done - no credit tokens]
 - ~20 AnyTM options + lower pool reserve (0% pool reserve) (3) [Done - no credit tokens]
-- ~20 AnyTM options + lower pool reserve + No buys (0% pool reserve) (4) [In progress]
+- ~20 AnyTM options + lower pool reserve + No buys (0% pool reserve) (4) [Done - no credit tokens]
+- ~20 AnyTM options + lower pool reserve (0% pool reserve) + lower deposits by 2 orders of mag (5) [Done - no credit tokens]
 
 - 2018 + 2020 tops w/ 3 months EXP, two OTM (5)
 - 2018 + 2020 tops w/ 3 months EXP, + 20 ATM/ITM options (6)

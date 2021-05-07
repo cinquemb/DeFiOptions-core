@@ -27,6 +27,7 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private callers;
 
     address private ctAddr;
+    uint private _totalDebt;
     uint private _totalBalance;
     uint private _totalAccruedFees;
 
@@ -68,6 +69,11 @@ contract CreditProvider is ManagedContract {
     function totalAccruedFees() external view returns (uint) {
 
         return _totalAccruedFees;
+    }
+
+    function totalDebt() external view returns (uint) {
+
+        return _totalDebt;
     }
 
     function ensureCaller(address addr) public view {
@@ -261,6 +267,14 @@ contract CreditProvider is ManagedContract {
     }
 
     function setDebt(address owner, uint value)  private {
+
+        if (debts[owner] >= value) {
+            // less debt being set
+            _totalDebt = _totalDebt.sub(debts[owner].sub(value));
+        } else {
+            // more debt being set
+            _totalDebt = _totalDebt.add(value.sub(debts[owner]));
+        }
         
         debts[owner] = value;
         debtsDate[owner] = settings.exchangeTime();

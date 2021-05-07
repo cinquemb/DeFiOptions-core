@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x41802923d17Ff634b61De8A9971eDAa884Abb97D',
+  "addr": '0x14C37290c47B23fCCaE48DD16aC9155C2679a006',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -712,10 +712,10 @@ class Agent:
         
         strategy = collections.defaultdict(lambda: 1.0)
 
-        #strategy["buy"] = 2.0
-        strategy["sell"] = 5
-        strategy["write"] = 5
-        strategy["deposit_exchange"] = 10
+        strategy["buy"] = 1.0
+        strategy["sell"] = 1.0
+        strategy["write"] = 1.0
+        strategy["deposit_exchange"] = 10.0
         
        
         if self.use_faith:
@@ -1014,6 +1014,8 @@ class CreditProvider:
         '''
         return self.contract.caller({'from' : agent.address, 'gas': 100000}).totalTokenStock()
 
+    def get_total_debt(self, agent):
+        return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).totalDebt(), USDT['decimals'])
 
     def get_short_collateral_exposure(self, agent):
         return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcRawCollateralShortage(agent.address), USDT['decimals'])
@@ -1071,7 +1073,7 @@ class LinearLiquidityPool(TokenProxy):
             self.contract.functions.buy(
                 symbol,
                 price,
-                volume * 10** USDT['decimals'],
+                volume.to_wei(),
                 self.usdt_token.contract.address
             ),
             8000000
@@ -1330,7 +1332,7 @@ class Model:
         """
         
         if header:
-            stream.write("#block\twritten\tholding\texposure\ttotal credit balance\ttotal stablecoin balance\n")#\tfaith\n")
+            stream.write("#block\twritten\tholding\texposure\ttotal CB\ttotal SB\ttotal debt\n")#\tfaith\n")
         
         print(
             w3.eth.get_block('latest')["number"],
@@ -1338,16 +1340,18 @@ class Model:
             self.options_exchange.get_total_holding(seleted_advancer),
             self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
             self.credit_provider.get_total_balance(seleted_advancer),
-            self.credit_provider.get_token_stock(seleted_advancer)
+            self.credit_provider.get_token_stock(seleted_advancer),
+            self.credit_provider.get_total_debt(seleted_advancer)
         )
         
-        stream.write('{}\t{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
+        stream.write('{}\t{}\t{}\t{:.2f}\t{:.2f}\t{:.2f}\t{:.2f}\n'.format(
                 w3.eth.get_block('latest')["number"],
                 self.options_exchange.get_total_written(seleted_advancer),
                 self.options_exchange.get_total_holding(seleted_advancer),
                 self.options_exchange.get_total_short_collateral_exposure(seleted_advancer),
                 self.credit_provider.get_total_balance(seleted_advancer),
-                self.credit_provider.get_token_stock(seleted_advancer)
+                self.credit_provider.get_token_stock(seleted_advancer),
+                self.credit_provider.get_total_debt(seleted_advancer)
             )
         )
        
@@ -1639,27 +1643,24 @@ class Model:
             if exchange_bal > 0 and len(available_symbols) > 0:
                 options.append('write')
 
-
-            '''
-            if (exchange_bal > 0) and len(self.option_tokens) > 0 and (len(available_symbols) == len(self.option_tokens)):
-                options.append('buy')
-
-            '''
-
             if (exchange_bal > 0 or pool_free_balance > 0) and ((len(any_calls) < max_symbols_per_type or len(any_puts) < max_symbols_per_type) or len(available_symbols) ==0):
                 options.append('add_symbol')
 
             if len(available_symbols) != len(self.option_tokens):
                 options.append('create_symbol')
 
+
+            if (exchange_bal > 0) and len(self.option_tokens) > 0 and (a.total_written <= a.total_holding):
+                options.append('buy')
+
             if (a.total_holding > 1 or a.total_written > 1) and (pool_free_balance > 0):
                 options.append('sell')
 
-            if a.usdt > 0 and a.total_written < 1:
+            if (a.usdt > 0 and a.total_written < 1 and len(available_symbols) != len(self.option_tokens)) or len(available_symbols) ==0:
                 options.append('deposit_exchange')
 
             #len(available_symbols) != len(self.option_tokens) is to limit deposits to pool
-            if a.usdt > 0 and a.total_written < 1 and a.total_holding < 1 and len(available_symbols) != len(self.option_tokens):
+            if (a.usdt > 0 and a.total_written < 1 and a.total_holding < 1 and len(available_symbols) != len(self.option_tokens)) or len(available_symbols) ==0:
                 options.append('deposit_pool')
 
             if exchange_free_bal > 0:
@@ -1727,7 +1728,7 @@ class Model:
                 if action == "deposit_exchange":
                     amount = portion_dedusted(
                         a.usdt,
-                        commitment * 0.01
+                        commitment * 0.1
                     )
                     try:
                         dpe_hash = self.options_exchange.deposit_exchange(a, amount)
@@ -1848,7 +1849,7 @@ class Model:
                 elif action == "deposit_pool":
                     amount = portion_dedusted(
                         a.usdt,
-                        commitment * 0.01
+                        commitment * 0.1
                     )
                     try:
                         dpp_hash = self.linear_liquidity_pool.deposit_pool(a, amount)
@@ -1916,7 +1917,9 @@ class Model:
                     except:
                         continue
                     if(cc > exchange_bal):
-                        continue
+                        amount /= cc.to_wei() / exchange_bal.to_wei()
+                        logger.info("Norm to Write; amount: {}".format(amount))
+
                     
                     try:
                         logger.info("Before Write; symbol: {}, strike_price: {}, amount: {}".format(sym, strike_price, amount))
@@ -1943,9 +1946,11 @@ class Model:
                         continue
                     
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
-                    volume = min(100, int(random.random() * (current_price_volume[1] / 10.**10)))
+                    volume = Balance.from_tokens(min(100, int(random.random() * (current_price_volume[1] / 10.**10))), USDT['decimals'])
+
+
                     if volume == 0:
-                        volume = 1
+                        volume = Balance.from_tokens(1, USDT['decimals'])
                     price = current_price_volume[0]
                     try:
                         logger.info("Before Buy; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
