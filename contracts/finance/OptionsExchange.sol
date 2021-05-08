@@ -206,6 +206,8 @@ contract OptionsExchange is ManagedContract {
         pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender, settings, address(creditProvider));
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
+
+        /*TODO: append pool symbol to list, also need a way to remove it */
         emit CreatePool(pool, msg.sender);
     }
 
@@ -283,11 +285,6 @@ contract OptionsExchange is ManagedContract {
         value = liquidateOptions(owner, opt, tk, isExpired, iv);
     }
 
-    function calcDebt(address owner) external view returns (uint debt) {
-
-        debt = creditProvider.calcDebt(owner);
-    }
-    
     function calcSurplus(address owner) public view returns (uint) {
         
         uint coll = calcCollateral(owner, true);
@@ -297,6 +294,11 @@ contract OptionsExchange is ManagedContract {
         }
         return 0;
     }
+
+    /* 
+    NOTE: 
+        really not sure about cachicing collateral calcs, dont want stale values to be used for critical things 
+    */
 
     function setCollateral(address owner) external {
 

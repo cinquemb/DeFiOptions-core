@@ -1,20 +1,23 @@
 pragma solidity >=0.6.0;
 
 import "../../../contracts/finance/OptionsExchange.sol";
+import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/interfaces/TimeProvider.sol";
 
 contract OptionsTrader {
     
     OptionsExchange private exchange;
+    CreditProvider private creditProvider;
     TimeProvider private time;
     
     address private addr;
     address private feed;
     uint private volumeBase = 1e18;
     
-    constructor(address _exchange, address _time, address _feed) public {
+    constructor(address _exchange, address _credit_provider, address _time, address _feed) public {
 
         exchange = OptionsExchange(_exchange);
+        creditProvider = CreditProvider(_credit_provider);
         time = TimeProvider(_time);
         addr = address(this);
         feed = _feed;
@@ -87,6 +90,6 @@ contract OptionsTrader {
     
     function calcDebt() public view returns (uint) {
         
-        return exchange.calcDebt(addr);
+        return creditProvider.calcDebt(addr);
     }
 }

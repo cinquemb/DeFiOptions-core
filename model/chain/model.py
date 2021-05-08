@@ -79,9 +79,9 @@ USDT = {
   "symbol": 'USDT',
 }
 
-LLP = {
+LLPF = {
     "addr": '',
-    "deploy_slug": "LinearLiquidityPoolAddress is at: "
+    "deploy_slug": "LinearLiquidityPoolFactoryAddress is at: "
 }
 
 BTCUSDAgg = {
@@ -98,7 +98,7 @@ BTCUSDc = {
     "deploy_slug": "BTCUSDMockFeed is at: "
 }
 
-for contract in [BTCUSDc, BTCUSDAgg, LLP, STG, CREDPRO, EXCHG, TPRO]:
+for contract in [BTCUSDc, BTCUSDAgg, LLPF, STG, CREDPRO, EXCHG, TPRO]:
     logger.info(contract["deploy_slug"])
     contract["addr"] = deploy_data.split(contract["deploy_slug"])[1].split('\n')[0]
     logger.info('\t'+contract["addr"])
@@ -119,6 +119,7 @@ USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read(
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPool.json', 'r+').read())
+LinearLiquidityPoolFactoryContract = json.loads(open('./build/contracts/LinearLiquidityPoolFactory.json', 'r+').read())
 ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
 TimeProviderMockContract = json.loads(open('./build/contracts/TimeProviderMock.json', 'r+').read())
 
@@ -2105,7 +2106,7 @@ def main():
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
-    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=LLP["addr"])
+    linear_liquidity_pool_factory = w3.eth.contract(abi=LinearLiquidityPoolFactoryContract['abi'], address=LLPF["addr"])
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
     btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])

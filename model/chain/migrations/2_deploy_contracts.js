@@ -9,7 +9,7 @@ const CreditProvider = artifacts.require("CreditProvider");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
-const LinearLiquidityPool = artifacts.require("LinearLiquidityPool");
+const LinearLiquidityPoolFactory = artifacts.require("LinearLiquidityPoolFactory");
 
 const MockChainLinkFeed = artifacts.require("ChainlinkFeed");
 const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
@@ -32,13 +32,9 @@ module.exports = async function(deployer) {
   await deployer.deploy(OptionTokenFactory, Deployer4.address);
   const exchange = await deployer.deploy(OptionsExchange, Deployer4.address);
   console.log("exchange is at: "+ exchange.address);
-  /*
-    TODO:
-      NEED TO DEPLOY POOL FACTORY
-  */
-  const pool = await deployer.deploy(LinearLiquidityPool, Deployer4.address);
+  const poolFactory = await deployer.deploy(LinearLiquidityPoolFactory, Deployer4.address);
 
-  console.log("pool is at: "+ pool.address);
+  console.log("poolFactory is at: "+ poolFactory.address);
 
 
   const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
@@ -80,6 +76,6 @@ module.exports = async function(deployer) {
   console.log("CreditProviderAddress is at: "+ CreditProviderAddress);
   const OptionsExchangeAddress = await deployer4.getContractAddress("OptionsExchange");
   console.log("OptionsExchangeAddress is at: "+ OptionsExchangeAddress);
-  const LinearLiquidityPoolAddress = await deployer4.getContractAddress("LinearLiquidityPool");
-  console.log("LinearLiquidityPoolAddress is at: "+ LinearLiquidityPoolAddress);
+  const LinearLiquidityPoolFactoryAddress = await deployer4.getContractAddress("LinearLiquidityPoolFactory");
+  console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
 };
