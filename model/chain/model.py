@@ -1232,7 +1232,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1623824686
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1610,7 +1610,7 @@ class Model:
 
         self.has_tried_liquidating = False
 
-        max_symbols_per_type = 10
+        max_symbols_per_type = 1
 
         for agent_num, a in enumerate(self.agents):            
             # TODO: real strategy
@@ -1748,13 +1748,14 @@ class Model:
                         choose random maturity length less than the maturity of the pool? 1 month for now
                     """
                     current_timestamp = w3.eth.get_block('latest')['timestamp']
-                    maturity = int(current_timestamp + (self.daily_period * (self.days_per_year / self.months_per_year)))
+                    num_months = 6.0 # 1.0
+                    maturity = int(current_timestamp + (self.daily_period * (self.days_per_year / self.months_per_year * num_months)))
                     days_until_expiry = (maturity - current_timestamp) / self.daily_period
                     months_to_exp = days_until_expiry / (self.days_per_year / 12.0)
                     num_samples = 2000
                     option_type = option_types[0 if random.random() > 0.5 else 1]
 
-                    is_otm_only = False
+                    is_otm_only = True
 
                     moneyness = max(0.0, random.random())
 
@@ -2145,10 +2146,10 @@ def main():
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
     btcusd_answers = []
-    start_date = "2017-12-17"
+    start_date = "2017-06-17"#"2017-12-17"
     btcusd_data_offset = 0
-    btcusd_data_subtraction_set = 30
-    start_data_parsing = True
+    btcusd_data_subtraction_set = 0
+    start_data_parsing = False
     for xidx, x in enumerate(btcusd_historical_ohlc):
 
 
@@ -2190,7 +2191,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
