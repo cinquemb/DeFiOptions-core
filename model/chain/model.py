@@ -74,7 +74,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x14C37290c47B23fCCaE48DD16aC9155C2679a006',
+  "addr": '0x3843D24b0ae7753aD72fbb9d06b729c6B33bc65F',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -1232,7 +1232,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1623824686
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1532,7 +1532,7 @@ class Model:
 
                 cmd = './op_model "%s" "%s" "%s"' % (
                     num_samples,
-                    0.2,
+                    0.05,
                     months_to_exp,
                 )
                 model_ret = str(execute_cmd(cmd))
@@ -1650,8 +1650,11 @@ class Model:
                 options.append('create_symbol')
 
 
+            '''
             if (exchange_bal > 0) and len(self.option_tokens) > 0 and (a.total_written <= a.total_holding):
                 options.append('buy')
+
+            '''
 
             if (a.total_holding > 1 or a.total_written > 1) and (pool_free_balance > 0):
                 options.append('sell')
@@ -1682,7 +1685,7 @@ class Model:
             '''
 
             # liquidate expired positons
-            if len(any_short_collateral) > 0 or open_option_expired_tokens or len(self.option_tokens_expired) > 0:
+            if (len(any_short_collateral) > 0) or open_option_expired_tokens or (len(self.option_tokens_expired) > 0):
                 options.append('liquidate_self')
                 options.append('redeem_token')
 
@@ -1803,7 +1806,7 @@ class Model:
                     '''
                     cmd = './op_model "%s" "%s" "%s"' % (
                         num_samples,
-                        0.2,
+                        0.05,
                         months_to_exp,
                     )
                     model_ret = str(execute_cmd(cmd))
@@ -1946,12 +1949,30 @@ class Model:
                         continue
                     
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
-                    volume = Balance.from_tokens(min(100, int(random.random() * (current_price_volume[1] / 10.**10))), USDT['decimals'])
+                    volume = Balance(current_price_volume[1], USDT['decimals'])
 
-
-                    if volume == 0:
-                        volume = Balance.from_tokens(1, USDT['decimals'])
                     price = current_price_volume[0]
+
+                    if (volume * (price / 10.**18) * 100) > exchange_bal:
+                        '''
+                        sym_parts = symbol.split('-')
+                        strike_price = int(float(sym_parts[2]))
+                        maturity = int(sym_parts[3])
+                        option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
+                        try:
+                            cc = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, volume, strike_price, maturity)
+                        except:
+                            continue
+                        '''          
+                        mod_price = Balance(price, 18)
+                        print("mod_price", mod_price, mod_price.to_decimals(USDT['decimals']), mod_price.to_decimals(USDT['decimals']).to_wei(), exchange_bal.to_wei(), volume)
+                        volume = Balance.from_tokens(int((exchange_bal.to_wei() / mod_price.to_decimals(USDT['decimals']).to_wei()) / 10), USDT['decimals'])
+
+
+                    if volume < 1:
+                        volume = Balance.from_tokens(1, USDT['decimals'])
+
+                    
                     try:
                         logger.info("Before Buy; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         buy_hash = self.linear_liquidity_pool.buy(a, symbol, price, volume)
@@ -2020,11 +2041,12 @@ class Model:
                             logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "option_token": otv.address})
 
                     for otk, otv in self.option_tokens.items():
-                        try:
-                            lqd8_hash = self.options_exchange.liquidate(a, otk, a.address)
-                            tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
-                        except Exception as inst:
-                            logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "short_owner": a.address, "option_token": otk})
+                        if otv[a] > 0:
+                            try:
+                                lqd8_hash = self.options_exchange.liquidate(a, otk, a.address)
+                                tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
+                            except Exception as inst:
+                                logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "short_owner": a.address, "option_token": otk})
 
                     self.has_tried_liquidating = True
                 else:
@@ -2059,7 +2081,7 @@ class Model:
             )
         )
 
-        return anyone_acted, random_advancer
+        return anyone_acted, random_advancer, tx_good
 
 def main():
     """
@@ -2168,7 +2190,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = False
+    skip = True
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2300,7 +2322,7 @@ def main():
         # Try and tick the model
         start_iter = time.time()
 
-        (anyone_acted, seleted_advancer) = model.step()
+        (anyone_acted, seleted_advancer, tx_passed) = model.step()
         if not anyone_acted:
             # Nobody could act
             logger.info("Nobody could act")
@@ -2310,8 +2332,15 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        if ((i % 2) == 0) and (i != 0):
-            provider.make_request("debug_increaseTime", [3600 * 12])
+        if len(tx_passed) == 2:
+            if ('write' in tx_passed and 'withdraw' in tx_passed):
+                provider.make_request("debug_increaseTime", [3600 * 24])
+            else:
+                if ((i % 2) == 0) and (i != 0):
+                    provider.make_request("debug_increaseTime", [3600 * 12])
+        else:
+            if ((i % 2) == 0) and (i != 0):
+                provider.make_request("debug_increaseTime", [3600 * 12])
         #sys.exit()
         
 if __name__ == "__main__":

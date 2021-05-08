@@ -13,6 +13,7 @@ trap cleanup EXIT
 
 echo "Deploying contracts..."
 time truffle migrate --reset -f 2 --to 2 --skip-dry-run --network=development | tee deploy_output.txt
+#curl -X POST --data @q.txt -H "Content-Type: application/json" http://127.0.0.1:9545/ext/bc/evm/rpc | python -m json.tool
 
 
 #'
