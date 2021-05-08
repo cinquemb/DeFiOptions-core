@@ -15,11 +15,16 @@ contract ManagedContract {
     function initializeAndLock(Deployer deployer) public {
 
         require(!locked, "locked");
-        initialize(deployer);
         locked = true;
+        initialize(deployer);
     }
 
     function initialize(Deployer deployer) virtual internal {
 
+    }
+
+    function getImplementation() internal view returns (address) {
+
+        return implementation;
     }
 }

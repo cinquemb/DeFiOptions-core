@@ -38,6 +38,8 @@ contract CreditToken is ManagedContract, ERC20 {
     }
 
     function initialize(Deployer deployer) override internal {
+
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
@@ -50,12 +52,6 @@ contract CreditToken is ManagedContract, ERC20 {
 
     function symbol() override external view returns (string memory) {
         return _symbol;
-    }
-
-    function setIssuer(address _issuer) public {
-
-        require(issuer == address(0), "issuer already set");
-        issuer = _issuer;
     }
 
     function issue(address to, uint value) public {

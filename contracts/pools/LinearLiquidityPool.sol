@@ -62,23 +62,18 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     uint private volumeBase;
     uint private fractionBase;
 
-    /*
-    constructor(address deployer) ERC20(_name) public {
-
-        Deployer(deployer).setContractAddress("LinearLiquidityPool");
-    }*/
-
     constructor(string memory _name, string memory _sb, address _ownerAddr, address _settings, address _credPrv, address _exchg)
         ERC20(string(abi.encodePacked(_name_prefix, _name)))
         public
     {    
         _symbol = _sb;
         owner = _ownerAddr;
+        fractionBase = 1e9;
         exchange = OptionsExchange(_exchg);
         settings = ProtocolSettings(_settings);
         creditProvider = CreditProvider(_credPrv);
         volumeBase = exchange.volumeBase();
-        fractionBase = 1e9;
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
     }
 
     function name() override external view returns (string memory) {
@@ -103,7 +98,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         _maturity = _mt;
     }
 
-    function redeemAllowed() override public returns (bool) {
+    function redeemAllowed() override public view returns (bool) {
         
         return settings.exchangeTime() >= _maturity;
     }
@@ -418,7 +413,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             value = value.mul(tv).div(tb);
             depositTokensInExchange(token, value);
         } else {
-            exchange.transferBalance(msg.sender, address(this), value, maxValue, deadline, v, r, s);
+            exchange.transferBalance(msg.sender, address(this), value);
         }
 
         return price;

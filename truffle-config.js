@@ -31,7 +31,20 @@ module.exports = {
       network_id: "*",
       gas: 8000000,
       gasPrice: 225000000000
-   }
+    }
+    
+    /*
+    matic: {
+      provider: function() {
+        return new HDWalletProvider(
+          process.env.MNENOMIC,
+          "wss://rpc-mumbai.maticvigil.com/ws/v1/" + process.env.MATIC_RPC_KEY
+        )
+      },
+      network_id: 80001,
+      confirmations: 2,
+      timeoutBlocks: 200
+    }*/
   },
 
   compilers: {

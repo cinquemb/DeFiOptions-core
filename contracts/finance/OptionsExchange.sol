@@ -58,6 +58,7 @@ contract OptionsExchange is ManagedContract {
     bytes32 public DOMAIN_SEPARATOR;
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
+    string private constant _name = "OptionsExchange";
 
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
@@ -86,7 +87,6 @@ contract OptionsExchange is ManagedContract {
 
     constructor(address deployer) public {
 
-        string memory _name = "OptionsExchange";
         Deployer(deployer).setContractAddress(_name);
 
         uint chainId;
@@ -106,6 +106,7 @@ contract OptionsExchange is ManagedContract {
 
     function initialize(Deployer deployer) override internal {
 
+        DOMAIN_SEPARATOR = OptionsExchange(getImplementation()).DOMAIN_SEPARATOR();
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
@@ -114,6 +115,11 @@ contract OptionsExchange is ManagedContract {
         volumeBase = 1e18;
         timeBase = 1e18;
         sqrtTimeBase = 1e9;
+    }
+    
+    function name() external pure returns (string memory) {
+
+        return _name;
     }
 
     function depositTokens(
@@ -141,6 +147,18 @@ contract OptionsExchange is ManagedContract {
     function balanceOf(address owner) external view returns (uint) {
 
         return creditProvider.balanceOf(owner);
+    }
+
+    function transferBalance(
+        address from, 
+        address to, 
+        uint value
+    )
+        external
+    {
+        creditProvider.ensureCaller(msg.sender);
+        creditProvider.transferBalance(from, to, value);
+        ensureFunds(from);
     }
 
     function transferBalance(
@@ -381,6 +399,13 @@ contract OptionsExchange is ManagedContract {
     {
         (OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
         return calcIntrinsicValue(opt);
+    }
+
+    function getUnderlyingPrice(string calldata symbol) external view returns (int) {
+        
+        address _ts = tokenAddress[symbol];
+        require(_ts != address(0), "token not found");
+        return getUdlPrice(options[_ts]);
     }
 
     function resolveToken(string memory symbol) public view returns (address) {

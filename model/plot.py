@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-project_name = "cinquemb:xsd-protocol"
+project_name = "DefiOptions:DefiOptions-core"
 """
 plot.py: plot log of % system behavior
 """ % (project_name)
@@ -16,7 +16,6 @@ def main():
     # This will hold each column, as a list
     columns = []
 
-    #log = open("./chain/log.150adv.10prem.40agents_3.tsv")
     log = open("./chain/log.tsv")
     for line in log:
         line = line.strip()
@@ -42,34 +41,66 @@ def main():
     if x_column_number == -1:
         raise RuntimeError("No column: " + x_heading)
         
-    fig, axes = plt.subplots(len(columns) - 2, 1, sharex=True)
+    fig, axes = plt.subplots(len(columns)+1, 1, sharex=True)
     fig.suptitle('%s Simulation Results' % (project_name))
 
     axis_cursor = 0
         
     for column_number in range(len(columns)):
 
-        if headings[column_number] == 'epoch':
-            continue
-        
-        if column_number == x_column_number:
-            # Don't plot against self
-            continue
+        try:
+            if headings[column_number] == 'epoch':
+                continue
             
-        # Plot this column against the designated x
-        ax = axes[axis_cursor]
-        ax.plot(columns[x_column_number], columns[column_number], '-')
-        ax.set_xlabel(headings[x_column_number])
-        ax.set_ylabel(headings[column_number])
-        
-        if headings[column_number] == "price":
-            # Special axes here so we can see 1.0
-            ax.set_ylim(0, 1.3)
-            ax.set_yticks([0, 0.35, 0.7, 1.05, 1.3])
-            ax.hlines(1.0, min(columns[x_column_number]), max(columns[x_column_number]))
-        
-        # Make the next plot on the next axes
-        axis_cursor += 1
+            if column_number == x_column_number:
+                # Don't plot against self
+                continue
+                
+            # Plot this column against the designated x
+            ax = axes[axis_cursor]
+            ax.plot(columns[x_column_number], columns[column_number], '-')
+            ax.set_xlabel(headings[x_column_number])
+            ax.set_ylabel(headings[column_number])
+
+            #print(headings[column_number])
+
+            if 'total SB' in headings[column_number]:
+                # plot diff 'total credit balance' 'total stablecoin balanace'
+                axis_cursor += 1
+
+
+                # Plot this column against the designated x
+                ax = axes[axis_cursor]
+                ncoldata = [(cB - sB) / 10.**6 for (cB,sB) in zip(columns[column_number - 1], columns[column_number])]
+                ax.plot(columns[x_column_number], ncoldata, '-')
+                ax.set_xlabel(headings[x_column_number])
+                ax.set_ylabel('dCB_SB')
+
+
+            if 'holding' in headings[column_number]:
+                # plot diff ('holding' - 'written') - (holding prev - written prev)
+                axis_cursor += 1
+
+
+                # Plot this column against the designated x
+                ax = axes[axis_cursor]
+                ncoldata = [(h - w) / 10.**6 for (h,w) in zip(columns[column_number], columns[column_number- 1])]
+                ncoldata1 = []
+                for nidx, x in enumerate(ncoldata):
+                    if nidx > 0:
+                        ncoldata1.append(x - ncoldata1[nidx-1])
+                    else:
+                        ncoldata1.append(0)
+
+                ax.plot(columns[x_column_number], ncoldata1, '-')
+                ax.set_xlabel(headings[x_column_number])
+                ax.set_ylabel('# liquidated')
+            
+            # Make the next plot on the next axes
+            axis_cursor += 1
+        except Exception as inst:
+            print inst
+            pass
             
     # Show all the plots
     plt.show()
