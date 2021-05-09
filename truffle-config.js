@@ -1,12 +1,12 @@
-//const HDWalletProvider = require("@truffle/hdwallet-provider");
+const HDWalletProvider = require("@truffle/hdwallet-provider");
 const Web3 = require('web3');
 
-//require('dotenv').config();
+require('dotenv').config();
 
 module.exports = {
 
   networks: {
-    /*kovan: {
+    kovan: {
       provider: function() {
         return new HDWalletProvider(
           process.env.MNENOMIC,
@@ -16,7 +16,7 @@ module.exports = {
       network_id: 42,
       networkCheckTimeout: 1000000,
       timeoutBlocks: 200
-    },*/
+    },
 
     //for eth
     /*development: {
@@ -31,9 +31,9 @@ module.exports = {
       network_id: "*",
       gas: 8000000,
       gasPrice: 225000000000
-    }
+    },
     
-    /*
+    
     matic: {
       provider: function() {
         return new HDWalletProvider(
@@ -44,7 +44,7 @@ module.exports = {
       network_id: 80001,
       confirmations: 2,
       timeoutBlocks: 200
-    }*/
+    }
   },
 
   compilers: {

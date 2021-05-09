@@ -17,26 +17,26 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 
 module.exports = async function(deployer) {
 
-  await deployer.deploy(Deployer4, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000");
+  await deployer.deploy(Deployer4, "0x0000000000000000000000000000000000000000");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
-  const timeProvider = await deployer.deploy(TimeProviderMock, Deployer4.address);
+  const timeProvider = await deployer.deploy(TimeProviderMock);
   console.log("timeProvider is at: "+ timeProvider.address);
-  const settings = await deployer.deploy(ProtocolSettings, Deployer4.address);
+  const settings = await deployer.deploy(ProtocolSettings);
   console.log("settings is at: "+ settings.address);
-  await deployer.deploy(CreditToken, Deployer4.address);
-  await deployer.deploy(GovToken, Deployer4.address);
-  const creditProvider = await deployer.deploy(CreditProvider, Deployer4.address);
+  const ct = await deployer.deploy(CreditToken);
+  const gt = await deployer.deploy(GovToken);
+  const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
-  await deployer.deploy(OptionTokenFactory, Deployer4.address);
-  const exchange = await deployer.deploy(OptionsExchange, Deployer4.address);
+  const otf = await deployer.deploy(OptionTokenFactory);
+  const exchange = await deployer.deploy(OptionsExchange);
   console.log("exchange is at: "+ exchange.address);
   /*
     TODO:
       NEED TO DEPLOY POOL FACTORY
   */
-  const pool = await deployer.deploy(LinearLiquidityPool, Deployer4.address);
+  const pool = await deployer.deploy(LinearLiquidityPool);
 
   console.log("pool is at: "+ pool.address);
 
@@ -70,8 +70,19 @@ module.exports = async function(deployer) {
     []
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
+  
+  deployer4.setContractAddress("TimeProvider", timeProvider.address);
+  //d.setContractAddress("UnderlyingFeed", EthFeedMock.address);
+  deployer4.setContractAddress("CreditProvider", creditProvider.address);
+  deployer4.addAlias("CreditIssuer", "CreditProvider");
+  deployer4.setContractAddress("CreditToken", ct.address);
+  deployer4.setContractAddress("OptionsExchange", exchange.address);
+  deployer4.setContractAddress("OptionTokenFactory", otf.address);
+  deployer4.setContractAddress("GovToken", gt.address);
+  deployer4.setContractAddress("ProtocolSettings", settings.address);
+  deployer4.setContractAddress("LinearLiquidityPool", pool.address);
 
-  await deployer4.deploy();
+
   const timeProviderAddress = await deployer4.getContractAddress("TimeProvider");
   console.log("timeProviderAddress is at: "+ timeProviderAddress);
   const ProtocolSettingsAddress = await deployer4.getContractAddress("ProtocolSettings");

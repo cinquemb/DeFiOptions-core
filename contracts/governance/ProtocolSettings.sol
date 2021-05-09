@@ -5,7 +5,6 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../finance/CreditProvider.sol";
 import "../interfaces/TimeProvider.sol";
-import "../interfaces/UnderlyingFeed.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
@@ -38,11 +37,6 @@ contract ProtocolSettings is ManagedContract {
     uint private volatilityPeriod;
 
     uint private MAX_UINT;
-
-    constructor(address deployer) public {
-
-        Deployer(deployer).setContractAddress("ProtocolSettings");
-    }
     
     function initialize(Deployer deployer) override internal {
 
@@ -99,7 +93,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setTokenRate(address token, uint v, uint b) external {
 
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         tokenRates[token] = Rate(v, b, MAX_UINT);
     }
 
@@ -110,7 +104,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setAllowedToken(address token, uint v, uint b) external {
 
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         if (tokenRates[token].value != 0) {
             Arrays.removeItem(tokens, token);
         }
@@ -126,7 +120,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setMinShareForProposal(uint s, uint b) external {
         
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         minShareForProposal = Rate(s, b, MAX_UINT);
     }
 
@@ -146,7 +140,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setDebtInterestRate(uint i, uint b) external {
         
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         debtInterestRates[debtInterestRates.length - 1].date = exchangeTime();
         debtInterestRates.push(Rate(i, b, MAX_UINT));
     }
@@ -175,7 +169,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setCreditInterestRate(uint i, uint b) external {
         
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         creditInterestRates[creditInterestRates.length - 1].date = exchangeTime();
         creditInterestRates.push(Rate(i, b, MAX_UINT));
     }
@@ -188,7 +182,7 @@ contract ProtocolSettings is ManagedContract {
 
     function setProcessingFee(uint f, uint b) external {
         
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         processingFee = Rate(f, b, MAX_UINT);
     }
 
@@ -199,13 +193,13 @@ contract ProtocolSettings is ManagedContract {
 
     function setUdlFeed(address addr, int v) external {
 
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         underlyingFeeds[addr] = v;
     }
 
     function setVolatilityPeriod(uint _volatilityPeriod) external {
 
-        ensureWritePriviledge();
+        ensureWritePrivilege();
         volatilityPeriod = _volatilityPeriod;
     }
 
@@ -242,7 +236,7 @@ contract ProtocolSettings is ManagedContract {
         }
     }
 
-    function ensureWritePriviledge() private view {
+    function ensureWritePrivilege() private view {
 
         if (msg.sender != owner) {
             Proposal p = Proposal(msg.sender);

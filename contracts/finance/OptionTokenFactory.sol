@@ -3,14 +3,10 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
+import "../interfaces/UnderlyingFeed.sol";
 import "./OptionToken.sol";
 
 contract OptionTokenFactory is ManagedContract {
-
-    constructor(address deployer) public {
-
-        Deployer(deployer).setContractAddress("OptionTokenFactory");
-    }
 
     function initialize(Deployer deployer) override internal {
 
