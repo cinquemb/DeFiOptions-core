@@ -92,6 +92,12 @@ contract ProtocolSettings is ManagedContract {
     }
 
     function setTokenRate(address token, uint v, uint b) external {
+        /*
+
+            "b" corresponds to token decimal normalization parameter such that the decimals the stablecoin represents is 18 on the exchange for example:
+                A stable coin with 6 decimals will need b set to 1e12, relative to one that has 18 decimals which will be set to just 1
+
+        */
 
         ensureWritePrivilege();
         tokenRates[token] = Rate(v, b, MAX_UINT);

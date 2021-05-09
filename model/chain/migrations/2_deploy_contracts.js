@@ -16,8 +16,8 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 
 
 module.exports = async function(deployer) {
-
-  await deployer.deploy(Deployer4, "0x0000000000000000000000000000000000000000");
+  //need to change address everytime network restarts
+  await deployer.deploy(Deployer4, "0xbA77a90a255883Aa944F1Ed82B37B141500C0f9D");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -71,17 +71,19 @@ module.exports = async function(deployer) {
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
   
-  deployer4.setContractAddress("TimeProvider", timeProvider.address);
-  //d.setContractAddress("UnderlyingFeed", EthFeedMock.address);
-  deployer4.setContractAddress("CreditProvider", creditProvider.address);
-  deployer4.addAlias("CreditIssuer", "CreditProvider");
-  deployer4.setContractAddress("CreditToken", ct.address);
-  deployer4.setContractAddress("OptionsExchange", exchange.address);
-  deployer4.setContractAddress("OptionTokenFactory", otf.address);
-  deployer4.setContractAddress("GovToken", gt.address);
-  deployer4.setContractAddress("ProtocolSettings", settings.address);
-  deployer4.setContractAddress("LinearLiquidityPool", pool.address);
 
+  //d.setContractAddress("UnderlyingFeed", EthFeedMock.address);
+  await deployer4.setContractAddress("TimeProvider", timeProvider.address);
+  await deployer4.setContractAddress("CreditProvider", creditProvider.address);
+  await deployer4.addAlias("CreditIssuer", "CreditProvider");
+  await deployer4.setContractAddress("CreditToken", ct.address);
+  await deployer4.setContractAddress("OptionsExchange", exchange.address);
+  await deployer4.setContractAddress("OptionTokenFactory", otf.address);
+  await deployer4.setContractAddress("GovToken", gt.address);
+  await deployer4.setContractAddress("ProtocolSettings", settings.address);
+  await deployer4.setContractAddress("LinearLiquidityPool", pool.address);
+
+  await deployer4.deploy();
 
   const timeProviderAddress = await deployer4.getContractAddress("TimeProvider");
   console.log("timeProviderAddress is at: "+ timeProviderAddress);

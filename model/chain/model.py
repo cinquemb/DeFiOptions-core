@@ -54,6 +54,7 @@ TPRO = {
 
 EXCHG = {
     "addr": '',
+    "decimals": 18,
     "deploy_slug": "OptionsExchangeAddress is at: "
 }
 
@@ -678,11 +679,11 @@ class Agent:
 
     @property
     def total_written(self):
-        return Balance(self.options_exchange.get_total_owner_written(self), USDT['decimals'])
+        return Balance(self.options_exchange.get_total_owner_written(self), EXCHG['decimals'])
 
     @property
     def total_holding(self):
-        return Balance(self.options_exchange.get_total_owner_holding(self), USDT['decimals'])
+        return Balance(self.options_exchange.get_total_owner_holding(self), EXCHG['decimals'])
 
     @property
     def lp(self):
@@ -755,7 +756,7 @@ class OptionsExchange:
 
     def balance(self, agent):
         bal = self.contract.caller({'from' : agent.address, 'gas': 100000}).balanceOf(agent.address)
-        return Balance(bal, USDT['decimals'])
+        return Balance(bal, EXCHG['decimals'])
 
     def resolve_token(self, agent, symbol):
         '''
@@ -829,12 +830,12 @@ class OptionsExchange:
 
         cc = self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcCollateral(
             feed_address,
-            Balance.from_tokens(amount, USDT['decimals']).to_wei(),
+            Balance.from_tokens(amount, EXCHG['decimals']).to_wei(),
             0 if option_type == 'CALL' else 1,
             strike_price,
             maturity
         )
-        return Balance(cc, USDT['decimals'])
+        return Balance(cc, EXCHG['decimals'])
 
     def write(self, agent, feed_address, option_type, amount, strike_price, maturity):
         '''
@@ -851,7 +852,7 @@ class OptionsExchange:
             agent,
             self.contract.functions.writeOptions(
                 feed_address,
-                Balance.from_tokens(amount, USDT['decimals']).to_wei(),
+                Balance.from_tokens(amount, EXCHG['decimals']).to_wei(),
                 0 if option_type == 'CALL' else 1,
                 strike_price,
                 maturity,
@@ -965,7 +966,7 @@ class OptionsExchange:
 
     def calc_collateral_surplus(self, checker, agent):
         cs = self.contract.caller({'from' : checker.address, 'gas': 8000000}).calcSurplus(agent.address)
-        return Balance(cs, USDT['decimals'])
+        return Balance(cs, EXCHG['decimals'])
 
     def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
         '''
@@ -1017,10 +1018,10 @@ class CreditProvider:
         return self.contract.caller({'from' : agent.address, 'gas': 100000}).totalTokenStock()
 
     def get_total_debt(self, agent):
-        return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).totalDebt(), USDT['decimals'])
+        return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).totalDebt(), EXCHG['decimals'])
 
     def get_short_collateral_exposure(self, agent):
-        return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcRawCollateralShortage(agent.address), USDT['decimals'])
+        return Balance(self.contract.caller({'from' : agent.address, 'gas': 8000000}).calcRawCollateralShortage(agent.address), EXCHG['decimals'])
 
 class LinearLiquidityPool(TokenProxy):
     def __init__(self, contract, usdt_token, options_exchange, **kwargs):
@@ -1163,15 +1164,15 @@ class LinearLiquidityPool(TokenProxy):
             agent,
             self.contract.functions.addSymbol(
                 udlfeed_address,
-                strike * 10**18,
+                strike * 10**EXCHG['decimals'],
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
                 current_timestamp + (60 * 60 * 24),
                 x,
                 y,
-                buyStock * 10**18,
-                sellStock * 10**18
+                buyStock * 10**EXCHG['decimals'],
+                sellStock * 10**EXCHG['decimals']
             ),
             8000000
         )
@@ -1196,15 +1197,15 @@ class LinearLiquidityPool(TokenProxy):
             agent,
             self.contract.functions.addSymbol(
                 udlfeed_address,
-                strike * (10**18),
+                strike * (10**EXCHG['decimals']),
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
                 current_timestamp + (60 * 60 * 24 * 2),
                 x,
                 y,
-                buyStock * (10**18),
-                sellStock * (10**18)
+                buyStock * (10**EXCHG['decimals']),
+                sellStock * (10**EXCHG['decimals'])
             ),
             8000000
         )
@@ -1212,7 +1213,7 @@ class LinearLiquidityPool(TokenProxy):
 
     def pool_free_balance(self, agent):
         pool_free_balance = self.contract.caller({'from' : agent.address, 'gas': 100000}).calcFreeBalance()
-        return Balance(pool_free_balance, USDT['decimals'])
+        return Balance(pool_free_balance, EXCHG['decimals'])
 
 class Model:
     """
@@ -1628,7 +1629,7 @@ class Model:
 
             exchange_bal  = self.options_exchange.balance(a)
             pool_free_balance = self.linear_liquidity_pool.pool_free_balance(a)
-            exchange_free_bal = Balance.from_tokens(0, USDT['decimals'])
+            exchange_free_bal = Balance.from_tokens(0, EXCHG['decimals'])
             try:
                 exchange_free_bal = self.options_exchange.calc_collateral_surplus(a, a)
             except Exception as inst:
@@ -1915,14 +1916,10 @@ class Model:
                     '''
 
                     for otk, otv in self.option_tokens.items():
-                        '''
-                            TODO:
-                                DECIMALS ARE OFF!
-                        '''
-                        owv = Balance(otv.contract.caller({'from' : a.address, 'gas': 100000}).writtenVolume(a.address), USDT['decimals'])
+                        owv = Balance(otv.contract.caller({'from' : a.address, 'gas': 100000}).writtenVolume(a.address), EXCHG['decimals'])
                         if owv > 0 and otv[a] > 0:
                             # written > holding
-                            token_amount = Balance(owv.to_wei() - otv[a].to_wei(), USDT['decimals'])
+                            token_amount = Balance(owv.to_wei() - otv[a].to_wei(), EXCHG['decimals'])
 
                             if token_amount > 0:
                                 try:
@@ -1974,7 +1971,7 @@ class Model:
                     symbol = option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
                     option_token_balance_of_pool = Balance(
                         option_token_to_buy.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(self.linear_liquidity_pool.address),
-                        USDT['decimals']
+                        EXCHG['decimals']
                     )
                     print(symbol, option_token_balance_of_pool)
                     try:
@@ -1987,11 +1984,11 @@ class Model:
                         continue
                     
                     print(symbol, current_price_volume, option_token_balance_of_pool, exchange_bal, 'BUY')
-                    volume = Balance(current_price_volume[1], USDT['decimals'])
+                    volume = Balance(current_price_volume[1], EXCHG['decimals'])
 
                     price = current_price_volume[0]
 
-                    if (volume * (price / 10.**18) * 100) > exchange_bal:
+                    if (volume * (price / 10.**EXCHG['decimals']) * 100) > exchange_bal:
                         '''
                         sym_parts = symbol.split('-')
                         strike_price = int(float(sym_parts[2]))
@@ -2002,13 +1999,13 @@ class Model:
                         except:
                             continue
                         '''          
-                        mod_price = Balance(price, 18)
-                        print("mod_price", mod_price, mod_price.to_decimals(USDT['decimals']), mod_price.to_decimals(USDT['decimals']).to_wei(), exchange_bal.to_wei(), volume)
-                        volume = Balance.from_tokens(int((exchange_bal.to_wei() / mod_price.to_decimals(USDT['decimals']).to_wei()) / 10), USDT['decimals'])
+                        mod_price = Balance(price, EXCHG['decimals'])
+                        print("mod_price", mod_price, mod_price.to_decimals(EXCHG['decimals']), mod_price.to_decimals(EXCHG['decimals']).to_wei(), exchange_bal.to_wei(), volume)
+                        volume = Balance.from_tokens(int((exchange_bal.to_wei() / mod_price.to_decimals(EXCHG['decimals']).to_wei()) / 10), EXCHG['decimals'])
 
 
                     if volume < 1:
-                        volume = Balance.from_tokens(1, USDT['decimals'])
+                        volume = Balance.from_tokens(1, EXCHG['decimals'])
 
                     
                     try:
@@ -2020,9 +2017,9 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
                     option_token_to_sell = None
-                    volume_to_sell = Balance(0, USDT['decimals'])
+                    volume_to_sell = Balance(0, EXCHG['decimals'])
                     for k, ot in self.option_tokens.items():
-                        volume_to_sell = Balance(ot.contract.caller({'from' : a.address, 'gas': 8000000}).balanceOf(a.address), USDT['decimals'])
+                        volume_to_sell = Balance(ot.contract.caller({'from' : a.address, 'gas': 8000000}).balanceOf(a.address), EXCHG['decimals'])
                         if volume_to_sell > 1:
                             option_token_to_sell = ot
                             break
@@ -2053,7 +2050,7 @@ class Model:
                         )
                     
                     if volume == 0:
-                        volume = Balance.from_tokens(1, USDT['decimals'])
+                        volume = Balance.from_tokens(1, EXCHG['decimals'])
                     price = current_price_volume[0] - (int(current_price_volume[0] * 0.001))
                     
                     try:
@@ -2290,7 +2287,7 @@ def main():
             protocol_settings.functions.setAllowedToken(
                 usdt.address,
                 1,
-                1
+                10**(18 - usdt.decimals)
             ),
             500000
         )
