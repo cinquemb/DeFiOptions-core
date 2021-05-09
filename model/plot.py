@@ -88,9 +88,9 @@ def main():
                 ncoldata1 = []
                 for nidx, x in enumerate(ncoldata):
                     if nidx > 0:
-                        ncoldata1.append(x - ncoldata1[nidx-1])
+                        ncoldata1.append(x - ncoldata[nidx-1])
                     else:
-                        ncoldata1.append(0)
+                        ncoldata1.append(x)
 
                 ax.plot(columns[x_column_number], ncoldata1, '-')
                 ax.set_xlabel(headings[x_column_number])
