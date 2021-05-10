@@ -12,6 +12,8 @@ interface LiquidityPool {
 
     function maturity() external view returns (uint);
 
+    function getOwner() external view returns (address);
+
     function yield(uint dt) external view returns (uint y);
 
     function depositTokens(

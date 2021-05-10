@@ -50,12 +50,12 @@ contract Base {
 
         Deployer deployer = Deployer(DeployedAddresses.Deployer());
         deployer.reset();
+        deployer.deploy();
         time = TimeProviderMock(deployer.getContractAddress("TimeProvider"));
         feed = EthFeedMock(deployer.getContractAddress("UnderlyingFeed"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        pool = exchange.createPool("DEFAULT", "TEST", address(settings));
-        deployer.deploy();
+        pool = exchange.createPool("DEFAULT", "TEST");
 
         pool.setParameters(
             spread,

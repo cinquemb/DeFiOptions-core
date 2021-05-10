@@ -26,7 +26,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         OptionsExchange.OptionType optType;
         uint120 strike;
         uint32 maturity;
-        uint32 updateFrequency;
         uint256 lastUpdateTime;
         uint32 t0;
         uint32 t1;
@@ -62,16 +61,19 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     uint private volumeBase;
     uint private fractionBase;
 
-    constructor(string memory _name, string memory _sb, address _ownerAddr, address _settings, address _credPrv, address _exchg)
+    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
         ERC20(string(abi.encodePacked(_name_prefix, _name)))
         public
     {    
         _symbol = _sb;
+        _name = _nm;
         owner = _ownerAddr;
+
+        Deployer deployer = Deployer(_deployAddr);
         fractionBase = 1e9;
-        exchange = OptionsExchange(_exchg);
-        settings = ProtocolSettings(_settings);
-        creditProvider = CreditProvider(_credPrv);
+        exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
+        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         volumeBase = exchange.volumeBase();
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
     }
@@ -108,6 +110,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         return _maturity;
     }
 
+    function getOwner() override external view returns (address) {
+        return owner;
+    }
+
     function yield(uint dt) override external view returns (uint y) {
         
         y = fractionBase;
@@ -136,7 +142,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         address udlFeed,
         uint strike,
         uint _mt,
-        uint _up8freq,
         OptionsExchange.OptionType optType,
         uint t0,
         uint t1,
@@ -149,7 +154,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     {
         ensureCaller();
         require(_mt < _maturity, "invalid maturity");
-        require(_up8freq > 0, "invalid update frequency");
         require(x.length > 0 && x.length.mul(2) == y.length, "invalid pricing surface");
 
         OptionsExchange.OptionData memory opt = OptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
@@ -158,8 +162,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
         } else {
-            uint256 diffUpdateTime = exchange.exchangeTime().sub(parameters[optSymbol].lastUpdateTime);
-            require(diffUpdateTime >= parameters[optSymbol].updateFrequency, "cannot update yet");
+            require(uint(settings.exchangeTime()) >= parameters[optSymbol].t1, "cannot update yet");
         }
 
         parameters[optSymbol] = PricingParameters(
@@ -167,7 +170,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             optType,
             strike.toUint120(),
             _mt.toUint32(),
-            _up8freq.toUint32(),
             settings.exchangeTime(),
             t0.toUint32(),
             t1.toUint32(),
@@ -182,7 +184,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function removeSymbol(string calldata optSymbol) external {
         ensureCaller();
-        require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy be for maturity");
+        require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy befor maturity");
         
         PricingParameters memory empty;
         parameters[optSymbol] = empty;

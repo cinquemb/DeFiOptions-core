@@ -6,6 +6,8 @@ import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/LiquidityPool.sol";
+
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
@@ -14,7 +16,7 @@ import "../utils/SignedSafeMath.sol";
 import "./CreditProvider.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
-import "./LinearLiquidityPoolFactory.sol";
+import "../pools/LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ManagedContract {
 
@@ -55,6 +57,7 @@ contract OptionsExchange is ManagedContract {
     uint private timeBase;
     uint private sqrtTimeBase;
 
+    string[] private poolSymbols;
     bytes32 public DOMAIN_SEPARATOR;
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
@@ -62,6 +65,7 @@ contract OptionsExchange is ManagedContract {
 
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
+    event RemovePoolSymbol(string symbolSuffix);
 
 
     event WriteOptions(
@@ -85,9 +89,7 @@ contract OptionsExchange is ManagedContract {
         uint volume
     );
 
-    constructor(address deployer) public {
-
-        Deployer(deployer).setContractAddress(_name);
+    constructor() public {
 
         uint chainId;
         assembly {
@@ -200,15 +202,55 @@ contract OptionsExchange is ManagedContract {
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string memory nameSuffix, string memory symbolSuffix, address settings) public returns (address pool) {
+    function createPool(string memory nameSuffix, string memory symbolSuffix) public returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
-        pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender, settings, address(creditProvider));
+        pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender);
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
 
-        /*TODO: append pool symbol to list, also need a way to remove it */
+        poolSymbols.push(symbolSuffix);
         emit CreatePool(pool, msg.sender);
+    }
+
+    function listPoolSymbols() external view returns (string memory available) {
+        for (uint i = 0; i < poolSymbols.length; i++) {
+            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            if (llp.maturity() > settings.exchangeTime()) {
+                available = listPoolSymbolHelper(available, poolSymbols[i]);
+            }
+        }
+    }
+
+    function listExpiredPoolSymbols() external view returns (string memory available) {
+        for (uint i = 0; i < poolSymbols.length; i++) {
+            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            if (llp.maturity() < settings.exchangeTime()) {
+                available = listPoolSymbolHelper(available, poolSymbols[i]);
+            }
+        }
+    }
+
+    function listPoolSymbolHelper(string memory buffer, string memory poolSymbol) internal pure returns (string memory) {
+        if (bytes(buffer).length == 0) {
+            buffer = poolSymbol;
+        } else {
+            buffer = string(abi.encodePacked(buffer, "\n", poolSymbol));
+        }
+
+        return buffer;
+    }
+
+    function removePoolSymbol(string calldata symbolSuffix) external {
+        require(poolAddress[symbolSuffix] != address(0), "pool does not exist");
+
+        LiquidityPool llp = LiquidityPool(poolAddress[symbolSuffix]);
+        require(llp.getOwner() == msg.sender, "not owner");
+        require(llp.maturity() >= settings.exchangeTime(), "cannot remove before maturity");
+        
+        poolAddress[symbolSuffix] = address(0);
+        Arrays.removeItem(poolSymbols, symbolSuffix);
+        emit RemovePoolSymbol(symbolSuffix);
     }
 
     function writeOptions(
