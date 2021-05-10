@@ -71,7 +71,7 @@ def main():
 
                 # Plot this column against the designated x
                 ax = axes[axis_cursor]
-                ncoldata = [(cB - sB) / 10.**6 for (cB,sB) in zip(columns[column_number - 1], columns[column_number])]
+                ncoldata = [(cB / 10**18) - (sB / 10**6) for (cB,sB) in zip(columns[column_number - 1], columns[column_number])]
                 ax.plot(columns[x_column_number], ncoldata, '-')
                 ax.set_xlabel(headings[x_column_number])
                 ax.set_ylabel('dCB_SB')
@@ -84,7 +84,7 @@ def main():
 
                 # Plot this column against the designated x
                 ax = axes[axis_cursor]
-                ncoldata = [(h - w) / 10.**6 for (h,w) in zip(columns[column_number], columns[column_number- 1])]
+                ncoldata = [(h - w) / 10.**18 for (h,w) in zip(columns[column_number], columns[column_number- 1])]
                 ncoldata1 = []
                 for nidx, x in enumerate(ncoldata):
                     if nidx > 0:

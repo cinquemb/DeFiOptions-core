@@ -71,8 +71,6 @@ module.exports = async function(deployer) {
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
   
-
-  //d.setContractAddress("UnderlyingFeed", EthFeedMock.address);
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
   await deployer4.addAlias("CreditIssuer", "CreditProvider");

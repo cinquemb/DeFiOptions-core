@@ -1235,7 +1235,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1638818700
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1798,7 +1798,7 @@ class Model:
                             continue
 
                         multiplier = 3.0
-                        tvol = (vol / (10.**xSD['decimals']))
+                        tvol = (vol / (10.**EXCHG['decimals']))
                         normed_vol = math.log((current_price + (tvol * multiplier)) / (current_price - (tvol * multiplier)))
 
                         mcmc_data["pending"] = {}
@@ -1839,9 +1839,9 @@ class Model:
                                     continue
 
                                 try:
-                                    x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
+                                    x = [int(round(x0,4) * 10**EXCHG['decimals']) for x0 in x0s]
                                     y = mcmc_symbol_computation["pending"]['y0'] + mcmc_symbol_computation["pending"]['y1']
-                                    y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                                    y  = [int(round(y0,4) * 10**EXCHG['decimals']) for y0 in y]
                                     print(x)
                                     print(y)
                                 except Exception as inst:
@@ -2225,7 +2225,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = False
+    skip = True
 
     if not skip:
         mt_hash = transaction_helper(
