@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 import "../deployment/ManagedContract.sol";
 import "../finance/RedeemableToken.sol";
 import "../governance/ProtocolSettings.sol";
+import "../governance/Proposal.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/ERC20.sol";
@@ -49,6 +50,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     string private constant _symbol = "LLPTK";
 
     address private owner;
+    uint private serial;
     uint private spread;
     uint private reserveRatio;
     uint private _maturity;
@@ -57,6 +59,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     uint private volumeBase;
     uint private fractionBase;
+
+    mapping(uint => Proposal) private proposalsMap;
+    mapping(address => uint) private proposingDate;
+
 
     constructor() ERC20(_name) public {
         
@@ -73,6 +79,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         volumeBase = exchange.volumeBase();
         fractionBase = 1e9;
+        serial = 1;
     }
 
     function name() override external view returns (string memory) {
@@ -90,7 +97,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     )
         external
     {
-        ensureCaller();
+        ensureOwner();
         spread = _spread;
         reserveRatio = _reserveRatio;
         _maturity = _mt;
@@ -152,7 +159,12 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         string memory optSymbol = exchange.getOptionSymbol(opt);
 
         if (parameters[optSymbol].x.length == 0) {
+            ensureOwner();
             optSymbols.push(optSymbol);
+        } else {
+            if (msg.sender != owner) {
+                require(parameters[optSymbol].t1 < settings.exchangeTime(), "must be after t1");
+            }
         }
 
         parameters[optSymbol] = PricingParameters(
@@ -254,6 +266,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         }
 
         return buffer;
+    }
+
+    function poolBalanceOf(address from) override external view returns (uint balance) {
+        balance = balanceOf(from);
     }
 
     function queryBuy(string memory optSymbol)
@@ -627,8 +643,39 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         require(parameters[optSymbol].udlFeed !=  address(0), "invalid optSymbol");
     }
 
-    function ensureCaller() private view {
+    function registerProposal(address addr) public returns (uint id) {
+        require(
+            proposingDate[addr] == 0,
+            "already proposed"
+        );
 
+        Proposal p = Proposal(addr);
+        id = serial++;
+        p.open(id);
+        proposalsMap[id] = p;
+        proposingDate[addr] = settings.exchangeTime();
+    }
+
+    function isRegisteredProposal(address addr) public view returns (bool) {
+        
+        Proposal p = Proposal(addr);
+        return address(proposalsMap[p.getId()]) == addr;
+    }
+
+    function ensureCaller() private view {
+        if (owner != address(0)) {
+            if (msg.sender != owner) {
+                Proposal p = Proposal(msg.sender);
+                require(isRegisteredProposal(msg.sender), "proposal not registered");
+                require(p.isPoolSettings(), "proposal not for pool");
+                require(p.isExecutionAllowed(), "execution not allowed");
+            }
+        } else {
+            require(owner == address(0) || msg.sender == owner, "unauthorized caller");
+        }
+    }
+
+    function ensureOwner() private view {
         require(owner == address(0) || msg.sender == owner, "unauthorized caller");
     }
 }

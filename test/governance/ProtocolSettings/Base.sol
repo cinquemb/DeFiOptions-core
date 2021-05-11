@@ -52,6 +52,7 @@ contract Base {
             address(settings),
             address(govToken),
             Proposal.Quorum.SIMPLE_MAJORITY,
+            Proposal.VoteType.PROTOCOL_SETTINGS,
             now + expiration
         );
     }

@@ -1235,7 +1235,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1638818700
+        self.prev_timestamp = 1645808718
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1945,8 +1945,7 @@ class Model:
                         commitment
                     )))
 
-                    if amount == 0:
-                        amount = 1
+                    
 
                     logger.info("Looking to Write; symbol: {}, strike_price: {}, amount: {}, exchange_bal: {}".format(sym, strike_price, amount, exchange_bal))
 
@@ -1958,7 +1957,9 @@ class Model:
                         amount /= cc.to_wei() / exchange_bal.to_wei()
                         logger.info("Norm to Write; amount: {}".format(amount))
 
-                    
+                    if amount < 1:
+                        continue
+
                     try:
                         logger.info("Before Write; symbol: {}, strike_price: {}, amount: {}".format(sym, strike_price, amount))
                         w_hash = self.options_exchange.write(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
@@ -2168,7 +2169,7 @@ def main():
         '''
     #print(linear_liquidity_pool.caller({'from' : w3.eth.accounts[:max_accounts][0], 'gas': 8000000}).listExpiredSymbols())
     #pretty(options_exchange.functions.resolveToken("BTC/USD-EP-147e18-1623989786").call(), indent=0)
-    #print(btcusd_chainlink_feed.functions.getLatestPrice().call())
+    #print(linear_liquidity_pool.functions.totalSupply().call())
     #print(Balance(4.474093538197649, 18).to_wei())
 
     #sys.exit()
@@ -2369,7 +2370,11 @@ def main():
 
         if len(tx_passed) <= 2:
             if ('write' in tx_passed and 'withdraw' in tx_passed):
-                provider.make_request("debug_increaseTime", [3600 * 24])
+                provider.make_request("debug_increaseTime", [3600 * 12])
+            elif ('write' in tx_passed and 'liquidate_self' in tx_passed):
+                provider.make_request("debug_increaseTime", [3600 * 12])
+            elif ('withdraw' in tx_passed and 'liquidate_self' in tx_passed):
+                provider.make_request("debug_increaseTime", [3600 * 12])
             elif ('withdraw' in tx_passed) and len(tx_passed) == 1:
                 provider.make_request("debug_increaseTime", [3600 * 24])
             else:
