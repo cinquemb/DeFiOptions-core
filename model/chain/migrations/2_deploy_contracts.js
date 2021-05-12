@@ -17,7 +17,7 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0xbA77a90a255883Aa944F1Ed82B37B141500C0f9D");
+  await deployer.deploy(Deployer4, "0x9e8c407B762Fb4E069985C7D46d905CBb1549404");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);

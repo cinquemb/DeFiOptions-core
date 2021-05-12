@@ -70,6 +70,10 @@ contract AggregatorV3Mock is AggregatorV3Interface {
         updatedAt = updatedAts[rounds[_roundId]];
     }
 
+    function latestRoundId() public view returns (uint) {
+        return latestRound;
+    }
+
     function latestRoundData()
         override
         external

@@ -76,19 +76,19 @@ abstract contract Proposal {
         return status;
     }
 
-    function isExecutionAllowed() public view returns (bool) {
+    function isExecutionAllowed() private view returns (bool) {
 
         return status == Status.APPROVED && !closed;
     }
 
-    function isPoolSettings() public view returns (bool) {
+    function isPoolSettingsAllowed() public view returns (bool) {
 
-        return voteType == VoteType.POOL_SETTINGS;
+        return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
     }
 
-    function isProtocolSettings() public view returns (bool) {
+    function isProtocolSettingsAllowed() public view returns (bool) {
 
-        return voteType == VoteType.PROTOCOL_SETTINGS;
+        return (voteType == VoteType.PROTOCOL_SETTINGS) && isExecutionAllowed();
     }
 
     function isClosed() public view returns (bool) {

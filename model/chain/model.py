@@ -75,7 +75,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x3843D24b0ae7753aD72fbb9d06b729c6B33bc65F',
+  "addr": '0xb0F879f75efaE7Caee0d4FC9D8661a0184dFB4E0',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -968,7 +968,7 @@ class OptionsExchange:
         cs = self.contract.caller({'from' : checker.address, 'gas': 8000000}).calcSurplus(agent.address)
         return Balance(cs, EXCHG['decimals'])
 
-    def prefetch_daily(self, agent, latest_round_id, iv_bin_window):
+    def prefetch_daily(self, agent, current_round_id, iv_bin_window):
         '''
 
             First call prefetchDailyPrice passing in the "roundId" of the latest sample you appended to your mock, corresponding to the underlying price for the new day
@@ -978,7 +978,7 @@ class OptionsExchange:
         txr = transaction_helper(
             agent,
             self.btcusd_chainlink_feed.functions.prefetchDailyPrice(
-                latest_round_id
+                current_round_id
             ),
             500000
         )
@@ -1235,7 +1235,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1645808718
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1434,9 +1434,11 @@ class Model:
             UPDATE FEEDS WHEN LASTEST DAY PASSESS
             UPDATE SYMBOL PARAMS
         '''
+
+        
         if (diff_timestamp >= self.daily_period):
             
-            if self.prev_timestamp > 0:
+            if self.prev_timestamp > 10000:
                 # increment round id
                 self.current_round_id += 1
 
@@ -1464,7 +1466,7 @@ class Model:
                 500000
             )
 
-            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
+            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id ,self.daily_vol_period * self.daily_period)
 
             '''
                 Prepare JSON data
@@ -1502,7 +1504,7 @@ class Model:
                         # need to calc feed vol
                         # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
                         try:
-                            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                            vol = self.btcusd_chainlink_feed.caller({'from' : random_advancer.address, 'gas': 8000000}).getDailyVolatility(
                                 self.daily_vol_period * self.daily_period
                             )
                         except Exception as inst:
@@ -1514,7 +1516,7 @@ class Model:
                         normed_vol = math.log((current_price + (tvol * multiplier)) / (current_price - (tvol * multiplier)))
 
                         mcmc_data[sym_parts[0]] = {}
-                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.current_round_id] / (10.**BTCUSDAgg['decimals'])
                         mcmc_data[sym_parts[0]]["vol"] = normed_vol
                         mcmc_data[sym_parts[0]]["data"] = [{
                             "strike": strike, 
@@ -1587,6 +1589,7 @@ class Model:
 
 
         logger.info("Clock: {}".format(current_timestamp))
+        logger.info("current_round_id: ".format(self.current_round_id))
         random.shuffle(self.agents)
 
         # return list of addres for agents who are short collateral
@@ -1665,7 +1668,6 @@ class Model:
             '''
             if (exchange_bal > 0) and len(self.option_tokens) > 0 and (a.total_written <= a.total_holding):
                 options.append('buy')
-
             '''
 
             if (a.total_holding > 1 or a.total_written > 1) and (pool_free_balance > 0):
@@ -1790,7 +1792,7 @@ class Model:
                         # need to calc feed vol
                         # NEED TO MAKE SURE THAT THE DECIMALS ARE CORRECT WHEN NORMING VOL
                         try:
-                            vol = self.btcusd_chainlink_feed.caller({'from' : seleted_advancer.address, 'gas': 8000000}).getDailyVolatility(
+                            vol = self.btcusd_chainlink_feed.caller({'from' : random_advancer.address, 'gas': 8000000}).getDailyVolatility(
                                 self.daily_vol_period * self.daily_period
                             )
                         except Exception as inst:
@@ -1802,7 +1804,7 @@ class Model:
                         normed_vol = math.log((current_price + (tvol * multiplier)) / (current_price - (tvol * multiplier)))
 
                         mcmc_data["pending"] = {}
-                        mcmc_data["pending"]["curr_price"] = self.btcusd_data[self.current_round_id] / 10.**BTCUSDAgg['decimals']
+                        mcmc_data["pending"]["curr_price"] = self.btcusd_data[self.current_round_id] / (10.**BTCUSDAgg['decimals'])
                         mcmc_data["pending"]["vol"] = normed_vol
                         mcmc_data["pending"]["data"] = [{
                             "strike": strike, 
@@ -1897,12 +1899,13 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "redeem_pool"})
                 elif action == "redeem_token":
                     for otk, otv in self.option_tokens_expired.items():
-                        try:
-                            logger.info("Before Redeem Option: {}, {}".format(otv.symbol, otv.totalSupply))
-                            rdmt_hash = self.options_exchange.redeem_token(a, otk)
-                            tx_hashes.append({'type': 'redeem_token', 'hash': rdmt_hash})
-                        except Exception as inst:
-                            logger.info({"agent": a.address, "error": inst, "action": "redeem_token", "option_token": otv.address})
+                        if otv[a] > 0:
+                            try:
+                                logger.info("Before Redeem Option: {}, {}".format(otv.symbol, otv[a]))
+                                rdmt_hash = self.options_exchange.redeem_token(a, otk)
+                                tx_hashes.append({'type': 'redeem_token', 'hash': rdmt_hash})
+                            except Exception as inst:
+                                logger.info({"agent": a.address, "error": inst, "action": "redeem_token", "option_token": otv.address})
                 elif action == "burn_token":
                     '''
                     for otk, otv in self.option_tokens_expired_to_burn.items():
@@ -1954,7 +1957,7 @@ class Model:
                     except:
                         continue
                     if(cc > exchange_bal):
-                        amount /= cc.to_wei() / exchange_bal.to_wei()
+                        amount /= cc.to_wei() / exchange_bal.to_wei() / 10
                         logger.info("Norm to Write; amount: {}".format(amount))
 
                     if amount < 1:
@@ -2061,20 +2064,22 @@ class Model:
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
-                    for short_owners in any_short_collateral:
+                    for short_owner in any_short_collateral:
                         for otk, otv in self.option_tokens.items():
-                            try:
-                                lqd8_hash = self.options_exchange.liquidate(a, otk, short_owners.address)
-                                tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
-                            except Exception as inst:
-                                logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owners.address, "option_token": otk})
+                            if otv[short_owner]:
+                                try:
+                                    lqd8_hash = self.options_exchange.liquidate(a, otk, short_owner.address)
+                                    tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
+                                except Exception as inst:
+                                    logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owner.address, "option_token": otk})
                 elif action == "liquidate_self":
                     for otk, otv in self.option_tokens_expired.items():
-                        try:
-                            lqd8_hash = self.options_exchange.liquidate(a, otk, self.linear_liquidity_pool.address)
-                            tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
-                        except Exception as inst:
-                            logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "option_token": otv.address})
+                        if otv[a] > 0:
+                            try:
+                                lqd8_hash = self.options_exchange.liquidate(a, otk, self.linear_liquidity_pool.address)
+                                tx_hashes.append({'type': 'liquidate_self', 'hash': lqd8_hash})
+                            except Exception as inst:
+                                logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "option_token": otk})
 
                     for otk, otv in self.option_tokens.items():
                         if otv[a] > 0:
@@ -2145,6 +2150,9 @@ def main():
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
     btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
+
+    #print(btcusd_chainlink_feed.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).getLatestPrice())
+    #sys.exit()
     
     mock_time = w3.eth.contract(abi=TimeProviderMockContract['abi'], address=TPRO["addr"])
 
@@ -2180,6 +2188,7 @@ def main():
 
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
+    print("current_timestamp", current_timestamp)
     btcusd_answers = []
     start_date = "2017-06-17"#"2017-12-17"
     btcusd_data_offset = 0
@@ -2226,7 +2235,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2376,7 +2385,7 @@ def main():
             elif ('withdraw' in tx_passed and 'liquidate_self' in tx_passed):
                 provider.make_request("debug_increaseTime", [3600 * 12])
             elif ('withdraw' in tx_passed) and len(tx_passed) == 1:
-                provider.make_request("debug_increaseTime", [3600 * 24])
+                provider.make_request("debug_increaseTime", [3600 * 12])
             else:
                 if ((i % 2) == 0) and (i != 0):
                     provider.make_request("debug_increaseTime", [3600 * 12])

@@ -391,7 +391,7 @@ contract OptionsExchange is ManagedContract {
         return getUdlPrice(options[_ts]);
     }
 
-    function resolveToken(string memory symbol) public view returns (address) {
+    function resolveToken(string calldata symbol) external view returns (address) {
         
         address addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
