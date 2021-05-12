@@ -75,7 +75,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xb0F879f75efaE7Caee0d4FC9D8661a0184dFB4E0',
+  "addr": '0xEA3b8Abf22aB5E2658514FF0B1be104f7c318C4B',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -715,9 +715,12 @@ class Agent:
         strategy = collections.defaultdict(lambda: 1.0)
 
         strategy["buy"] = 1.0
-        strategy["sell"] = 1.0
+        strategy["sell"] = 10.0
         strategy["write"] = 1.0
         strategy["deposit_exchange"] = 10.0
+        strategy["deposit_pool"] = 10.0
+        strategy["add_symbol"] = 1.0
+        strategy["create_symbol"] = 1.0
         
        
         if self.use_faith:
@@ -1168,7 +1171,7 @@ class LinearLiquidityPool(TokenProxy):
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24),
+                current_timestamp + (60 * 60 * 24 * 1),
                 x,
                 y,
                 buyStock * 10**EXCHG['decimals'],
@@ -1201,7 +1204,7 @@ class LinearLiquidityPool(TokenProxy):
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24 * 2),
+                current_timestamp + (60 * 60 * 24 * 1),
                 x,
                 y,
                 buyStock * (10**EXCHG['decimals']),
@@ -1233,9 +1236,9 @@ class Model:
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
         self.btcusd_data_init_bins = 30
-        self.current_round_id = 30
+        self.current_round_id = 33
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1624182042
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1438,7 +1441,7 @@ class Model:
         
         if (diff_timestamp >= self.daily_period):
             
-            if self.prev_timestamp > 10000:
+            if self.prev_timestamp > 0:
                 # increment round id
                 self.current_round_id += 1
 
@@ -1487,7 +1490,7 @@ class Model:
                     print('update symbol param file:', sym)
                     sym_parts = sym.split('-')
 
-                    strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
+                    strike = int(float(sym_parts[2]) / 10**EXCHG['decimals'])
                     maturity = int(sym_parts[3])
                     
                     option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
@@ -1512,7 +1515,7 @@ class Model:
                             continue
 
                         multiplier = 3.0
-                        tvol = (vol / (10.**xSD['decimals']))
+                        tvol = (vol / (10.**EXCHG['decimals']))
                         normed_vol = math.log((current_price + (tvol * multiplier)) / (current_price - (tvol * multiplier)))
 
                         mcmc_data[sym_parts[0]] = {}
@@ -1562,9 +1565,9 @@ class Model:
                                     continue
 
                                 try:
-                                    x = [int(round(x0,4) * 10**xSD['decimals']) for x0 in x0s]
+                                    x = [Balance.from_tokens(round(x0,2), EXCHG['decimals']).to_wei() for x0 in x0s]
                                     y = mcmc_symbol_computation[sym]['y0'] + mcmc_symbol_computation[sym]['y1']
-                                    y  = [int(round(y0,4) * 10**xSD['decimals']) for y0 in y]
+                                    y  = [Balance.from_tokens(round(y0,2), EXCHG['decimals']).to_wei() for y0 in y]
                                     print(x)
                                     print(y)
                                 except Exception as inst:
@@ -1572,12 +1575,12 @@ class Model:
                                     x = [0, 0]
                                     y = [0, 0, 0, 0]
 
-                                strike = int(float(sym_parts[2]) / 10**xSD['decimals'])
+                                strike = int(float(sym_parts[2]) / 10**EXCHG['decimals'])
                                 option_type = 'PUT' if sym_parts[1] == 'EP' else 'CALL'
-                                
                                 current_timestamp = w3.eth.get_block('latest')['timestamp']
                                 sym_upd8_tx = self.linear_liquidity_pool.update_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, int(sym_parts[3]), option_type, current_timestamp, x, y, buyStock, sellStock)
                                 receipt = w3.eth.waitForTransactionReceipt(sym_upd8_tx, poll_latency=tx_pool_latency, timeout=600)
+                                print('update hash:', receipt)
 
             
             '''
@@ -1589,7 +1592,7 @@ class Model:
 
 
         logger.info("Clock: {}".format(current_timestamp))
-        logger.info("current_round_id: ".format(self.current_round_id))
+        logger.info("current_round_id: {}".format(self.current_round_id))
         random.shuffle(self.agents)
 
         # return list of addres for agents who are short collateral
@@ -1658,7 +1661,7 @@ class Model:
             if exchange_bal > 0 and len(available_symbols) > 0 and (pool_free_balance > exchange_bal):
                 options.append('write')
 
-            if (exchange_bal > 0 or pool_free_balance > 0) and ((len(any_calls) < max_symbols_per_type or len(any_puts) < max_symbols_per_type) or len(available_symbols) ==0):
+            if (exchange_bal > 0 or pool_free_balance > 0) and ((len(any_calls) < max_symbols_per_type or len(any_puts) < max_symbols_per_type) or (len(available_symbols) < max_symbols_per_type*2)):
                 options.append('add_symbol')
 
             if len(available_symbols) != len(tks_list_symbols):
@@ -1673,11 +1676,11 @@ class Model:
             if (a.total_holding > 1 or a.total_written > 1) and (pool_free_balance > 0):
                 options.append('sell')
 
-            if (a.usdt > 0 and a.total_written < 1 and len(available_symbols) != len(self.option_tokens)) or len(available_symbols) ==0:
+            if (a.usdt > 0 and a.total_written < 1 and len(available_symbols) != len(self.option_tokens)) or (len(available_symbols) < max_symbols_per_type*2):
                 options.append('deposit_exchange')
 
             #len(available_symbols) != len(self.option_tokens) is to limit deposits to pool
-            if (a.usdt > 0 and a.total_written < 1 and a.total_holding < 1 and len(available_symbols) != len(self.option_tokens)) or len(available_symbols) ==0:
+            if (a.usdt > 0 and a.total_written < 1 and a.total_holding < 1 and len(available_symbols) != len(self.option_tokens)) or (len(available_symbols) < max_symbols_per_type*2):
                 options.append('deposit_pool')
 
             if exchange_free_bal > 0:
@@ -1841,17 +1844,18 @@ class Model:
                                     continue
 
                                 try:
-                                    x = [int(round(x0,4) * 10**EXCHG['decimals']) for x0 in x0s]
+                                    x = [Balance.from_tokens(round(x0,2), EXCHG['decimals']).to_wei() for x0 in x0s]
                                     y = mcmc_symbol_computation["pending"]['y0'] + mcmc_symbol_computation["pending"]['y1']
-                                    y  = [int(round(y0,4) * 10**EXCHG['decimals']) for y0 in y]
+                                    y  = [Balance.from_tokens(round(y0,2), EXCHG['decimals']).to_wei() for y0 in y]
                                     print(x)
                                     print(y)
                                 except Exception as inst:
+                                    print ('failed to add_symbol')
                                     continue
 
                                 try:
-                                    current_timestamp = w3.eth.get_block('latest')['timestamp']
-                                    ads_hash = self.linear_liquidity_pool.add_symbol(a, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
+                                    # must be the selected advancer or governane proposoal
+                                    ads_hash = self.linear_liquidity_pool.add_symbol(seleted_advancer, self.btcusd_chainlink_feed.address, strike, maturity, option_type, current_timestamp, x, y, buyStock, sellStock)
                                     providerAvax.make_request("avax.issueBlock", {})
                                     receipt = w3.eth.waitForTransactionReceipt(ads_hash, poll_latency=tx_pool_latency, timeout=600)
                                     tx_hashes.append({'type': 'add_symbol', 'hash': ads_hash})
@@ -1948,8 +1952,6 @@ class Model:
                         commitment
                     )))
 
-                    
-
                     logger.info("Looking to Write; symbol: {}, strike_price: {}, amount: {}, exchange_bal: {}".format(sym, strike_price, amount, exchange_bal))
 
                     try:
@@ -1957,7 +1959,7 @@ class Model:
                     except:
                         continue
                     if(cc > exchange_bal):
-                        amount /= cc.to_wei() / exchange_bal.to_wei() / 10
+                        amount /= (cc.to_wei() / exchange_bal.to_wei())
                         logger.info("Norm to Write; amount: {}".format(amount))
 
                     if amount < 1:
@@ -2021,23 +2023,31 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "buy", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "sell":
                     option_token_to_sell = None
+                    symbol = None
                     volume_to_sell = Balance(0, EXCHG['decimals'])
+                    current_price_volume = None
                     for k, ot in self.option_tokens.items():
                         volume_to_sell = Balance(ot.contract.caller({'from' : a.address, 'gas': 8000000}).balanceOf(a.address), EXCHG['decimals'])
                         if volume_to_sell > 1:
                             option_token_to_sell = ot
-                            break
-                    
-                    if not option_token_to_sell:
-                        continue
-                    symbol = option_token_to_sell.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
-                    try:
-                        current_price_volume = self.linear_liquidity_pool.query_sell(a, symbol)
-                    except Exception as inst:
-                        print("\terror querying sell", inst)
-                        continue
+                            
+                            if not option_token_to_sell:
+                                continue
+                            
+                            symbol = option_token_to_sell.contract.caller({'from' : a.address, 'gas': 8000000}).symbol()
+                            try:
+                                current_price_volume = self.linear_liquidity_pool.query_sell(a, symbol)
+                            except Exception as inst:
+                                print("\terror querying sell", inst)
+                                continue
 
-                    if volume_to_sell >= sellStock:
+                            if volume_to_sell >= sellStock:
+                                print(volume_to_sell, ">", sellStock, "CANT SELL")
+                                continue
+
+                            break
+
+                    if not current_price_volume:
                         continue
 
 
@@ -2235,7 +2245,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = False
+    skip = True
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2376,6 +2386,12 @@ def main():
         logger.info('iter: %s, sys time %s' % (i, end_iter-start_iter))
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
+
+        '''
+        if ('deposit_pool' in tx_passed) or ('deposit_exchange' in tx_passed):
+            continue
+        el
+        '''
 
         if len(tx_passed) <= 2:
             if ('write' in tx_passed and 'withdraw' in tx_passed):
