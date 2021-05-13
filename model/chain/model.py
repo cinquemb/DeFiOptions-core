@@ -17,6 +17,7 @@ import base64
 import mmap
 from eth_abi import encode_single, decode_single
 from web3 import Web3
+import datetime
 
 IS_DEBUG = False
 is_try_model_mine = False
@@ -75,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xEA3b8Abf22aB5E2658514FF0B1be104f7c318C4B',
+  "addr": '0x789646A193Fc90d4785860d47949386c693E3233',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -717,10 +718,10 @@ class Agent:
         strategy["buy"] = 1.0
         strategy["sell"] = 10.0
         strategy["write"] = 1.0
-        strategy["deposit_exchange"] = 10.0
-        strategy["deposit_pool"] = 10.0
-        strategy["add_symbol"] = 1.0
-        strategy["create_symbol"] = 1.0
+        strategy["deposit_exchange"] = 2.0
+        strategy["deposit_pool"] = 2.0
+        strategy["add_symbol"] = 10.0
+        strategy["create_symbol"] = 10.0
         
        
         if self.use_faith:
@@ -1236,9 +1237,9 @@ class Model:
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
         self.btcusd_data_init_bins = 30
-        self.current_round_id = 33
+        self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1624182042
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1438,8 +1439,7 @@ class Model:
             UPDATE SYMBOL PARAMS
         '''
 
-        
-        if (diff_timestamp >= self.daily_period):
+        if (datetime.datetime.fromtimestamp(current_timestamp, tz=datetime.timezone.utc) >= datetime.datetime.fromtimestamp(self.prev_timestamp, tz=datetime.timezone.utc)):
             
             if self.prev_timestamp > 0:
                 # increment round id
@@ -1469,7 +1469,7 @@ class Model:
                 500000
             )
 
-            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id ,self.daily_vol_period * self.daily_period)
+            self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
 
             '''
                 Prepare JSON data
@@ -2113,6 +2113,7 @@ class Model:
             total_tx_submitted += (end_tx_count - start_tx_count)
 
         providerAvax.make_request("avax.issueBlock", {})
+
         tx_hashes_good = 0
         tx_fails = []
         tx_good = []
@@ -2199,6 +2200,8 @@ def main():
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
     print("current_timestamp", current_timestamp)
+
+
     btcusd_answers = []
     start_date = "2017-06-17"#"2017-12-17"
     btcusd_data_offset = 0
@@ -2224,6 +2227,7 @@ def main():
     print('btcusd_data_offset', btcusd_data_offset, start_date)
 
     avax_cchain_nonces = open(MMAP_FILE, "r+b")
+
 
     # temp opx, llp, agent
     opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
@@ -2387,13 +2391,9 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        '''
         if ('deposit_pool' in tx_passed) or ('deposit_exchange' in tx_passed):
             continue
-        el
-        '''
-
-        if len(tx_passed) <= 2:
+        elif len(tx_passed) <= 2:
             if ('write' in tx_passed and 'withdraw' in tx_passed):
                 provider.make_request("debug_increaseTime", [3600 * 12])
             elif ('write' in tx_passed and 'liquidate_self' in tx_passed):
@@ -2410,6 +2410,7 @@ def main():
         else:
             if ((i % 2) == 0) and (i != 0):
                 provider.make_request("debug_increaseTime", [3600 * 12])
+        #'''
         #sys.exit()
         
 if __name__ == "__main__":
