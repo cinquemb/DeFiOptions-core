@@ -1239,9 +1239,9 @@ class Model:
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
         self.btcusd_data_init_bins = 30
-        self.current_round_id = 30
+        self.current_round_id = 83
         self.daily_vol_period = 30
-        self.prev_timestamp = 1621818691
+        self.prev_timestamp = 1626882141
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1710,9 +1710,9 @@ class Model:
             '''
             TODO:
                 Test later, since only book positions are pretty much have the pool as the owner for options issued
+            '''
             if len(any_short_collateral) > 0 and not self.has_tried_liquidating:
                 options.append('liquidate')
-            '''
 
             # liquidate expired positons
             if (len(any_short_collateral) > 0) or open_option_expired_tokens or (len(self.option_tokens_expired) > 0):
@@ -2088,13 +2088,16 @@ class Model:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
                     for short_owner in any_short_collateral:
-                        for otk, otv in self.option_tokens.items():
-                            if otv[short_owner]:
-                                try:
-                                    lqd8_hash = self.options_exchange.liquidate(a, otk, short_owner.address)
-                                    tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
-                                except Exception as inst:
-                                    logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owner.address, "option_token": otk})
+                        if short_owner.total_written > 1: 
+                            for otk, otv in self.option_tokens.items():
+                                if otv.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(short_owner.address) > 0:
+                                    try:
+                                        lqd8_hash = self.options_exchange.liquidate(a, otk, short_owner.address)
+                                        tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
+                                    except Exception as inst:
+                                        logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owner.address, "option_token": otk})
+
+                    self.has_tried_liquidating = True
                 elif action == "liquidate_self":
                     for otk, otv in self.option_tokens_expired.items():
                         if otv[a] > 0:
@@ -2112,7 +2115,6 @@ class Model:
                             except Exception as inst:
                                 logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "short_owner": a.address, "option_token": otk})
 
-                    self.has_tried_liquidating = True
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
@@ -2404,8 +2406,7 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        if ((i % 2) == 0) and (i != 0):
-            provider.make_request("debug_increaseTime", [3600 * 24])
+        provider.make_request("debug_increaseTime", [3600 * 6])
         #'''
         #sys.exit()
         
