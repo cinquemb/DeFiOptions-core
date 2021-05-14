@@ -4,12 +4,12 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
+import "../interfaces/IOptionsExchange.sol";
 import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 import "./CreditToken.sol";
-import "./OptionsExchange.sol";
 
 
 contract CreditProvider is ManagedContract {
@@ -19,7 +19,7 @@ contract CreditProvider is ManagedContract {
     
     ProtocolSettings private settings;
     CreditToken private creditToken;
-    OptionsExchange private exchange;
+    address private exchangeAddr;
 
     mapping(address => uint) private balances;
     mapping(address => uint) private debts;
@@ -45,10 +45,8 @@ contract CreditProvider is ManagedContract {
 
         creditToken = CreditToken(deployer.getContractAddress("CreditToken"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        address exchangeAddress = deployer.getContractAddress("OptionsExchange");
-        exchange = OptionsExchange(exchangeAddress);
-
-        callers[exchangeAddress] = 1;
+        exchangeAddr = deployer.getContractAddress("OptionsExchange");
+        callers[exchangeAddr] = 1;
         callers[address(settings)] = 1;
         callers[deployer.getContractAddress("CreditToken")] = 1;
         callers[deployer.getContractAddress("LinearLiquidityPool")] = 1;
@@ -199,7 +197,7 @@ contract CreditProvider is ManagedContract {
         // this represents the sum of the negative exposure of owner on the exchange from any part of their book where written is greater than holding
 
         uint bal = balanceOf(owner);
-        uint tcoll = exchange.calcCollateral(owner, false);
+        uint tcoll = IOptionsExchange(exchangeAddr).calcCollateral(owner, false);
         int coll = int(tcoll);
         int net = int(bal) - coll;
 

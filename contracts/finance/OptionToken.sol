@@ -1,7 +1,6 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../finance/OptionsExchange.sol";
 import "../finance/RedeemableToken.sol";
 import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
@@ -22,7 +21,7 @@ contract OptionToken is RedeemableToken {
         public
     {    
         _symbol = _sb;
-        exchange = OptionsExchange(_issuer);
+        exchangeAddr = _issuer;
     }
 
     function name() override external view returns (string memory) {
@@ -36,7 +35,7 @@ contract OptionToken is RedeemableToken {
 
     function issue(address from, address to, uint value) external {
 
-        require(msg.sender == address(exchange), "issuance unallowed");
+        require(msg.sender == exchangeAddr, "issuance unallowed");
         _issued[from] = _issued[from].add(value);
         addBalance(to, value);
         _totalSupply = _totalSupply.add(value);
@@ -52,14 +51,14 @@ contract OptionToken is RedeemableToken {
     function burn(address owner, uint value) public {
 
         require(
-            msg.sender == owner || msg.sender == address(exchange),
+            msg.sender == owner || msg.sender == exchangeAddr,
             "burn sender unallowed"
         );
 
         uint b = balanceOf(owner);
         uint w = _issued[owner];
         require(
-            b >= value && w >= value || (msg.sender == address(exchange) && w >= value),
+            b >= value && w >= value || (msg.sender == exchangeAddr && w >= value),
             "invalid burn value"
         );
 
@@ -71,7 +70,7 @@ contract OptionToken is RedeemableToken {
         _issued[owner] = w.sub(value);
         _unliquidatedVolume = _unliquidatedVolume.sub(value);
 
-        exchange.cleanUp(address(this), owner, value);
+        IOptionsExchange(exchangeAddr).cleanUp(address(this), owner, value);
         emit Transfer(owner, address(0), value);
     }
 
@@ -91,13 +90,13 @@ contract OptionToken is RedeemableToken {
 
     function afterRedeem(address owner, uint, uint val) override internal {
 
-        exchange.cleanUp(address(this), owner, val);
+        IOptionsExchange(exchangeAddr).cleanUp(address(this), owner, val);
         emit Transfer(owner, address(0), val);
     }
 
     function emitTransfer(address from, address to, uint value) override internal {
 
-        exchange.transferOwnership(_symbol, from, to, value);
+        IOptionsExchange(exchangeAddr).transferOwnership(_symbol, from, to, value);
         emit Transfer(from, to, value);
     }
 }

@@ -1,18 +1,17 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-
-import "../../contracts/finance/OptionsExchange.sol";
 import "../../contracts/utils/Arrays.sol";
 import "../../contracts/utils/ERC20.sol";
 import "../../contracts/utils/SafeMath.sol";
 import "../../contracts/utils/MoreMath.sol";
+import "../interfaces/IOptionsExchange.sol";
 
 abstract contract RedeemableToken is ERC20 {
 
     using SafeMath for uint;
 
-    OptionsExchange internal exchange;
+    address internal exchangeAddr;
 
     function redeemAllowed() virtual public view returns(bool);
 
@@ -27,7 +26,7 @@ abstract contract RedeemableToken is ERC20 {
 
         require(redeemAllowed(), "redeemd not allowed");
 
-        uint valTotal = exchange.balanceOf(address(this));
+        uint valTotal = IOptionsExchange(exchangeAddr).balanceOf(address(this));
         uint valRemaining = valTotal;
         uint supplyTotal = _totalSupply;
         uint supplyRemaining = _totalSupply;
@@ -53,7 +52,7 @@ abstract contract RedeemableToken is ERC20 {
         if (bal > 0) {
             uint b = 1e3;
             val = MoreMath.round(valTotal.mul(bal.mul(b)).div(supplyTotal), b);
-            exchange.transferBalance(owner, val);
+            IOptionsExchange(exchangeAddr).transferBalance(owner, val);
             removeBalance(owner, bal);
         }
 

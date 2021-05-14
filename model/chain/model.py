@@ -76,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x789646A193Fc90d4785860d47949386c693E3233',
+  "addr": '0xf8029A99A8b8AD989C242E612Cffe4181f5CA73c',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -718,10 +718,10 @@ class Agent:
         strategy["buy"] = 1.0
         strategy["sell"] = 10.0
         strategy["write"] = 1.0
-        strategy["deposit_exchange"] = 2.0
-        strategy["deposit_pool"] = 2.0
-        strategy["add_symbol"] = 10.0
-        strategy["create_symbol"] = 10.0
+        strategy["deposit_exchange"] = 1.0
+        strategy["deposit_pool"] = 1.0
+        strategy["add_symbol"] = 1.0
+        strategy["create_symbol"] = 1.0
         
        
         if self.use_faith:
@@ -984,18 +984,20 @@ class OptionsExchange:
             self.btcusd_chainlink_feed.functions.prefetchDailyPrice(
                 current_round_id
             ),
-            500000
+            8000000
         )
         txr_recp = w3.eth.waitForTransactionReceipt(txr, poll_latency=tx_pool_latency, timeout=600)
+        print("prefetchDailyPrice", txr_recp)
         
         txv = transaction_helper(
             agent,
             self.btcusd_chainlink_feed.functions.prefetchDailyVolatility(
                 iv_bin_window
             ),
-            500000
+            8000000
         )
         txv_recp = w3.eth.waitForTransactionReceipt(txv, poll_latency=tx_pool_latency, timeout=600)
+        print("prefetchDailyVolatility", txr_recp)
 
     def prefetch_sample(self, agent):
         txr = transaction_helper(
@@ -1168,11 +1170,11 @@ class LinearLiquidityPool(TokenProxy):
             agent,
             self.contract.functions.addSymbol(
                 udlfeed_address,
-                strike * 10**EXCHG['decimals'],
+                strike * (10**EXCHG['decimals']),
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24 * 1),
+                current_timestamp + (60 * 60 * 24 * 2),
                 x,
                 y,
                 buyStock * 10**EXCHG['decimals'],
@@ -1205,7 +1207,7 @@ class LinearLiquidityPool(TokenProxy):
                 maturity,
                 0 if option_type == 'CALL' else 1,
                 current_timestamp,
-                current_timestamp + (60 * 60 * 24 * 1),
+                current_timestamp + (60 * 60 * 24 * 2),
                 x,
                 y,
                 buyStock * (10**EXCHG['decimals']),
@@ -1239,7 +1241,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 0
+        self.prev_timestamp = 1621818691
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1439,37 +1441,45 @@ class Model:
             UPDATE SYMBOL PARAMS
         '''
 
-        if (datetime.datetime.fromtimestamp(current_timestamp, tz=datetime.timezone.utc) >= datetime.datetime.fromtimestamp(self.prev_timestamp, tz=datetime.timezone.utc)):
+        #if (datetime.datetime.fromtimestamp(current_timestamp, tz=datetime.timezone.utc).date() > datetime.datetime.fromtimestamp(self.prev_timestamp, tz=datetime.timezone.utc).date()):
+        if (datetime.datetime.fromtimestamp(current_timestamp).date() > datetime.datetime.fromtimestamp(self.prev_timestamp).date()):
             
             if self.prev_timestamp > 0:
                 # increment round id
                 self.current_round_id += 1
 
-            transaction_helper(
+            tx = transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendRoundId(
                     self.current_round_id
                 ),
                 500000
             )
+            receipt = w3.eth.waitForTransactionReceipt(tx, poll_latency=tx_pool_latency, timeout=600)
+            print("appendRoundId:", receipt)
 
-            transaction_helper(
+            tx = transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendAnswer(
                     self.btcusd_data[self.current_round_id]
                 ),
                 500000
             )
+            receipt = w3.eth.waitForTransactionReceipt(tx, poll_latency=tx_pool_latency, timeout=600)
+            print("appendAnswer:", receipt)
 
-            transaction_helper(
+            tx = transaction_helper(
                 seleted_advancer,
                 self.btcusd_agg.functions.appendUpdatedAt(
                     current_timestamp
                 ),
                 500000
             )
+            receipt = w3.eth.waitForTransactionReceipt(tx, poll_latency=tx_pool_latency, timeout=600)
+            print("appendUpdatedAt:", receipt)
 
             self.options_exchange.prefetch_daily(seleted_advancer, self.current_round_id, self.daily_vol_period * self.daily_period)
+
 
             '''
                 Prepare JSON data
@@ -1519,7 +1529,7 @@ class Model:
                         normed_vol = math.log((current_price + (tvol * multiplier)) / (current_price - (tvol * multiplier)))
 
                         mcmc_data[sym_parts[0]] = {}
-                        mcmc_data[sym_parts[0]]["curr_price"] = self.btcusd_data[self.current_round_id] / (10.**BTCUSDAgg['decimals'])
+                        mcmc_data[sym_parts[0]]["curr_price"] = current_price
                         mcmc_data[sym_parts[0]]["vol"] = normed_vol
                         mcmc_data[sym_parts[0]]["data"] = [{
                             "strike": strike, 
@@ -1565,9 +1575,9 @@ class Model:
                                     continue
 
                                 try:
-                                    x = [Balance.from_tokens(round(x0,2), EXCHG['decimals']).to_wei() for x0 in x0s]
+                                    x = [Balance.from_tokens(round(x0,4), EXCHG['decimals']).to_wei() for x0 in x0s]
                                     y = mcmc_symbol_computation[sym]['y0'] + mcmc_symbol_computation[sym]['y1']
-                                    y  = [Balance.from_tokens(round(y0,2), EXCHG['decimals']).to_wei() for y0 in y]
+                                    y  = [Balance.from_tokens(round(y0,4), EXCHG['decimals']).to_wei() for y0 in y]
                                     print(x)
                                     print(y)
                                 except Exception as inst:
@@ -1593,7 +1603,9 @@ class Model:
 
         logger.info("Clock: {}".format(current_timestamp))
         logger.info("current_round_id: {}".format(self.current_round_id))
-        random.shuffle(self.agents)
+
+        shuffled_agents = list(range(len(self.agents)))
+        random.shuffle(shuffled_agents)
 
         # return list of addres for agents who are short collateral
         any_short_collateral = []
@@ -1626,8 +1638,9 @@ class Model:
 
         max_symbols_per_type = 10
 
-        for agent_num, a in enumerate(self.agents):            
+        for agent_num in shuffled_agents:            
             # TODO: real strategy
+            a = self.agents[agent_num]
             options = []
 
             open_option_tokens = self.is_positive_option_token_balance(a)
@@ -1844,9 +1857,9 @@ class Model:
                                     continue
 
                                 try:
-                                    x = [Balance.from_tokens(round(x0,2), EXCHG['decimals']).to_wei() for x0 in x0s]
+                                    x = [Balance.from_tokens(round(x0,4), EXCHG['decimals']).to_wei() for x0 in x0s]
                                     y = mcmc_symbol_computation["pending"]['y0'] + mcmc_symbol_computation["pending"]['y1']
-                                    y  = [Balance.from_tokens(round(y0,2), EXCHG['decimals']).to_wei() for y0 in y]
+                                    y  = [Balance.from_tokens(round(y0,4), EXCHG['decimals']).to_wei() for y0 in y]
                                     print(x)
                                     print(y)
                                 except Exception as inst:
@@ -2391,25 +2404,8 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        if ('deposit_pool' in tx_passed) or ('deposit_exchange' in tx_passed):
-            continue
-        elif len(tx_passed) <= 2:
-            if ('write' in tx_passed and 'withdraw' in tx_passed):
-                provider.make_request("debug_increaseTime", [3600 * 12])
-            elif ('write' in tx_passed and 'liquidate_self' in tx_passed):
-                provider.make_request("debug_increaseTime", [3600 * 12])
-            elif ('withdraw' in tx_passed and 'liquidate_self' in tx_passed):
-                provider.make_request("debug_increaseTime", [3600 * 12])
-            elif ('withdraw' in tx_passed) and len(tx_passed) == 1:
-                provider.make_request("debug_increaseTime", [3600 * 12])
-            else:
-                if ((i % 2) == 0) and (i != 0):
-                    provider.make_request("debug_increaseTime", [3600 * 12])
-        elif (len(tx_passed) == 0):
+        if ((i % 2) == 0) and (i != 0):
             provider.make_request("debug_increaseTime", [3600 * 24])
-        else:
-            if ((i % 2) == 0) and (i != 0):
-                provider.make_request("debug_increaseTime", [3600 * 12])
         #'''
         #sys.exit()
         
