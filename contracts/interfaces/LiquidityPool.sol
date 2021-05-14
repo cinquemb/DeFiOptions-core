@@ -34,6 +34,8 @@ interface LiquidityPool {
 
     function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
 
+    function poolBalanceOf(address from) external view returns (uint balance);
+
     function buy(
         string calldata optSymbol,
         uint price,

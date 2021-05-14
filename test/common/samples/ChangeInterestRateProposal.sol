@@ -15,8 +15,9 @@ contract ChangeInterestRateProposal is Proposal {
         address _settings,
         address _govToken,
         Proposal.Quorum _quorum,
+        Proposal.VoteType  _voteType,
         uint expiresAt
-    ) public Proposal(_timeProvider, _govToken, _quorum, expiresAt) {
+    ) public Proposal(_timeProvider, _govToken, _quorum, _voteType, expiresAt) {
         settings = ProtocolSettings(_settings);
     }
 

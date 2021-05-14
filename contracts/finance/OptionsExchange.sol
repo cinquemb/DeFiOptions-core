@@ -53,7 +53,7 @@ contract OptionsExchange is ManagedContract {
     mapping(string => address) private tokenAddress;
     mapping(address => uint) public nonces;
     
-    uint public volumeBase;
+    uint private _volumeBase;
     uint private timeBase;
     uint private sqrtTimeBase;
 
@@ -114,7 +114,7 @@ contract OptionsExchange is ManagedContract {
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
 
-        volumeBase = 1e18;
+        _volumeBase = 1e18;
         timeBase = 1e18;
         sqrtTimeBase = 1e9;
     }
@@ -122,6 +122,10 @@ contract OptionsExchange is ManagedContract {
     function name() external pure returns (string memory) {
 
         return _name;
+    }
+
+    function volumeBase() external view returns (uint) {
+        return _volumeBase;
     }
 
     function depositTokens(
@@ -181,7 +185,7 @@ contract OptionsExchange is ManagedContract {
         ensureFunds(from);
     }
 
-    function transferBalance(address to, uint value) public {
+    function transferBalance(address to, uint value) external {
 
         creditProvider.transferBalance(msg.sender, to, value);
         ensureFunds(msg.sender);
@@ -378,7 +382,7 @@ contract OptionsExchange is ManagedContract {
             ).add(int(calcCollateral(feeds[opt.udlFeed].upperVol, written, opt)));
         }
 
-        coll = coll.div(int(volumeBase));
+        coll = coll.div(int(_volumeBase));
 
         if (is_regular == false) {
             return uint(coll);
@@ -423,12 +427,7 @@ contract OptionsExchange is ManagedContract {
             );
         }
 
-        payout = payout.div(int(volumeBase));
-    }
-    
-    function calcIntrinsicValue(address _tk) external view returns (int) {
-        
-        return calcIntrinsicValue(options[_tk]);
+        payout = payout.div(int(_volumeBase));
     }
 
     function calcIntrinsicValue(
@@ -437,7 +436,7 @@ contract OptionsExchange is ManagedContract {
         uint strike, 
         uint maturity
     )
-        external
+        public
         view
         returns (int)
     {
@@ -452,7 +451,7 @@ contract OptionsExchange is ManagedContract {
         return getUdlPrice(options[_ts]);
     }
 
-    function resolveToken(string memory symbol) public view returns (address) {
+    function resolveToken(string calldata symbol) external view returns (address) {
         
         address addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
@@ -614,7 +613,7 @@ contract OptionsExchange is ManagedContract {
         returns (uint value)
     {
         if (iv > 0) {
-            value = iv.div(volumeBase);
+            value = iv.div(_volumeBase);
             creditProvider.processPayment(owner, address(tk), value);
         }
 
@@ -637,7 +636,7 @@ contract OptionsExchange is ManagedContract {
 
         uint volume = calcLiquidationVolume(owner, opt, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
-            .div(volumeBase);
+            .div(_volumeBase);
         creditProvider.processPayment(owner, address(tk), value);
 
         if (volume > 0) {
@@ -661,7 +660,7 @@ contract OptionsExchange is ManagedContract {
         uint coll = calcCollateral(owner, true);
         require(coll > bal, "unfit for liquidation");
 
-        volume = coll.sub(bal).mul(volumeBase).mul(written).div(
+        volume = coll.sub(bal).mul(_volumeBase).mul(written).div(
             calcCollateral(
                 uint(fd.upperVol).sub(uint(fd.lowerVol)),
                 written,
@@ -727,7 +726,7 @@ contract OptionsExchange is ManagedContract {
 
         int coll = calcIntrinsicValue(opt).mul(int(volume)).add(
             int(calcCollateral(fd.upperVol, volume, opt))
-        ).div(int(volumeBase));
+        ).div(int(_volumeBase));
 
         return coll > 0 ? uint(coll) : 0;
     }

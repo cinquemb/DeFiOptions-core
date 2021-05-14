@@ -2,6 +2,7 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../interfaces/TimeProvider.sol";
+import "../interfaces/LiquidityPool.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "./GovToken.sol";
@@ -10,12 +11,15 @@ abstract contract Proposal {
 
     using SafeMath for uint;
 
-    enum Quorum { SIMPLE_MAJORITY, TWO_THIRDS }
+    enum Quorum { SIMPLE_MAJORITY, TWO_THIRDS, QUADRATIC }
+
+    enum VoteType {PROTOCOL_SETTINGS, POOL_SETTINGS}
 
     enum Status { PENDING, OPEN, APPROVED, REJECTED }
 
     TimeProvider private time;
     GovToken private govToken;
+    LiquidityPool private llpToken;
 
     mapping(address => int) private votes;
     
@@ -24,6 +28,7 @@ abstract contract Proposal {
     uint private nay;
     Quorum private quorum;
     Status private status;
+    VoteType private voteType;
     uint private expiresAt;
     bool private closed;
 
@@ -31,12 +36,25 @@ abstract contract Proposal {
         address _time,
         address _govToken,
         Quorum _quorum,
+        VoteType  _voteType,
         uint _expiresAt
     )
         public
     {
         time = TimeProvider(_time);
-        govToken = GovToken(_govToken);
+        voteType = _voteType;
+
+        if (voteType == VoteType.PROTOCOL_SETTINGS) {
+            govToken = GovToken(_govToken);
+            require(_quorum != Quorum.QUADRATIC, "cant be quadratic");
+        } else if (voteType == VoteType.POOL_SETTINGS) {
+            llpToken = LiquidityPool(_govToken);
+            require(_quorum == Quorum.QUADRATIC, "must be quadratic");
+            require(_expiresAt > time.getNow() && _expiresAt.sub(time.getNow()) > 1 days, "too short expiry");
+        } else {
+            revert("vote type not specified");
+        }
+        
         quorum = _quorum;
         status = Status.PENDING;
         expiresAt = _expiresAt;
@@ -58,9 +76,19 @@ abstract contract Proposal {
         return status;
     }
 
-    function isExecutionAllowed() public view returns (bool) {
+    function isExecutionAllowed() private view returns (bool) {
 
         return status == Status.APPROVED && !closed;
+    }
+
+    function isPoolSettingsAllowed() public view returns (bool) {
+
+        return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
+    }
+
+    function isProtocolSettingsAllowed() public view returns (bool) {
+
+        return (voteType == VoteType.PROTOCOL_SETTINGS) && isExecutionAllowed();
     }
 
     function isClosed() public view returns (bool) {
@@ -70,7 +98,11 @@ abstract contract Proposal {
 
     function open(uint _id) public {
 
-        require(msg.sender == address(govToken));
+        if (voteType == VoteType.PROTOCOL_SETTINGS) {
+            require(msg.sender == address(govToken)); 
+        } else {
+            require(msg.sender == address(llpToken)); 
+        }
         require(status == Status.PENDING);
         id = _id;
         status = Status.OPEN;
@@ -81,15 +113,22 @@ abstract contract Proposal {
         ensureIsActive();
         require(votes[msg.sender] == 0);
         
-        uint balance = govToken.balanceOf(msg.sender);
+        uint balance;
+
+        if (voteType == VoteType.PROTOCOL_SETTINGS) {
+            balance = govToken.balanceOf(msg.sender);
+        } else {
+            balance = llpToken.poolBalanceOf(msg.sender);
+        }
+        
         require(balance > 0);
 
         if (support) {
             votes[msg.sender] = int(balance);
-            yea = yea.add(balance);
+            yea = (voteType == VoteType.PROTOCOL_SETTINGS) ? yea.add(balance) : yea.add(MoreMath.sqrt(balance));
         } else {
             votes[msg.sender] = int(-balance);
-            nay = nay.add(balance);
+            nay = (voteType == VoteType.PROTOCOL_SETTINGS) ? nay.add(balance) : nay.add(MoreMath.sqrt(balance));
         }
     }
 
@@ -103,25 +142,38 @@ abstract contract Proposal {
 
         ensureIsActive();
 
-        uint total = govToken.totalSupply();
+        if (quorum == Proposal.Quorum.QUADRATIC) {
+            require(expiresAt < time.getNow());
 
-        uint v;
-        if (quorum == Proposal.Quorum.SIMPLE_MAJORITY) {
-            v = total.div(2);
-        } else if (quorum == Proposal.Quorum.TWO_THIRDS) {
-            v = total.mul(2).div(3);
+            if (yea > nay) {
+                status = Status.APPROVED;
+                execute();
+            } else {
+                status = Status.REJECTED;
+            }
         } else {
-            revert();
-        }
+            uint total = govToken.totalSupply();
+            
+            uint v;
+            
+            if (quorum == Proposal.Quorum.SIMPLE_MAJORITY) {
+                v = total.div(2);
+            } else if (quorum == Proposal.Quorum.TWO_THIRDS) {
+                v = total.mul(2).div(3);
+            } else {
+                revert();
+            }
 
-        if (yea > v) {
-            status = Status.APPROVED;
-            execute();
-        } else if (nay >= v) {
-            status = Status.REJECTED;
-        } else {
-            revert("quorum not reached");
-        }
+            if (yea > v) {
+                status = Status.APPROVED;
+                execute();
+            } else if (nay >= v) {
+                status = Status.REJECTED;
+            } else {
+                revert("quorum not reached");
+            }
+
+        }        
 
         closed = true;
     }
@@ -132,7 +184,10 @@ abstract contract Proposal {
 
         require(!closed);
         require(status == Status.OPEN);
-        require(expiresAt > time.getNow());
+        
+        if (voteType == VoteType.PROTOCOL_SETTINGS) {
+            require(expiresAt > time.getNow());
+        }      
     }
 
     function update(address voter, int diff) private {
@@ -146,9 +201,17 @@ abstract contract Proposal {
             uint newBalance = diff > 0 ? oldBalance.add(_diff) : oldBalance.sub(_diff);
 
             if (votes[voter] > 0) {
-                yea = yea.add(newBalance).sub(oldBalance);
+                yea = (voteType == VoteType.PROTOCOL_SETTINGS) ? yea.add(
+                    newBalance
+                ).sub(oldBalance) : yea.add(
+                    MoreMath.sqrt(newBalance)
+                ).sub(MoreMath.sqrt(oldBalance));
             } else {
-                nay = nay.add(newBalance).sub(oldBalance);
+                nay = (voteType == VoteType.PROTOCOL_SETTINGS) ? nay.add(
+                    newBalance
+                ).sub(oldBalance) : nay.add(
+                    MoreMath.sqrt(newBalance)
+                ).sub(MoreMath.sqrt(oldBalance));
             }
         }
     }
