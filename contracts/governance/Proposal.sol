@@ -143,7 +143,10 @@ abstract contract Proposal {
         ensureIsActive();
 
         if (quorum == Proposal.Quorum.QUADRATIC) {
-            require(expiresAt < time.getNow());
+
+            if (yea.add(nay) < MoreMath.sqrt(llpToken.totalSupply())) {
+                require(expiresAt < time.getNow());
+            }
 
             if (yea > nay) {
                 status = Status.APPROVED;

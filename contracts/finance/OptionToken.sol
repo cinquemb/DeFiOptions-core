@@ -83,6 +83,10 @@ contract OptionToken is RedeemableToken {
         return _unliquidatedVolume;
     }
 
+    function totalSupply() external view returns (uint) {
+        return _totalSupply;
+    }
+
     function redeemAllowed() override public view returns (bool) {
         
         return _unliquidatedVolume == 0;

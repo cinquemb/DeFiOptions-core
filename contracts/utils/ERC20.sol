@@ -42,11 +42,6 @@ abstract contract ERC20 is IERC20Details {
         return 18;
     }
 
-    function totalSupply() virtual public view returns (uint) {
-
-        return _totalSupply;
-    }
-
     function balanceOf(address owner) virtual public view returns (uint) {
 
         return balances[owner];

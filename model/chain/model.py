@@ -1239,9 +1239,9 @@ class Model:
         self.btcusd_agg = btcusd_agg
         self.btcusd_data = btcusd_data
         self.btcusd_data_init_bins = 30
-        self.current_round_id = 83
+        self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1626882141
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1969,10 +1969,16 @@ class Model:
 
                     try:
                         cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
-                    except:
+                        cc_s = self.options_exchange.calc_collateral_surplus(a, a)
+                    except Exception as inst:
+                        print(inst)
                         continue
-                    if(cc > exchange_bal):
-                        amount /= (cc.to_wei() / exchange_bal.to_wei())
+
+                    if cc_s < 1:
+                        continue
+
+                    if(cc > cc_s):
+                        amount /= (cc.to_wei() / cc_s.to_wei())
                         logger.info("Norm to Write; amount: {}".format(amount))
 
                     if amount < 1:
@@ -2264,7 +2270,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2406,7 +2412,10 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        provider.make_request("debug_increaseTime", [3600 * 6])
+        if len(tx_passed) <= 1:
+            provider.make_request("debug_increaseTime", [3600 * 24])
+        else:
+            provider.make_request("debug_increaseTime", [3600 * 6])
         #'''
         #sys.exit()
         

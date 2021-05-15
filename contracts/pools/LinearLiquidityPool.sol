@@ -2,12 +2,12 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../finance/RedeemableToken.sol";
+import "../finance/OptionToken.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SignedSafeMath.sol";
-import "../finance/OptionToken.sol";
 
 contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken {
 
@@ -80,6 +80,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function symbol() override external view returns (string memory) {
         return _symbol;
+    }
+
+    function totalSupply() override external view returns (uint) {
+        return _totalSupply;
     }
 
     function setParameters(
@@ -511,9 +515,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint k = offset.add(j);
         require(k < p.y.length, "error calcOptPriceAt: k >= p.y.length");
         int yA = int(p.y[k]);
-        int yB = int(p.y[k - 1]);
-        int xN = int(xp.sub(p.x[j - 1]));
-        int xD = int(p.x[j]).sub(int(p.x[j - 1]));
+        int yB = int(p.y[k.sub(1)]);
+        int xN = int(xp.sub(p.x[j.sub(1)]));
+        int xD = int(p.x[j]).sub(int(p.x[j.sub(1)]));
 
         require(xD != 0, "error calcOptPriceAt: xD == 0");
 
@@ -602,11 +606,11 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function calcYield(uint index, uint start) private view returns (uint y) {
 
-        uint t0 = deposits[index - 1].date;
+        uint t0 = deposits[index.sub(1)].date;
         uint t1 = index < deposits.length ?
             deposits[index].date : settings.exchangeTime();
 
-        int v0 = int(deposits[index - 1].value.add(deposits[index - 1].balance));
+        int v0 = int(deposits[index.sub(1)].value.add(deposits[index.sub(1)].balance));
         int v1 = index < deposits.length ? 
             int(deposits[index].balance) :
             IOptionsExchange(exchangeAddr).calcExpectedPayout(address(this)).add(int(IOptionsExchange(exchangeAddr).balanceOf(address(this))));
