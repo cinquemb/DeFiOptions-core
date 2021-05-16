@@ -76,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xf8029A99A8b8AD989C242E612Cffe4181f5CA73c',
+  "addr": '0x6E3e776d2D2e9B5791A5EEF3457aC7aCAa30370a',
   "decimals": 6,
   "symbol": 'USDT',
 }

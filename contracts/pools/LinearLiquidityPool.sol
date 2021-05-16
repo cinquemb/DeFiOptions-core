@@ -6,6 +6,7 @@ import "../finance/OptionToken.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IInterpolator.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SignedSafeMath.sol";
 
@@ -14,8 +15,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
-
-    enum Operation { BUY, SELL }
 
     struct PricingParameters {
         address udlFeed;
@@ -43,6 +42,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     string private constant _symbol = "LLPTK";
 
     address private owner;
+    address private interpolatorAddr;
+    
     uint private serial;
     uint private spread;
     uint private _maturity;
@@ -68,6 +69,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        interpolatorAddr = deployer.getContractAddress("Interpolator");
 
         volumeBase = IOptionsExchange(exchangeAddr).volumeBase();
         fractionBase = 1e9;
@@ -466,78 +468,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         returns (uint price)
     {
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
-        
-        (uint j, uint xp) = findUdlPrice(p);
-        uint _now = settings.exchangeTime();
-        uint dt = uint(p.t1).sub(uint(p.t0));
-        require(_now >= p.t0 && _now <= p.t1, "calcOptPrice: _now < p.t0 | _now > p.t1");
-        
-        uint t = _now.sub(p.t0);
-        uint p0 = calcOptPriceAt(p, 0, j, xp);
-        uint p1 = calcOptPriceAt(p, p.x.length, j, xp);
-
-        uint dp0p1 = uint(MoreMath.abs(int(p0).sub(int(p1))));
-
-        if (p0 >= p1) {
-            price = p0.mul(dt).sub(
-                t.mul(dp0p1)
-            ).mul(f).div(fractionBase).div(dt);
-        } else {
-            price = p0.mul(dt).add(
-                t.mul(dp0p1)
-            ).mul(f).div(fractionBase).div(dt);
-        }
-    }
-
-    function findUdlPrice(PricingParameters memory p) private view returns (uint j, uint xp) {
-
-        UnderlyingFeed feed = UnderlyingFeed(p.udlFeed);
-        (,int udlPrice) = feed.getLatestPrice();
-        xp = uint(udlPrice);
-
-        while (p.x[j] < xp && j < p.x.length) {
-            j++;
-        }
-
-        require(j > 0 && j < p.x.length, "findUdlPrice: invalid pricing parameters");
-    }
-
-    function calcOptPriceAt(
-        PricingParameters memory p,
-        uint offset,
-        uint j,
-        uint xp
-    )
-        private
-        pure
-        returns (uint price)
-    {
-        uint k = offset.add(j);
-        require(k < p.y.length, "error calcOptPriceAt: k >= p.y.length");
-        int yA = int(p.y[k]);
-        int yB = int(p.y[k.sub(1)]);
-        int xN = int(xp.sub(p.x[j.sub(1)]));
-        int xD = int(p.x[j]).sub(int(p.x[j.sub(1)]));
-
-        require(xD != 0, "error calcOptPriceAt: xD == 0");
-
-        (int y1, int y2) = (0, 0);
-        
-        if (yA >= yB) {
-            y1 = yA.sub(yB);
-            y2 = yB;
-        } else {
-            y1 = yB.sub(yA);
-            y2 = yA;
-        }
-
-        price = uint(
-            y1.mul(
-                xN
-            ).div(
-                xD
-            ).add(y2)
-        );
+        price = IInterpolator(interpolatorAddr).interpolate(p.udlFeed, p.t0, p.t1, p.x, p.y, f);
     }
 
     function calcVolume(

@@ -10,6 +10,7 @@ const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
 const LinearLiquidityPool = artifacts.require("LinearLiquidityPool");
+const LinearAnySlopeInterpolator = artifacts.require("LinearAnySlopeInterpolator");
 
 const MockChainLinkFeed = artifacts.require("ChainlinkFeed");
 const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
@@ -17,7 +18,7 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x1a962D292dd5871C1C6C1D56A7a425CB9ce187d2");
+  await deployer.deploy(Deployer4, "0x10035DBE8e79e57bAFf7596632597Bd69338FFE9");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -27,6 +28,7 @@ module.exports = async function(deployer) {
   console.log("settings is at: "+ settings.address);
   const ct = await deployer.deploy(CreditToken);
   const gt = await deployer.deploy(GovToken);
+  const lasit = await deployer.deploy(LinearAnySlopeInterpolator);
   const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
   const otf = await deployer.deploy(OptionTokenFactory);
@@ -80,6 +82,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("GovToken", gt.address);
   await deployer4.setContractAddress("ProtocolSettings", settings.address);
   await deployer4.setContractAddress("LinearLiquidityPool", pool.address);
+  await deployer4.setContractAddress("Interpolator", lasit.address);
 
   await deployer4.deploy();
 

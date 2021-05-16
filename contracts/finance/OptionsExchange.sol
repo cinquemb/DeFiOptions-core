@@ -57,6 +57,8 @@ contract OptionsExchange is ManagedContract {
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
     string private constant _name = "OptionsExchange";
 
+    event WithdrawTokens(address indexed from, uint value);
+
     event CreateSymbol(address indexed token, address indexed sender);
 
     event WriteOptions(
@@ -185,6 +187,7 @@ contract OptionsExchange is ManagedContract {
         
         require(value <= calcSurplus(msg.sender), "insufficient surplus");
         creditProvider.withdrawTokens(msg.sender, value);
+        emit WithdrawTokens(msg.sender, value);
     }
 
     function createSymbol(string memory symbol, address udlFeed) public returns (address tk) {
@@ -194,6 +197,28 @@ contract OptionsExchange is ManagedContract {
         tokenAddress[symbol] = tk;
         prefetchFeedData(udlFeed);
         emit CreateSymbol(tk, msg.sender);
+    }
+
+    function getOptionSymbol(
+        address udlFeed,
+        OptionType optType,
+        uint strike, 
+        uint maturity
+    )
+        public
+        view
+        returns (string memory symbol)
+    {    
+        symbol = string(abi.encodePacked(
+            UnderlyingFeed(udlFeed).symbol(),
+            "-",
+            "E",
+            optType == OptionType.CALL ? "C" : "P",
+            "-",
+            MoreMath.toString(strike),
+            "-",
+            MoreMath.toString(maturity)
+        ));
     }
 
     function writeOptions(
@@ -629,16 +654,12 @@ contract OptionsExchange is ManagedContract {
 
     function getOptionSymbol(OptionData memory opt) public view returns (string memory symbol) {    
 
-        symbol = string(abi.encodePacked(
-            UnderlyingFeed(opt.udlFeed).symbol(),
-            "-",
-            "E",
-            opt._type == OptionType.CALL ? "C" : "P",
-            "-",
-            MoreMath.toString(opt.strike),
-            "-",
-            MoreMath.toString(opt.maturity)
-        ));
+        symbol = getOptionSymbol(
+            opt.udlFeed,
+            opt._type,
+            opt.strike,
+            opt.maturity
+        );
     }
 
     function calcCollateral(
