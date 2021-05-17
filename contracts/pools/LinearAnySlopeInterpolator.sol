@@ -5,7 +5,6 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
-import "../interfaces/UnderlyingFeed.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
@@ -25,7 +24,7 @@ contract LinearAnySlopeInterpolator is ManagedContract {
     }
 
     function interpolate(
-        address udlFeed,
+        int udlPrice,
         uint32 t0,
         uint32 t1,
         uint120[] calldata x,
@@ -36,7 +35,7 @@ contract LinearAnySlopeInterpolator is ManagedContract {
         view
         returns (uint price)
     {
-        (uint j, uint xp) = findUdlPrice(udlFeed, x);
+        (uint j, uint xp) = findUdlPrice(udlPrice, x);
         uint _now = settings.exchangeTime();
         uint dt = uint(t1).sub(uint(t0));
         require(_now >= t0 && _now <= t1, "error interpolate: _now < t0 | _now > t1");
@@ -59,16 +58,13 @@ contract LinearAnySlopeInterpolator is ManagedContract {
     }
 
     function findUdlPrice(
-        address udlFeed,
+        int udlPrice,
         uint120[] memory x
     )
         private
-        view
+        pure
         returns (uint j, uint xp)
     {
-        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
-        (,int udlPrice) = feed.getLatestPrice();
-        
         xp = uint(udlPrice);
         while (x[j] < xp && j < x.length) {
             j++;
