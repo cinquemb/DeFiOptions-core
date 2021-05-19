@@ -62,11 +62,11 @@ contract OptionsExchange is ManagedContract {
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
     string private constant _name = "OptionsExchange";
-
+    
+    event RemovePoolSymbol(string symbolSuffix);
+    event WithdrawTokens(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
-    event RemovePoolSymbol(string symbolSuffix);
-
 
     event WriteOptions(
         address indexed token,
@@ -139,7 +139,7 @@ contract OptionsExchange is ManagedContract {
     )
         external
     {
-        ERC20(token).permit(msg.sender, address(this), value, deadline, v, r, s);
+        IERC20Permit(token).permit(msg.sender, address(this), value, deadline, v, r, s);
         depositTokens(to, token, value);
     }
 
@@ -195,6 +195,7 @@ contract OptionsExchange is ManagedContract {
         
         require(value <= calcSurplus(msg.sender), "insufficient surplus");
         creditProvider.withdrawTokens(msg.sender, value);
+        emit WithdrawTokens(msg.sender, value);
     }
 
     function createSymbol(string memory symbol, address udlFeed) public returns (address tk) {
@@ -255,6 +256,29 @@ contract OptionsExchange is ManagedContract {
         poolAddress[symbolSuffix] = address(0);
         Arrays.removeItem(poolSymbols, symbolSuffix);
         emit RemovePoolSymbol(symbolSuffix);
+
+    }
+    
+    function getOptionSymbol(
+        address udlFeed,
+        OptionType optType,
+        uint strike, 
+        uint maturity
+    )
+        public
+        view
+        returns (string memory symbol)
+    {    
+        symbol = string(abi.encodePacked(
+            UnderlyingFeed(udlFeed).symbol(),
+            "-",
+            "E",
+            optType == OptionType.CALL ? "C" : "P",
+            "-",
+            MoreMath.toString(strike),
+            "-",
+            MoreMath.toString(maturity)
+        ));
     }
 
     function writeOptions(
@@ -339,20 +363,6 @@ contract OptionsExchange is ManagedContract {
             return bal.sub(coll);
         }
         return 0;
-    }
-
-    /* 
-    NOTE: 
-        really not sure about cachicing collateral calcs, dont want stale values to be used for critical things 
-    */
-
-    function setCollateral(address owner) external {
-
-        collateral[owner] = calcCollateral(owner, true);
-    }
-
-    function getCachedCollateral(address owner) public view returns (uint) {
-        return collateral[owner];
     }
 
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
@@ -699,16 +709,12 @@ contract OptionsExchange is ManagedContract {
 
     function getOptionSymbol(OptionData memory opt) public view returns (string memory symbol) {    
 
-        symbol = string(abi.encodePacked(
-            UnderlyingFeed(opt.udlFeed).symbol(),
-            "-",
-            "E",
-            opt._type == OptionType.CALL ? "C" : "P",
-            "-",
-            MoreMath.toString(opt.strike),
-            "-",
-            MoreMath.toString(opt.maturity)
-        ));
+        symbol = getOptionSymbol(
+            opt.udlFeed,
+            opt._type,
+            opt.strike,
+            opt.maturity
+        );
     }
 
     function calcCollateral(

@@ -2,6 +2,8 @@ pragma solidity >=0.6.0;
 
 interface LiquidityPool {
 
+    enum Operation { NONE, BUY, SELL }
+
     event AddSymbol(string optSymbol);
     
     event RemoveSymbol(string optSymbol);
@@ -28,13 +30,15 @@ interface LiquidityPool {
 
     function depositTokens(address to, address token, uint value) external;
 
-    function listSymbols() external view returns (string memory);
+    function listSymbols() external view returns (string memory available);
 
     function queryBuy(string calldata optSymbol) external view returns (uint price, uint volume);
 
     function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
 
     function poolBalanceOf(address from) external view returns (uint balance);
+
+    function totalSupply() external view returns (uint);
 
     function buy(
         string calldata optSymbol,

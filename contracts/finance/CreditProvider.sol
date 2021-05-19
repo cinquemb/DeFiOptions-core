@@ -31,9 +31,9 @@ contract CreditProvider is ManagedContract {
     uint private _totalBalance;
     uint private _totalAccruedFees;
 
-    event DepositTokens(address indexed owner, address indexed token, uint value);
+    event DepositTokens(address indexed to, address indexed token, uint value);
 
-    event WithdrawTokens(address indexed owner, address indexed token, uint value);
+    event WithdrawTokens(address indexed from, address indexed token, uint value);
 
     event TransferBalance(address indexed from, address indexed to, uint value);
 
@@ -278,7 +278,7 @@ contract CreditProvider is ManagedContract {
         debtsDate[owner] = settings.exchangeTime();
     }
 
-    function transferTokens(address to, uint value) private returns (uint) {
+    function transferTokens(address to, uint value) private {
         
         require(to != address(this) && to != ctAddr, "invalid token transfer address");
 

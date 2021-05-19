@@ -11,6 +11,8 @@ const CreditProvider = artifacts.require("CreditProvider");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 const LinearLiquidityPool = artifacts.require("LinearLiquidityPool");
+const LinearInterpolator = artifacts.require("LinearInterpolator");
+const YieldTracker = artifacts.require("YieldTracker");
 
 module.exports = async function(deployer) {
 
@@ -30,6 +32,8 @@ module.exports = async function(deployer) {
   await deployer.deploy(OptionTokenFactory);
   await deployer.deploy(OptionsExchange);
   await deployer.deploy(LinearLiquidityPool);
+  await deployer.deploy(LinearInterpolator);
+  await deployer.deploy(YieldTracker);
 
   var d = await Deployer.deployed();
   
@@ -48,4 +52,6 @@ module.exports = async function(deployer) {
   d.setContractAddress("GovToken", GovToken.address);
   d.setContractAddress("ProtocolSettings", ProtocolSettings.address);
   d.setContractAddress("LinearLiquidityPool", LinearLiquidityPool.address);
+  d.setContractAddress("LinearInterpolator", LinearInterpolator.address);
+  d.setContractAddress("YieldTracker", YieldTracker.address);
 };

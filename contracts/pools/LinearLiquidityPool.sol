@@ -2,20 +2,20 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../finance/RedeemableToken.sol";
+import "../finance/OptionToken.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IInterpolator.sol";
+import "../interfaces/IYieldTracker.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SignedSafeMath.sol";
-import "../finance/OptionToken.sol";
 
 contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken {
 
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
-
-    enum Operation { BUY, SELL }
 
     struct PricingParameters {
         address udlFeed;
@@ -31,23 +31,23 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint120[] y;
     }
 
-    struct Deposit {
-        uint32 date;
-        uint balance;
-        uint value;
+    struct Range {
+        uint120 start;
+        uint120 end;
     }
 
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
-
-    mapping(string => PricingParameters) private parameters;
-
-    string private constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
-    string private constant _symbol_prefix = "LLPTK-";
-    string private _symbol;
+        
     string private _name;
+    string private _symbol;
+    string private constant _symbol_prefix = "LLPTK-";
+    string private constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
 
     address private owner;
+    address private trackerAddr;
+    address private interpolatorAddr;
+    
     uint private serial;
     uint private spread;
     uint private _maturity;
@@ -55,11 +55,11 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     uint private reserveRatio;
     uint private fractionBase;
     string[] private optSymbols;
-    Deposit[] private deposits;
 
     mapping(address => uint) private proposingId;
     mapping(uint => address) private proposalsMap;
     mapping(string => PricingParameters) private parameters;
+    mapping(string => mapping(uint => Range)) private ranges;
 
     constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
         ERC20(string(abi.encodePacked(_name_prefix, _name)))
@@ -74,6 +74,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        interpolatorAddr = deployer.getContractAddress("Interpolator");
+        trackerAddr = deployer.getContractAddress("YieldTracker");
         volumeBase = IOptionsExchange(exchangeAddr).volumeBase();
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         serial = 1;
@@ -86,6 +88,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     function symbol() override external view returns (string memory) {
 
         return string(abi.encodePacked(_symbol_prefix, _symbol));
+    }
+
+    function totalSupply() override external view returns (uint) {
+        return _totalSupply;
     }
 
     function setParameters(
@@ -116,27 +122,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
 
     function yield(uint dt) override external view returns (uint y) {
-        
-        y = fractionBase;
-
-        if (deposits.length > 0) {
-            
-            uint _now = settings.exchangeTime();
-            uint start = _now.sub(dt);
-            
-            uint i = 0;
-            for (i = 0; i < deposits.length; i++) {
-                if (deposits[i].date > start) {
-                    break;
-                }
-            }
-
-            for (; i <= deposits.length; i++) {
-                if (i > 0) {
-                    y = y.mul(calcYield(i, start)).div(fractionBase);
-                }
-            }
-        }
+        y = IYieldTracker(trackerAddr).yield(address(this), dt);
     }
 
     function addSymbol(
@@ -189,6 +175,13 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         emit AddSymbol(optSymbol);
     }
 
+    function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
+
+        ensureCaller();
+        ranges[optSymbol][uint(op)] = Range(start.toUint120(), end.toUint120());
+    }
+
+
     function removeSymbol(string calldata optSymbol) external {
         ensureCaller();
         require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy befor maturity");
@@ -211,7 +204,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         override
         external
     {
-        ERC20(token).permit(msg.sender, address(this), value, deadline, v, r, s);
+        IERC20Permit(token).permit(msg.sender, address(this), value, deadline, v, r, s);
         depositTokens(to, token, value);
     }
 
@@ -222,8 +215,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint b1 = IOptionsExchange(exchangeAddr).balanceOf(address(this));
         int po = IOptionsExchange(exchangeAddr).calcExpectedPayout(address(this));
         
-        deposits.push(
-            Deposit(settings.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0))
+        IYieldTracker(trackerAddr).push(
+            settings.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0)
         );
 
         uint ts = _totalSupply;
@@ -310,7 +303,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     }
     
     function buy(
-        string memory optSymbol,
+        string calldata optSymbol,
         uint price,
         uint volume,
         address token,
@@ -321,6 +314,15 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         bytes32 s
     )
         override
+        external
+        returns (address _tk)
+    {        
+        IERC20Permit(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
+        _tk = buy(optSymbol, price, volume, token);
+    }
+
+    function buy(string memory optSymbol, uint price, uint volume, address token)
+        override
         public
         returns (address _tk)
     {
@@ -328,7 +330,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         ensureValidSymbol(optSymbol);
 
         PricingParameters memory param = parameters[optSymbol];
-        price = receivePayment(param, price, volume, maxValue, token, deadline, v, r, s);
+
+        require(isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range");
+
+        price = receivePayment(param, price, volume, token);
 
         _tk = IOptionsExchange(exchangeAddr).resolveToken(optSymbol);
         OptionToken tk = OptionToken(_tk);
@@ -341,16 +346,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         }
 
         emit Buy(_tk, msg.sender, price, volume);
-    }
-
-    function buy(string calldata optSymbol, uint price, uint volume, address token)
-        override
-        external
-        returns (address _tk)
-    {
-        bytes32 x;
-        uint maxValue = price.mul(volume).div(volumeBase);
-        _tk = buy(optSymbol, price, volume, token, maxValue, 0, 0, x, x);
     }
 
     function sell(
@@ -369,6 +364,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         ensureValidSymbol(optSymbol);
 
         PricingParameters memory param = parameters[optSymbol];
+        
+        require(isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range");
+
         price = validatePrice(price, param, Operation.SELL);
 
         address _tk = IOptionsExchange(exchangeAddr).resolveToken(optSymbol);
@@ -401,16 +399,28 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         sell(optSymbol, price, volume, 0, 0, x, x);
     }
 
+    function isInRange(
+        string memory optSymbol,
+        Operation op,
+        address udlFeed
+    )
+        private
+        view
+        returns(bool)
+    {
+        Range memory r = ranges[optSymbol][uint(op)];
+        if (r.start == 0 && r.end == 0) {
+            return true;
+        }
+        int udlPrice = getUdlPrice(udlFeed);
+        return uint(udlPrice) >= r.start && uint(udlPrice) <= r.end;
+    }
+
     function receivePayment(
         PricingParameters memory param,
         uint price,
         uint volume,
-        uint maxValue,
-        address token,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        address token
     )
         private
         returns (uint)
@@ -420,9 +430,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
         if (token != exchangeAddr) {
             (uint tv, uint tb) = settings.getTokenRate(token);
-            if (deadline > 0) {
-                ERC20(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
-            }
             value = value.mul(tv).div(tb);
             depositTokensInExchange(token, value);
         } else {
@@ -477,78 +484,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         returns (uint price)
     {
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
-        
-        (uint j, uint xp) = findUdlPrice(p);
-        uint _now = settings.exchangeTime();
-        uint dt = uint(p.t1).sub(uint(p.t0));
-        require(_now >= p.t0 && _now <= p.t1, "calcOptPrice: _now < p.t0 | _now > p.t1");
-        
-        uint t = _now.sub(p.t0);
-        uint p0 = calcOptPriceAt(p, 0, j, xp);
-        uint p1 = calcOptPriceAt(p, p.x.length, j, xp);
-
-        uint dp0p1 = uint(MoreMath.abs(int(p0).sub(int(p1))));
-
-        if (p0 >= p1) {
-            price = p0.mul(dt).sub(
-                t.mul(dp0p1)
-            ).mul(f).div(fractionBase).div(dt);
-        } else {
-            price = p0.mul(dt).add(
-                t.mul(dp0p1)
-            ).mul(f).div(fractionBase).div(dt);
-        }
-    }
-
-    function findUdlPrice(PricingParameters memory p) private view returns (uint j, uint xp) {
-
-        UnderlyingFeed feed = UnderlyingFeed(p.udlFeed);
-        (,int udlPrice) = feed.getLatestPrice();
-        xp = uint(udlPrice);
-
-        while (p.x[j] < xp && j < p.x.length) {
-            j++;
-        }
-
-        require(j > 0 && j < p.x.length, "findUdlPrice: invalid pricing parameters");
-    }
-
-    function calcOptPriceAt(
-        PricingParameters memory p,
-        uint offset,
-        uint j,
-        uint xp
-    )
-        private
-        pure
-        returns (uint price)
-    {
-        uint k = offset.add(j);
-        require(k < p.y.length, "error calcOptPriceAt: k >= p.y.length");
-        int yA = int(p.y[k]);
-        int yB = int(p.y[k - 1]);
-        int xN = int(xp.sub(p.x[j - 1]));
-        int xD = int(p.x[j]).sub(int(p.x[j - 1]));
-
-        require(xD != 0, "error calcOptPriceAt: xD == 0");
-
-        (int y1, int y2) = (0, 0);
-        
-        if (yA >= yB) {
-            y1 = yA.sub(yB);
-            y2 = yB;
-        } else {
-            y1 = yB.sub(yA);
-            y2 = yA;
-        }
-
-        price = uint(
-            y1.mul(
-                xN
-            ).div(
-                xD
-            ).add(y2)
-        );
+        int udlPrice = getUdlPrice(p.udlFeed);
+        price = IInterpolator(interpolatorAddr).interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
     }
 
     function calcVolume(
@@ -615,25 +552,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         }
     }
 
-    function calcYield(uint index, uint start) private view returns (uint y) {
-
-        uint t0 = deposits[index - 1].date;
-        uint t1 = index < deposits.length ?
-            deposits[index].date : settings.exchangeTime();
-
-        int v0 = int(deposits[index - 1].value.add(deposits[index - 1].balance));
-        int v1 = index < deposits.length ? 
-            int(deposits[index].balance) :
-            IOptionsExchange(exchangeAddr).calcExpectedPayout(address(this)).add(int(IOptionsExchange(exchangeAddr).balanceOf(address(this))));
-
-        y = uint(v1.mul(int(fractionBase)).div(v0));
-        if (start > t0) {
-            y = MoreMath.powDecimal(
-                y, 
-                (t1.sub(start)).mul(fractionBase).div(t1.sub(t0)), 
-                fractionBase
-            );
-        }
+    function getUdlPrice(address udlFeed) private view returns (int udlPrice) {
+        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
+        (, udlPrice) = feed.getLatestPrice();
     }
 
     function depositTokensInExchange(address token, uint value) private {

@@ -76,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xf8029A99A8b8AD989C242E612Cffe4181f5CA73c',
+  "addr": '0xDf303c7b8845149895dc13B91E99B1E9243cA117',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -1242,7 +1242,7 @@ class Model:
         self.btcusd_data_init_bins = 30
         self.current_round_id = 30
         self.daily_vol_period = 30
-        self.prev_timestamp = 1621818691
+        self.prev_timestamp = 0
         self.daily_period = 60 * 60 * 24
         self.weekly_period = self.daily_period * 7
         self.days_per_year = 365
@@ -1711,9 +1711,9 @@ class Model:
             '''
             TODO:
                 Test later, since only book positions are pretty much have the pool as the owner for options issued
+            '''
             if len(any_short_collateral) > 0 and not self.has_tried_liquidating:
                 options.append('liquidate')
-            '''
 
             # liquidate expired positons
             if (len(any_short_collateral) > 0) or open_option_expired_tokens or (len(self.option_tokens_expired) > 0):
@@ -1970,10 +1970,16 @@ class Model:
 
                     try:
                         cc  = self.options_exchange.calc_collateral(a, self.btcusd_chainlink_feed.address, option_type, amount, strike_price, maturity)
-                    except:
+                        cc_s = self.options_exchange.calc_collateral_surplus(a, a)
+                    except Exception as inst:
+                        print(inst)
                         continue
-                    if(cc > exchange_bal):
-                        amount /= (cc.to_wei() / exchange_bal.to_wei())
+
+                    if cc_s < 1:
+                        continue
+
+                    if(cc > cc_s):
+                        amount /= (cc.to_wei() / cc_s.to_wei())
                         logger.info("Norm to Write; amount: {}".format(amount))
 
                     if amount < 1:
@@ -2084,18 +2090,21 @@ class Model:
                     try:
                         logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
-                        tx_hashes.append({'type': 'sell', 'hash': sell_hash})
+                        tx_hashes.append({'type': 'sell', 'hash': sell_hash, "volume": volume, "price": price, "symbol": symbol})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
                     for short_owner in any_short_collateral:
-                        for otk, otv in self.option_tokens.items():
-                            if otv[short_owner]:
-                                try:
-                                    lqd8_hash = self.options_exchange.liquidate(a, otk, short_owner.address)
-                                    tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
-                                except Exception as inst:
-                                    logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owner.address, "option_token": otk})
+                        if short_owner.total_written > 1: 
+                            for otk, otv in self.option_tokens.items():
+                                if otv.contract.caller({'from' : a.address, 'gas': 8000000}).writtenVolume(short_owner.address) > 0:
+                                    try:
+                                        lqd8_hash = self.options_exchange.liquidate(a, otk, short_owner.address)
+                                        tx_hashes.append({'type': 'liquidate', 'hash': lqd8_hash})
+                                    except Exception as inst:
+                                        logger.info({"agent": a.address, "error": inst, "action": "liquidate", "short_owner": short_owner.address, "option_token": otk})
+
+                    self.has_tried_liquidating = True
                 elif action == "liquidate_self":
                     for otk, otv in self.option_tokens_expired.items():
                         if otv[a] > 0:
@@ -2113,7 +2122,6 @@ class Model:
                             except Exception as inst:
                                 logger.info({"agent": a.address, "error": inst, "action": "liquidate_self", "short_owner": a.address, "option_token": otk})
 
-                    self.has_tried_liquidating = True
                 else:
                     raise RuntimeError("Bad action: " + action)
                     
@@ -2136,14 +2144,14 @@ class Model:
             receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency, timeout=600)
             tx_hashes_good += receipt["status"]
             if receipt["status"] == 0:
-                tx_fails.append(tmp_tx_hash['type'])
+                tx_fails.append(tmp_tx_hash)
             else:
-                tx_good.append(tmp_tx_hash['type'])
+                tx_good.append(tmp_tx_hash)
 
         #'''
 
         logger.info("total tx: {}, successful tx: {}, tx fails: {}, tx passed: {}".format(
-                len(tx_hashes), tx_hashes_good, json.dumps(list(set(tx_fails))), json.dumps(list(set(tx_good)))
+                len(tx_hashes), tx_hashes_good, tx_fails, tx_good
             )
         )
 
@@ -2263,7 +2271,7 @@ def main():
     '''
         SETUP PROTOCOL SETTINGS FOR POOL
     '''
-    skip = True
+    skip = False
 
     if not skip:
         mt_hash = transaction_helper(
@@ -2405,8 +2413,12 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        if ((i % 2) == 0) and (i != 0):
+        filtered_tx_passed = list(set([x['type'] for x in tx_passed]))
+
+        if len(filtered_tx_passed) == 1:
             provider.make_request("debug_increaseTime", [3600 * 24])
+        else:
+            provider.make_request("debug_increaseTime", [3600 * 6])
         #'''
         #sys.exit()
         

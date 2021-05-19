@@ -53,6 +53,10 @@ contract CreditToken is ManagedContract, ERC20 {
         return _symbol;
     }
 
+    function totalSupply() external view returns (uint) {
+        return _totalSupply;
+    }
+
     function issue(address to, uint value) public {
 
         require(msg.sender == issuer, "issuance unallowed");

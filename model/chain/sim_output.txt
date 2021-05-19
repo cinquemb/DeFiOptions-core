@@ -4,5 +4,7 @@
 - ~20 AnyTM options + lower pool reserve + No buys (0% pool reserve) (4) [Done - no credit tokens - debt created]
 - ~20 AnyTM options + lower pool reserve + No buys (0% pool reserve) + lower deposits by 2 orders of mag (5) [Done - no credit tokens - debt created]
 - 2018 top w/ 6 months EXP, ~20 AnyTM + lower pool reserve + No buys (0% pool reserve) + lower deposits by 2 orders of mag (6) [Done - no credit tokens - debt created]
+- 2018 top w/ 6 months EXP, ~20 AnyTM + lower pool reserve + No buys (0% pool reserve) + lower deposits by 2 orders of mag, #2 (7) [Done - no credit tokens - no debt created]
+- 2018 top w/ 6 months EXP, ~20 AnyTM + lower pool reserve + No buys (0% pool reserve) + lower deposits by 2 orders of mag, #3 (8) [Done - no credit tokens - debt created]
 
-- 2018 top w/ 6 months EXP, ~20 AnyTM + lower pool reserve + No sells (0% pool reserve) + lower deposits by 2 orders of mag (7) []
+- 2018 top w/ 6 months EXP, ~20 AnyTM + lower pool reserve + No buys (0% pool reserve) + lower deposits by 2 orders of mag, #4 (8)
