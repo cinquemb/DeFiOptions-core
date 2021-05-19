@@ -19,7 +19,7 @@ const YieldTracker = artifacts.require("YieldTracker");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x10035DBE8e79e57bAFf7596632597Bd69338FFE9");
+  await deployer.deploy(Deployer4, "0xaEcef7C63969026948F60BaE9db549Dc0E18ffeD");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);

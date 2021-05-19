@@ -76,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x6E3e776d2D2e9B5791A5EEF3457aC7aCAa30370a',
+  "addr": '0xDf303c7b8845149895dc13B91E99B1E9243cA117',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -2089,7 +2089,7 @@ class Model:
                     try:
                         logger.info("Before Sell; symbol: {}, price: {}, volume: {}".format(symbol, price, volume))
                         sell_hash = self.linear_liquidity_pool.sell(a, symbol, price, volume, option_token_to_sell)
-                        tx_hashes.append({'type': 'sell', 'hash': sell_hash})
+                        tx_hashes.append({'type': 'sell', 'hash': sell_hash, "volume": volume, "price": price, "symbol": symbol})
                     except Exception as inst:
                         logger.info({"agent": a.address, "error": inst, "action": "sell", "volume": volume, "price": price, "symbol": symbol})
                 elif action == "liquidate":
@@ -2143,14 +2143,14 @@ class Model:
             receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency, timeout=600)
             tx_hashes_good += receipt["status"]
             if receipt["status"] == 0:
-                tx_fails.append(tmp_tx_hash['type'])
+                tx_fails.append(tmp_tx_hash)
             else:
-                tx_good.append(tmp_tx_hash['type'])
+                tx_good.append(tmp_tx_hash)
 
         #'''
 
         logger.info("total tx: {}, successful tx: {}, tx fails: {}, tx passed: {}".format(
-                len(tx_hashes), tx_hashes_good, json.dumps(list(set(tx_fails))), json.dumps(list(set(tx_good)))
+                len(tx_hashes), tx_hashes_good, tx_fails, tx_good
             )
         )
 
@@ -2412,7 +2412,9 @@ def main():
         # Log system state
         model.log(stream, seleted_advancer, header=(i == 0))
 
-        if len(tx_passed) <= 1:
+        filtered_tx_passed = list(set([x['type'] for x in tx_passed]))
+
+        if len(filtered_tx_passed) == 1:
             provider.make_request("debug_increaseTime", [3600 * 24])
         else:
             provider.make_request("debug_increaseTime", [3600 * 6])
