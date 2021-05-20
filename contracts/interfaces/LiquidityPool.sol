@@ -2,8 +2,6 @@ pragma solidity >=0.6.0;
 
 interface LiquidityPool {
 
-    enum Operation { NONE, BUY, SELL }
-
     event AddSymbol(string optSymbol);
     
     event RemoveSymbol(string optSymbol);

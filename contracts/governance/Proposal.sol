@@ -61,7 +61,7 @@ abstract contract Proposal {
         closed = false;
     }
 
-    function getId() public view returns (uint) {
+    function getId() external view returns (uint) {
 
         return id;
     }
@@ -81,7 +81,7 @@ abstract contract Proposal {
         return status == Status.APPROVED && !closed;
     }
 
-    function isPoolSettingsAllowed() public view returns (bool) {
+    function isPoolSettingsAllowed() external view returns (bool) {
 
         return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
     }
@@ -96,7 +96,7 @@ abstract contract Proposal {
         return closed;
     }
 
-    function open(uint _id) public {
+    function open(uint _id) external {
 
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
             require(msg.sender == address(govToken)); 

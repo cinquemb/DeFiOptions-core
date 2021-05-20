@@ -1,14 +1,18 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../finance/RedeemableToken.sol";
+import "../deployment/ManagedContract.sol";
 import "../finance/OptionToken.sol";
-import "../governance/ProtocolSettings.sol";
+import "../finance/RedeemableToken.sol";
+import "../interfaces/IProposal.sol";
 import "../interfaces/LiquidityPool.sol";
-import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IInterpolator.sol";
 import "../interfaces/IYieldTracker.sol";
+import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../utils/SafeCast.sol";
+import "../utils/MoreMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken {
@@ -16,6 +20,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
+
+    enum Operation { NONE, BUY, SELL }
 
     struct PricingParameters {
         address udlFeed;
@@ -35,9 +41,6 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint120 start;
         uint120 end;
     }
-
-    ProtocolSettings private settings;
-    CreditProvider private creditProvider;
         
     string private _name;
     string private _symbol;
@@ -46,7 +49,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     address private owner;
     address private trackerAddr;
+    address private settingsAddr;
     address private interpolatorAddr;
+    address private creditProviderAddr;
     
     uint private serial;
     uint private spread;
@@ -72,8 +77,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         Deployer deployer = Deployer(_deployAddr);
         fractionBase = 1e9;
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        settingsAddr = deployer.getContractAddress("ProtocolSettings");
+        creditProviderAddr = deployer.getContractAddress("CreditProvider");
         interpolatorAddr = deployer.getContractAddress("Interpolator");
         trackerAddr = deployer.getContractAddress("YieldTracker");
         volumeBase = IOptionsExchange(exchangeAddr).volumeBase();
@@ -109,7 +114,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function redeemAllowed() override public view returns (bool) {
         
-        return settings.exchangeTime() >= _maturity;
+        return IProtocolSettings(settingsAddr).exchangeTime() >= _maturity;
     }
 
     function maturity() override external view returns (uint) {
@@ -146,7 +151,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         IOptionsExchange.OptionData memory opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
         string memory optSymbol = IOptionsExchange(exchangeAddr).getOptionSymbol(opt);
 
-        uint256 exchangeTime = settings.exchangeTime();
+        uint256 exchangeTime = IProtocolSettings(settingsAddr).exchangeTime();
 
         if (parameters[optSymbol].x.length == 0) {
             ensureOwner();
@@ -184,7 +189,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function removeSymbol(string calldata optSymbol) external {
         ensureCaller();
-        require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy befor maturity");
+        require(parameters[optSymbol].maturity >= IProtocolSettings(settingsAddr).exchangeTime(), "cannot destroy befor maturity");
         
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
@@ -216,7 +221,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         int po = IOptionsExchange(exchangeAddr).calcExpectedPayout(address(this));
         
         IYieldTracker(trackerAddr).push(
-            settings.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0)
+            IProtocolSettings(settingsAddr).exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0)
         );
 
         uint ts = _totalSupply;
@@ -244,7 +249,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     
     function listSymbols() override external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > settings.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity > IProtocolSettings(settingsAddr).exchangeTime()) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
@@ -252,7 +257,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
     function listExpiredSymbols() external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity < settings.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity < IProtocolSettings(settingsAddr).exchangeTime()) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
@@ -429,7 +434,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint value = price.mul(volume).div(volumeBase);
 
         if (token != exchangeAddr) {
-            (uint tv, uint tb) = settings.getTokenRate(token);
+            (uint tv, uint tb) = IProtocolSettings(settingsAddr).getTokenRate(token);
             value = value.mul(tv).div(tb);
             depositTokensInExchange(token, value);
         } else {
@@ -560,8 +565,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     function depositTokensInExchange(address token, uint value) private {
         
         ERC20 t = ERC20(token);
-        t.transferFrom(msg.sender, address(creditProvider), value);
-        creditProvider.addBalance(address(this), token, value);
+        t.transferFrom(msg.sender, creditProviderAddr, value);
+        ICreditProvider(creditProviderAddr).addBalance(address(this), token, value);
     }
 
     function ensureValidSymbol(string memory optSymbol) private view {
@@ -575,9 +580,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             "already proposed"
         );
 
-        Proposal p = Proposal(addr);
         id = serial++;
-        p.open(id);
+        IProposal(addr).open(id);
         proposalsMap[id] = addr;
         proposingId[addr] = id;
     }
@@ -585,7 +589,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     function ensureCaller() private view {
         if (owner != address(0)) {
             if (msg.sender != owner) {
-                Proposal p = Proposal(msg.sender);
+                IProposal p = IProposal(msg.sender);
                 require(proposalsMap[p.getId()] == msg.sender, "proposal not registered");
                 require(p.isPoolSettingsAllowed(), "not allowed");
             }
