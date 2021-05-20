@@ -147,7 +147,7 @@ contract ProtocolSettings is ManagedContract {
     function setDebtInterestRate(uint i, uint b) external {
         
         ensureWritePrivilege();
-        debtInterestRates[debtInterestRates.length - 1].date = exchangeTime();
+        debtInterestRates[debtInterestRates.length - 1].date = time.getNow();
         debtInterestRates.push(Rate(i, b, MAX_UINT));
     }
 
@@ -176,7 +176,7 @@ contract ProtocolSettings is ManagedContract {
     function setCreditInterestRate(uint i, uint b) external {
         
         ensureWritePrivilege();
-        creditInterestRates[creditInterestRates.length - 1].date = exchangeTime();
+        creditInterestRates[creditInterestRates.length - 1].date = time.getNow();
         creditInterestRates.push(Rate(i, b, MAX_UINT));
     }
 
@@ -220,7 +220,7 @@ contract ProtocolSettings is ManagedContract {
         
         do {
             r = getRate(rates, date);
-            uint dt = MoreMath.min(r.date, exchangeTime()).sub(date).div(1 hours);
+            uint dt = MoreMath.min(r.date, time.getNow()).sub(date).div(1 hours);
             if (dt > 0) {
                 value = MoreMath.powAndMultiply(r.value, r.base, dt, value);
                 date = r.date;
@@ -251,7 +251,7 @@ contract ProtocolSettings is ManagedContract {
         }
     }
 
-    function exchangeTime() public view returns (uint256) {
+    function exchangeTime() external view returns (uint256) {
         return time.getNow();
     }
 }
