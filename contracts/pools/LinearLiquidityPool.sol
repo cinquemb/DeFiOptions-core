@@ -21,6 +21,8 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     using SafeMath for uint;
     using SignedSafeMath for int;
 
+    enum Operation { NONE, BUY, SELL }
+
     struct PricingParameters {
         address udlFeed;
         IOptionsExchange.OptionType optType;
