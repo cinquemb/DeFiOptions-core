@@ -31,9 +31,17 @@ for sim_raw_file in out_put_files[-2:]:
 						temp_vol = int(tv.strip().replace(
 							"'volume': Balance(",
 						'').replace("'", "").replace("}]", "")) / 10.**18
+
+						temp_price = float(tp.strip().replace(
+							"'price': ",
+						'').replace("'", "").replace("}]", "")) / 10.**18
+
 	
 						if temp_sym not in sim_symbols_sold_map[sim_raw_file]['symbols']:
-							sim_symbols_sold_map[sim_raw_file]['symbols'][temp_sym] = True
+							sim_symbols_sold_map[sim_raw_file]['symbols'][temp_sym] = temp_vol * temp_price
+						else:
+							sim_symbols_sold_map[sim_raw_file]['symbols'][temp_sym] += temp_vol * temp_price
+
 
 						if '-EP-' in temp_sym:
 							sim_symbols_sold_map[sim_raw_file]['puts'] += temp_vol
