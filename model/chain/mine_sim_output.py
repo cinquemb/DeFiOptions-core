@@ -9,7 +9,7 @@ sim_symbols_sold_unver_map = {}
 
 
 for sim_raw_file in out_put_files[-2:]:
-	sim_symbols_sold_map[sim_raw_file] = {'calls': 0, 'puts': 0, 'symbols': {}}
+	sim_symbols_sold_map[sim_raw_file] = {'calls': 0, 'puts': 0, 'calls_value': 0, 'puts_value': 0, 'symbols': {}}
 	with open(base_sim_path+sim_raw_file, 'r+') as f:
 		i = 0
 		cached_symbols = []
@@ -45,12 +45,16 @@ for sim_raw_file in out_put_files[-2:]:
 
 						if '-EP-' in temp_sym:
 							sim_symbols_sold_map[sim_raw_file]['puts'] += temp_vol
+							sim_symbols_sold_map[sim_raw_file]['puts_value'] += temp_vol * temp_price
 
 						if '-EC-' in temp_sym:
 							sim_symbols_sold_map[sim_raw_file]['calls'] += temp_vol
+							sim_symbols_sold_map[sim_raw_file]['calls_value'] += temp_vol * temp_price
 			i+=1
 
 
 	print(sim_raw_file, 'total c/p: ', sim_symbols_sold_map[sim_raw_file]['calls'] / (sim_symbols_sold_map[sim_raw_file]['puts']))
+	print(sim_raw_file, 'total cv/pv: ', sim_symbols_sold_map[sim_raw_file]['calls_value'] / (sim_symbols_sold_map[sim_raw_file]['puts_value']))
+
 print('total: ' + json.dumps(sim_symbols_sold_map, indent=4))
 
