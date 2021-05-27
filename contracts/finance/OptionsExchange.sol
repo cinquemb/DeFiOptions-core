@@ -589,9 +589,19 @@ contract OptionsExchange is ManagedContract {
     {
         FeedData memory fd = feeds[opt.udlFeed];
 
+
         uint volume = calcLiquidationVolume(owner, opt, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
+
+        /* TODO:
+            should be incentivized, i.e. compound gives 5% of collateral to liquidator 
+            could be done in multistep where 
+                - the first time triggers a margin call event for the owner (how to incentivize? 5% in credit tokens?)
+                - sencond step triggers the actual liquidation (incentivized, 5% of collateral liquidated)
+        */
+
+        
         creditProvider.processPayment(owner, address(tk), value);
 
         if (volume > 0) {
