@@ -61,6 +61,7 @@ contract Base {
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
         // todo: need to fix this for new initialization
         pool = LinearLiquidityPool(deployer.getContractAddress("LinearLiquidityPool"));
+        erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
 
         pool.setParameters(
             spread,
@@ -68,7 +69,6 @@ contract Base {
             90 days
         );
 
-        erc20 = new ERC20Mock();
         settings.setOwner(address(this));
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
@@ -128,5 +128,10 @@ contract Base {
             strike,
             maturity
         );
+    }
+
+    function createPoolTrader(address stablecoinAddr) internal returns (PoolTrader) {
+
+        return new PoolTrader(stablecoinAddr, address(exchange), address(pool), address(feed));  
     }
 }
