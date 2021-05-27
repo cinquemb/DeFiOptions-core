@@ -9,7 +9,7 @@ const CreditProvider = artifacts.require("CreditProvider");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
-const LinearLiquidityPool = artifacts.require("LinearLiquidityPool");
+const LinearLiquidityPoolFactory = artifacts.require("LinearLiquidityPoolFactory");
 const LinearAnySlopeInterpolator = artifacts.require("LinearAnySlopeInterpolator");
 
 const MockChainLinkFeed = artifacts.require("ChainlinkFeed");
@@ -36,13 +36,8 @@ module.exports = async function(deployer) {
   const otf = await deployer.deploy(OptionTokenFactory);
   const exchange = await deployer.deploy(OptionsExchange);
   console.log("exchange is at: "+ exchange.address);
-  /*
-    TODO:
-      NEED TO DEPLOY POOL FACTORY
-  */
-  const pool = await deployer.deploy(LinearLiquidityPool);
-
-  console.log("pool is at: "+ pool.address);
+  const poolFactory = await deployer.deploy(LinearLiquidityPoolFactory);
+  console.log("poolFactory is at: "+ poolFactory.address);
 
 
   const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
@@ -83,7 +78,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("OptionTokenFactory", otf.address);
   await deployer4.setContractAddress("GovToken", gt.address);
   await deployer4.setContractAddress("ProtocolSettings", settings.address);
-  await deployer4.setContractAddress("LinearLiquidityPool", pool.address);
+  await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);
   await deployer4.setContractAddress("YieldTracker", yt.address);
 
@@ -97,6 +92,6 @@ module.exports = async function(deployer) {
   console.log("CreditProviderAddress is at: "+ CreditProviderAddress);
   const OptionsExchangeAddress = await deployer4.getContractAddress("OptionsExchange");
   console.log("OptionsExchangeAddress is at: "+ OptionsExchangeAddress);
-  const LinearLiquidityPoolAddress = await deployer4.getContractAddress("LinearLiquidityPool");
-  console.log("LinearLiquidityPoolAddress is at: "+ LinearLiquidityPoolAddress);
+  const LinearLiquidityPoolFactoryAddress = await deployer4.getContractAddress("LinearLiquidityPoolFactory");
+  console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
 };

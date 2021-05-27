@@ -28,6 +28,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         IOptionsExchange.OptionType optType;
         uint120 strike;
         uint32 maturity;
+        uint256 lastUpdateTime;
         uint32 t0;
         uint32 t1;
         uint120 buyStock;
@@ -40,9 +41,11 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         uint120 start;
         uint120 end;
     }
-
-    string private constant _symbol = "LLPTK";
-    string private constant _name = "Linear Liquidity Pool Redeemable Token";
+        
+    string private _name;
+    string private _symbol;
+    string private constant _symbol_prefix = "LLPTK-";
+    string private constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
 
     address private owner;
     address private trackerAddr;
@@ -63,30 +66,33 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    constructor() ERC20(_name) public {}
+    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
+        ERC20(string(abi.encodePacked(_name_prefix, _name)))
+        public
+    {    
+        _symbol = _sb;
+        _name = _nm;
+        owner = _ownerAddr;
 
-    function initialize(Deployer deployer) override internal {
-
-        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
-
-        owner = deployer.getOwner();
+        Deployer deployer = Deployer(_deployAddr);
+        fractionBase = 1e9;
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         settingsAddr = deployer.getContractAddress("ProtocolSettings");
         creditProviderAddr = deployer.getContractAddress("CreditProvider");
         interpolatorAddr = deployer.getContractAddress("Interpolator");
         trackerAddr = deployer.getContractAddress("YieldTracker");
-
         volumeBase = IOptionsExchange(exchangeAddr).volumeBase();
-        fractionBase = 1e9;
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         serial = 1;
     }
 
     function name() override external view returns (string memory) {
-        return _name;
+        return string(abi.encodePacked(_name_prefix, _name));
     }
 
     function symbol() override external view returns (string memory) {
-        return _symbol;
+
+        return string(abi.encodePacked(_symbol_prefix, _symbol));
     }
 
     function totalSupply() override external view returns (uint) {
@@ -116,6 +122,10 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         return _maturity;
     }
 
+    function getOwner() override external view returns (address) {
+        return owner;
+    }
+
     function yield(uint dt) override external view returns (uint y) {
         y = IYieldTracker(trackerAddr).yield(address(this), dt);
     }
@@ -141,12 +151,14 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         IOptionsExchange.OptionData memory opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
         string memory optSymbol = IOptionsExchange(exchangeAddr).getOptionSymbol(opt);
 
+        uint256 exchangeTime = IProtocolSettings(settingsAddr).exchangeTime();
+
         if (parameters[optSymbol].x.length == 0) {
             ensureOwner();
             optSymbols.push(optSymbol);
         } else {
             if (msg.sender != owner) {
-                require(parameters[optSymbol].t1 < IProtocolSettings(settingsAddr).exchangeTime(), "must be after t1");
+                require(parameters[optSymbol].t1 < exchangeTime, "must be after t1");
             }
         }
 
@@ -155,6 +167,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             optType,
             strike.toUint120(),
             _mt.toUint32(),
+            uint(exchangeTime),
             t0.toUint32(),
             t1.toUint32(),
             buyStock.toUint120(),
@@ -174,8 +187,9 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
 
 
     function removeSymbol(string calldata optSymbol) external {
-        // need addtional check so it can only be done after opex and token no longer exists?
         ensureCaller();
+        require(parameters[optSymbol].maturity >= IProtocolSettings(settingsAddr).exchangeTime(), "cannot destroy befor maturity");
+        
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
         Arrays.removeItem(optSymbols, optSymbol);

@@ -81,9 +81,9 @@ USDT = {
   "symbol": 'USDT',
 }
 
-LLP = {
+LLPF = {
     "addr": '',
-    "deploy_slug": "LinearLiquidityPoolAddress is at: "
+    "deploy_slug": "LinearLiquidityPoolFactoryAddress is at: "
 }
 
 BTCUSDAgg = {
@@ -100,7 +100,7 @@ BTCUSDc = {
     "deploy_slug": "BTCUSDMockFeed is at: "
 }
 
-for contract in [BTCUSDc, BTCUSDAgg, LLP, STG, CREDPRO, EXCHG, TPRO]:
+for contract in [BTCUSDc, BTCUSDAgg, LLPF, STG, CREDPRO, EXCHG, TPRO]:
     logger.info(contract["deploy_slug"])
     contract["addr"] = deploy_data.split(contract["deploy_slug"])[1].split('\n')[0]
     logger.info('\t'+contract["addr"])
@@ -121,6 +121,7 @@ USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read(
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
 LinearLiquidityPoolContract = json.loads(open('./build/contracts/LinearLiquidityPool.json', 'r+').read())
+LinearLiquidityPoolFactoryContract = json.loads(open('./build/contracts/LinearLiquidityPoolFactory.json', 'r+').read())
 ERC20StableCoinContract = json.loads(open('./build/contracts/ERC20.json', 'r+').read())
 TimeProviderMockContract = json.loads(open('./build/contracts/TimeProviderMock.json', 'r+').read())
 
@@ -2178,7 +2179,7 @@ def main():
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
-    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract['abi'], address=LLP["addr"])
+    linear_liquidity_pool_factory = w3.eth.contract(abi=LinearLiquidityPoolFactoryContract['abi'], address=LLPF["addr"])
     protocol_settings = w3.eth.contract(abi=ProtocolSettingsContract['abi'], address=STG['addr'])
     btcusd_chainlink_feed = w3.eth.contract(abi=ChainlinkFeedContract['abi'], address=BTCUSDc['addr'])
     btcusd_agg = w3.eth.contract(abi=AggregatorV3MockContract['abi'], address=BTCUSDAgg["addr"])
@@ -2252,6 +2253,29 @@ def main():
 
     # temp opx, llp, agent
     opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
+    agent = Agent(None, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
+    p_hash = transaction_helper(
+        agent,
+        opx.functions.createPool(
+            "DEFAULT",
+            "TEST",
+        ),
+        8000000
+    )
+    tmp_tx_hash = {'type': 'setParameters', 'hash': sp_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    '''
+        TODO: NEED TO GET POOL ADDR AFTER CREATION FROM FACTORY
+    '''
+    linear_liquidity_pool_address = ''
+    linear_liquidity_pool
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
+
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
 

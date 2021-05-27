@@ -6,6 +6,8 @@ import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/LiquidityPool.sol";
+
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
@@ -14,6 +16,7 @@ import "../utils/SignedSafeMath.sol";
 import "./CreditProvider.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
+import "../pools/LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ManagedContract {
 
@@ -37,7 +40,8 @@ contract OptionsExchange is ManagedContract {
     
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
-    OptionTokenFactory private factory;
+    OptionTokenFactory private optionTokenFactory;
+    LinearLiquidityPoolFactory private poolFactory;
 
     
     mapping(address => uint) public collateral;
@@ -45,6 +49,7 @@ contract OptionsExchange is ManagedContract {
     mapping(address => FeedData) private feeds;
     mapping(address => address[]) private book;
 
+    mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
     mapping(address => uint) public nonces;
     
@@ -52,13 +57,15 @@ contract OptionsExchange is ManagedContract {
     uint private timeBase;
     uint private sqrtTimeBase;
 
+    string[] private poolSymbols;
     bytes32 public DOMAIN_SEPARATOR;
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
     string private constant _name = "OptionsExchange";
-
+    
+    event RemovePoolSymbol(string symbolSuffix);
     event WithdrawTokens(address indexed from, uint value);
-
+    event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
 
     event WriteOptions(
@@ -104,7 +111,8 @@ contract OptionsExchange is ManagedContract {
         DOMAIN_SEPARATOR = OptionsExchange(getImplementation()).DOMAIN_SEPARATOR();
         creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        factory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
+        optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
+        poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
 
         _volumeBase = 1e18;
         timeBase = 1e18;
@@ -193,12 +201,64 @@ contract OptionsExchange is ManagedContract {
     function createSymbol(string memory symbol, address udlFeed) public returns (address tk) {
 
         require(tokenAddress[symbol] == address(0), "already created");
-        tk = factory.create(symbol, udlFeed);
+        tk = optionTokenFactory.create(symbol, udlFeed);
         tokenAddress[symbol] = tk;
         prefetchFeedData(udlFeed);
         emit CreateSymbol(tk, msg.sender);
     }
 
+    function createPool(string memory nameSuffix, string memory symbolSuffix) public returns (address pool) {
+
+        require(poolAddress[symbolSuffix] == address(0), "already created");
+        pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender);
+        poolAddress[symbolSuffix] = pool;
+        creditProvider.insertPoolCaller(pool);
+
+        poolSymbols.push(symbolSuffix);
+        emit CreatePool(pool, msg.sender);
+    }
+
+    function listPoolSymbols() external view returns (string memory available) {
+        for (uint i = 0; i < poolSymbols.length; i++) {
+            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            if (llp.maturity() > settings.exchangeTime()) {
+                available = listPoolSymbolHelper(available, poolSymbols[i]);
+            }
+        }
+    }
+
+    function listExpiredPoolSymbols() external view returns (string memory available) {
+        for (uint i = 0; i < poolSymbols.length; i++) {
+            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            if (llp.maturity() < settings.exchangeTime()) {
+                available = listPoolSymbolHelper(available, poolSymbols[i]);
+            }
+        }
+    }
+
+    function listPoolSymbolHelper(string memory buffer, string memory poolSymbol) internal pure returns (string memory) {
+        if (bytes(buffer).length == 0) {
+            buffer = poolSymbol;
+        } else {
+            buffer = string(abi.encodePacked(buffer, "\n", poolSymbol));
+        }
+
+        return buffer;
+    }
+
+    function removePoolSymbol(string calldata symbolSuffix) external {
+        require(poolAddress[symbolSuffix] != address(0), "pool does not exist");
+
+        LiquidityPool llp = LiquidityPool(poolAddress[symbolSuffix]);
+        require(llp.getOwner() == msg.sender, "not owner");
+        require(llp.maturity() >= settings.exchangeTime(), "cannot remove before maturity");
+        
+        poolAddress[symbolSuffix] = address(0);
+        Arrays.removeItem(poolSymbols, symbolSuffix);
+        emit RemovePoolSymbol(symbolSuffix);
+
+    }
+    
     function getOptionSymbol(
         address udlFeed,
         OptionType optType,
@@ -295,11 +355,6 @@ contract OptionsExchange is ManagedContract {
         value = liquidateOptions(owner, opt, tk, isExpired, iv);
     }
 
-    function calcDebt(address owner) external view returns (uint debt) {
-
-        debt = creditProvider.calcDebt(owner);
-    }
-    
     function calcSurplus(address owner) public view returns (uint) {
         
         uint coll = calcCollateral(owner, true);

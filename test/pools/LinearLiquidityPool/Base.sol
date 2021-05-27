@@ -59,8 +59,7 @@ contract Base {
         feed = EthFeedMock(deployer.getContractAddress("UnderlyingFeed"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        // todo: need to fix this for new initialization
-        pool = LinearLiquidityPool(deployer.getContractAddress("LinearLiquidityPool"));
+        pool = exchange.createPool("DEFAULT", "TEST");
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
 
         pool.setParameters(
