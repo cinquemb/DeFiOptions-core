@@ -1,6 +1,8 @@
 pragma solidity >=0.6.0;
 
 import "../interfaces/AggregatorV3Interface.sol";
+import '../interfaces/IDEXOracleV1.sol';
+
 
 contract DEXAggregatorV1 is AggregatorV3Interface {
 
