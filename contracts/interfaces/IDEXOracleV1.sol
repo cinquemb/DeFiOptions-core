@@ -19,11 +19,12 @@ pragma experimental ABIEncoderV2;
 
 import "../utils/Decimal.sol";
 
-contract IOracle {
+contract IDEXOracleV1 {
     function setup() public;
     function capture() public returns (int256, bool);
     function pair() external view returns (address);
     function liveReserve() external view returns (uint256);
     function latestPrice() public view returns (int256 memory);
     function latestValid() public view returns (bool);
+    function latestCapture() public view returns (uint256);
 }

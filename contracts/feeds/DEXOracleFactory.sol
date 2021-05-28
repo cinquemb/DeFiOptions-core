@@ -8,20 +8,20 @@ import "../feeds/DEXAggregatorV1.sol";
 
 contract DEXOracleFactory is ManagedContract {
 
-    address private deployerAddress;
+    address private exchangeAddr;
 
     function initialize(Deployer deployer) override internal {
         deployerAddress = address(deployer);
     }
+    
     /*TODO 
-    	need to pass the needed dex information so that different dex can be used
+    	need to pass the needed dex information so that different dex can be used, assumes UniswapV2Type
     */
 
+    function create(address underlying, address stable, address dexTokenPair) external returns (address, address) {
 
-    function create(address tokenPairAddress) external returns (address) {
-
-    	address oracleAddr = address(new DEXOracleV1(tokenPairAddress));
-    	address feedAddr = address(new DEXAggregatorV1(oracleAddr));
-        return oracleAddr;
+    	address oracleAddr = address(new DEXOracleV1(deployerAddress, underlying, stable, dexTokenPair));
+    	address aggAddr = address(new DEXAggregatorV1(oracleAddr));
+        return (oracleAddr, aggAddr);
     }
 }

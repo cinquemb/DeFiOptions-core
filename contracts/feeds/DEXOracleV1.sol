@@ -29,12 +29,15 @@ contract DEXOracleV1 is IDEXOracleV1 {
 
     address internal _pairAddr;
     address internal _exchange;
+    address internal _settings;
     address internal _underlying;
     address internal _stablecoin;
 
     uint256 internal _index;
     uint256 internal _reserve;
     uint256 internal _cumulative;
+    uint256 internal _lastCapture;
+    uint256 internal _twapPeriod = 60 * 60 * 24; // 1 day
 
     bool private _latestValid;
     bool internal _initialized;
@@ -43,25 +46,23 @@ contract DEXOracleV1 is IDEXOracleV1 {
     int256 private _latestPrice;
     IPangolinPair internal _pair;
 
-    /*TODO:
-        NEED TO HARD CODE TWAP TIME  AND KEEP TRACK OF LAST TIME SUCCESFUL CAPTURE HAPPENED
-    */
+    constructor (address _deployAddr, address underlying, address stable, address dexTokenPair) public {
 
+        Deployer deployer = Deployer(_deployAddr);
 
-    constructor (address exchange, address underlying, address stable, address dexTokenPair) public {
-        _exchange = exchange;
+        _exchange = deployer.getContractAddress("OptionsExchange");
+        _settings = deployer.getContractAddress("ProtocolSettings");
         _underlying = underlying;
         _stablecoin = stable;
         _pairAddr = dexTokenPair;
+
+        (uint r, uint b) = IProtocolSettings(_settings).getTokenRate(_stablecoin);
+        require(r != 0 && b != 0, "DEXOracleV1: token not allowed");
         
         _pair = IPangolinPair(_pairAddr);
         (address token0, address token1) = (_pair.token0(), _pair.token1());
         _index = _underlying == token0 ? 0 : 1;
         require(_index == 0 || _underlying == token1, "DEXOracleV1: Underlying not found");
-
-        /*TODO:
-            NEED TO CHECK THAT _stablecoin is in the approved stablecoins used on exchange 
-        */
     }
 
     /**
@@ -72,10 +73,18 @@ contract DEXOracleV1 is IDEXOracleV1 {
      *        (2) First reported value
      */
     function capture() public onlyExchange returns (int256, bool) {
+        uint256 currentTime = IProtocolSettings(_settings).exchangeTime();
+
+        if (_lastCapture != 0) {
+            require(currentTime.sub(_lastCapture) >= _twapPeriod, "DEXOracleV1: too soon");
+        }
+
         if (_initialized) {
+            _lastCapture = currentTime;
             return updateOracle();
         } else {
             initializeOracle();
+            _lastCapture = currentTime;
             return updateOracle();
         }
     }
@@ -152,6 +161,10 @@ contract DEXOracleV1 is IDEXOracleV1 {
 
     function latestValid() public view returns (bool) {
         return _latestValid;
+    }
+
+    function latestCapture() public view returns (uint256) {
+        return _lastCapture;
     }
 
     modifier onlyExchange() {

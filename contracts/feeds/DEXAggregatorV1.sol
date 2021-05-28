@@ -12,6 +12,17 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
+    addresss _dexOracle;
+
+
+    constructor(
+        address dexOracle,
+    )
+        public
+    {
+        _dexOracle = dexOracle;
+    }
+
     function decimals() override external view returns (uint8) {
 
         return 8;
@@ -25,40 +36,18 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
 
     }
 
-    /*
-
-    TODO: These need to be internal methods, called thru the exchange with the proper token pair arg
-
-    function setRoundIds(uint[] calldata rids) external {
-        for (uint i = 0; i < rids.length; i++) {
-            rounds[rids[i]] = i;
-        }
-
-        latestRound = rids[ rids.length - 1];
-    }
-
     function appendRoundId(uint rid) external {
         rounds[rid] = answers.length;
         latestRound = rid;
     }
 
-    function setAnswers(int[] calldata ans) external {
-        answers = ans;
-    }
-
-    function appendAnswer(int ans) external {
-        answers.push(ans);
-    }
-
-    function setUpdatedAts(uint[] calldata uts) external {
-        updatedAts = uts;
+    function appendAnswer() external {
+        answers.push(IDEXOracleV1(_dexOracle).latestPrice());
     }
 
     function appendUpdatedAt(uint ut) external {
-        updatedAts.push(ut);
+        updatedAts.push(IDEXOracleV1(_dexOracle).latestCapture());
     }
-
-    */
 
     function getRoundData(uint80 _roundId)
         override
