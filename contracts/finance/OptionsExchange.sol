@@ -16,6 +16,7 @@ import "../utils/SignedSafeMath.sol";
 import "./CreditProvider.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
+import "../feeds/DEXOracleFactory.sol";
 import "../pools/LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ManagedContract {
@@ -40,24 +41,27 @@ contract OptionsExchange is ManagedContract {
     
     ProtocolSettings private settings;
     CreditProvider private creditProvider;
+    DEXOracleFactory private oracleFactory;
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
 
-    
+    mapping(address => uint) public nonces;
     mapping(address => uint) public collateral;
+    
     mapping(address => OptionData) private options;
     mapping(address => FeedData) private feeds;
     mapping(address => address[]) private book;
 
     mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
-    mapping(address => uint) public nonces;
+    mapping(address => string) private dexOracleAddress;
     
-    uint private _volumeBase;
     uint private timeBase;
+    uint private _volumeBase;
     uint private sqrtTimeBase;
 
     string[] private poolSymbols;
+    address[] private dexOracleAddress;
     bytes32 public DOMAIN_SEPARATOR;
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
@@ -67,6 +71,8 @@ contract OptionsExchange is ManagedContract {
     event WithdrawTokens(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
+    event CreateDexOracle(address indexed oracle, address indexed oracleAgg, address indexed sender);
+
 
     event WriteOptions(
         address indexed token,
@@ -216,6 +222,16 @@ contract OptionsExchange is ManagedContract {
 
         poolSymbols.push(symbolSuffix);
         emit CreatePool(pool, msg.sender);
+    }
+
+    function createDexOracle(address underlying, address stable, address dexTokenPair) public returns (address pool) {
+        bytes32 memory dexTokenPairStr = bytes32((dexOracleAddress[dexTokenPair]);
+        require(dexTokenPairStr.length == 0, "already created");
+        (oracleAddr, aggAddr) = oracleFactory.create(underlying, stable, dexTokenPair);
+        dexOracleAddress[dexTokenPair] = pool;// TODO: GET TOKEN PAIR NAME
+
+        dexOracleAddresses.push(dexTokenPair);
+        emit CreateDexOracle(oracleAddr, aggAddr, msg.sender);
     }
 
     function listPoolSymbols() external view returns (string memory available) {

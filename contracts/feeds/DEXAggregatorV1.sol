@@ -36,17 +36,28 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
 
     }
 
-    function appendRoundId(uint rid) external {
-        rounds[rid] = answers.length;
-        latestRound = rid;
+    function incrementRound() external {
+        appendUpdatedAt();
+        appendAnswer();
+        appendRoundId();
     }
 
-    function appendAnswer() external {
+    function appendRoundId() internal {
+        if (answers.length > 1) {
+            rounds[latestRound++] = answers.length;
+        } else {
+            rounds[latestRound] = answers.length;
+        }
+    }
+
+    function appendAnswer() internal {
         answers.push(IDEXOracleV1(_dexOracle).latestPrice());
     }
 
-    function appendUpdatedAt(uint ut) external {
-        updatedAts.push(IDEXOracleV1(_dexOracle).latestCapture());
+    function appendUpdatedAt() internal {
+        uint256 ct = DEXOracleV1(_dexOracle).latestCapture();
+        require(ct != updatedAts[updatedAts.length-1], "DEXAggregatorV1: too soon");
+        updatedAts.push(ct);
     }
 
     function getRoundData(uint80 _roundId)
