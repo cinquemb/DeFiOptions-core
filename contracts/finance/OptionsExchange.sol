@@ -147,6 +147,9 @@ contract OptionsExchange is ManagedContract {
 
         ERC20 t = ERC20(token);
         t.transferFrom(msg.sender, address(creditProvider), value);
+        /* TODO:
+            Would need to check if k upper currently has a modified factor, and only credit `value / k_upper_dynamic` such that debt will still exist for any given adress while total sb can go back to being >= total credit balance
+        */
         creditProvider.addBalance(to, token, value);
     }
 
