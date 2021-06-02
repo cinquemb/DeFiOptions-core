@@ -15,11 +15,7 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     addresss _dexOracle;
 
 
-    constructor(
-        address dexOracle,
-    )
-        public
-    {
+    constructor(address dexOracle) public {
         _dexOracle = dexOracle;
     }
 
