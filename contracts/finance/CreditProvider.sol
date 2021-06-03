@@ -189,7 +189,7 @@ contract CreditProvider is ManagedContract {
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
 
-            if (balances[owner] > 0) {
+            if (balances[owner] == 0) {
                 _totalOwners = _totalOwners.add(1);
             }
 
