@@ -151,14 +151,12 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
         IOptionsExchange.OptionData memory opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
         string memory optSymbol = IOptionsExchange(exchangeAddr).getOptionSymbol(opt);
 
-        uint256 exchangeTime = IProtocolSettings(settingsAddr).exchangeTime();
-
         if (parameters[optSymbol].x.length == 0) {
             ensureOwner();
             optSymbols.push(optSymbol);
         } else {
             if (msg.sender != owner) {
-                require(parameters[optSymbol].t1 < exchangeTime, "must be after t1");
+                require(parameters[optSymbol].t1 < IProtocolSettings(settingsAddr).exchangeTime(), "must be after t1");
             }
         }
 
@@ -167,7 +165,7 @@ contract LinearLiquidityPool is LiquidityPool, ManagedContract, RedeemableToken 
             optType,
             strike.toUint120(),
             _mt.toUint32(),
-            uint(exchangeTime),
+            uint(IProtocolSettings(settingsAddr).exchangeTime()),
             t0.toUint32(),
             t1.toUint32(),
             buyStock.toUint120(),

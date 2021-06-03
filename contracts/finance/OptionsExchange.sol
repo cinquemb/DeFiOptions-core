@@ -146,16 +146,42 @@ contract OptionsExchange is ManagedContract {
     function depositTokens(address to, address token, uint value) public {
 
         ERC20 t = ERC20(token);
+        int excessCollateral = collateralSkew();
         t.transferFrom(msg.sender, address(creditProvider), value);
-        /* TODO:
-            Would need to check if k upper currently has a modified factor, and only credit `value / k_upper_dynamic` such that debt will still exist for any given adress while total sb can go back to being >= total credit balance
-        */
-        creditProvider.addBalance(to, token, value);
+
+        /* 
+            if shortage:
+                deduct from creditited value;
+            if excesss
+                add to credited value;
+        */        
+        
+        uint creditingValue = uint(int(value).sub(excessCollateral));
+        creditProvider.addBalance(to, token, creditingValue);
     }
 
     function balanceOf(address owner) external view returns (uint) {
 
         return creditProvider.balanceOf(owner);
+    }
+
+    function collateralSkew() public view returns (int) {
+        /*
+            This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account 
+                OR
+            split any excess stablecoin balance (due to more collected from debt than debt outstanding) to discount any new deposits()
+        */
+        int totalStableCoinBalance = int(creditProvider.totalTokenStock()); // stable coin balance
+        int totalCreditBalance = int(creditProvider.getTotalBalance()); // credit balance
+        int totalOwners = int(creditProvider.getTotalOwners()).add(1);
+        int skew = totalCreditBalance.sub(totalStableCoinBalance);
+
+        // try to split between (total unique non zero balances on exchange / 2) if short stable coins
+        if (totalCreditBalance >= totalStableCoinBalance) {
+            return skew.div(totalOwners).mul(2);
+        } else {
+            return skew.div(totalOwners);
+        }   
     }
 
     function transferBalance(
@@ -394,6 +420,9 @@ contract OptionsExchange is ManagedContract {
                 )
             ).add(int(calcCollateral(feeds[opt.udlFeed].upperVol, written, opt)));
         }
+
+        // add split excess (could raise or lower collateral requirements)
+        coll = coll.add(collateralSkew());
 
         coll = coll.div(int(_volumeBase));
 

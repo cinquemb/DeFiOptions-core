@@ -28,6 +28,7 @@ contract CreditProvider is ManagedContract {
 
     address private ctAddr;
     uint private _totalDebt;
+    uint private _totalOwners;
     uint private _totalBalance;
     uint private _totalAccruedFees;
 
@@ -187,6 +188,11 @@ contract CreditProvider is ManagedContract {
 
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
+
+            if (balances[owner] > 0) {
+                _totalOwners = _totalOwners.add(1);
+            }
+
             balances[owner] = balances[owner].add(v);
             _totalBalance =_totalBalance.add(v);
         }
@@ -225,6 +231,14 @@ contract CreditProvider is ManagedContract {
         if (value > 0) {
             _totalBalance = _totalBalance.sub(value);
         } 
+
+        if (_totalOwners > 0 && balances[owner] == 0) {
+            _totalOwners = _totalOwners.sub(1);
+        }
+    }
+
+    function getTotalOwners() public view returns (uint) {
+        return _totalOwners;
     }
 
     function getTotalBalance() public view returns (uint) {
