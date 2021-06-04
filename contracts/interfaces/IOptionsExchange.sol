@@ -11,6 +11,11 @@ interface IOptionsExchange {
         uint32 maturity;
     }
 
+    struct FeedData {
+        uint120 lowerVol;
+        uint120 upperVol;
+    }
+
     function volumeBase() external view returns (uint);
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
