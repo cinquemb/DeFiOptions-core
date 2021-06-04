@@ -6,6 +6,7 @@ const GovToken = artifacts.require("GovToken");
 
 const CreditToken = artifacts.require("CreditToken");
 const CreditProvider = artifacts.require("CreditProvider");
+const CollateralManager = artifacts.require("CollateralManager");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
@@ -38,6 +39,8 @@ module.exports = async function(deployer) {
   console.log("exchange is at: "+ exchange.address);
   const poolFactory = await deployer.deploy(LinearLiquidityPoolFactory);
   console.log("poolFactory is at: "+ poolFactory.address);
+
+  const collateralManager = await deployer.deploy(CollateralManager);
 
 
   const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
@@ -74,6 +77,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
   await deployer4.addAlias("CreditIssuer", "CreditProvider");
   await deployer4.setContractAddress("CreditToken", ct.address);
+  await deployer4.setContractAddress("CollateralManager", collateralManager.address);
   await deployer4.setContractAddress("OptionsExchange", exchange.address);
   await deployer4.setContractAddress("OptionTokenFactory", otf.address);
   await deployer4.setContractAddress("GovToken", gt.address);

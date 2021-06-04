@@ -20,8 +20,15 @@ interface IOptionsExchange {
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
     function resolveToken(string calldata symbol) external view returns (address);
+    function getExchangeFeeds(address udlFeed) external view returns (FeedData memory);
+    function getFeedData(address udlFeed) external view returns (FeedData memory fd);
+    function getBook(address owner) external view returns (string memory symbols, address[] memory tokens, uint[] memory holding, uint[] memory written, int[] memory iv);
+    function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory);
     function calcExpectedPayout(address owner) external view returns (int payout);
     function calcIntrinsicValue(address udlFeed, OptionType optType, uint strike, uint maturity) external view returns (int);
+    function calcIntrinsicValue(OptionData calldata opt) external view returns (int value);
+    function getUdlNow(OptionData calldata opt) external view returns (uint timestamp);
+    function getUdlPrice(IOptionsExchange.OptionData calldata opt) external view returns (int answer);
     function calcCollateral(address owner, bool is_regular) external view returns (uint);
     function calcCollateral(address udlFeed, uint volume, OptionType optType, uint strike,  uint maturity) external view returns (uint);
     function writeOptions(address udlFeed, uint volume, OptionType optType, uint strike,  uint maturity, address to) external returns (address _tk);

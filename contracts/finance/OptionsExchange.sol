@@ -7,6 +7,8 @@ import "../governance/ProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/LiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/ICollateralManager.sol";
 
 import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
@@ -24,29 +26,15 @@ contract OptionsExchange is ManagedContract {
     using SafeMath for uint;
     using SignedSafeMath for int;
     
-    enum OptionType { CALL, PUT }
-    
-    struct OptionData {
-        address udlFeed;
-        OptionType _type;
-        uint120 strike;
-        uint32 maturity;
-    }
-
-    struct FeedData {
-        uint120 lowerVol;
-        uint120 upperVol;
-    }
-    
     ProtocolSettings private settings;
     ICreditProvider private creditProvider;
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
-
+    ICollateralManager private collateralManager;
     
     mapping(address => uint) public collateral;
-    mapping(address => OptionData) private options;
-    mapping(address => FeedData) private feeds;
+    mapping(address => IOptionsExchange.OptionData) private options;
+    mapping(address => IOptionsExchange.FeedData) private feeds;
     mapping(address => address[]) private book;
 
     mapping(string => address) private poolAddress;
@@ -113,6 +101,7 @@ contract OptionsExchange is ManagedContract {
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
+        collateralManager = ICollateralManager(deployer.getContractAddress("CollateralManager"));
 
         _volumeBase = 1e18;
         timeBase = 1e18;
@@ -120,7 +109,6 @@ contract OptionsExchange is ManagedContract {
     }
     
     function name() external pure returns (string memory) {
-
         return _name;
     }
 
@@ -146,7 +134,7 @@ contract OptionsExchange is ManagedContract {
     function depositTokens(address to, address token, uint value) public {
 
         ERC20 t = ERC20(token);
-        int excessCollateral = collateralSkew();
+        int excessCollateral = collateralManager.collateralSkew();
         t.transferFrom(msg.sender, address(creditProvider), value);
 
         /* 
@@ -163,27 +151,6 @@ contract OptionsExchange is ManagedContract {
     function balanceOf(address owner) external view returns (uint) {
 
         return creditProvider.balanceOf(owner);
-    }
-
-    function collateralSkew() public view returns (int) {
-        /*
-            This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account 
-                OR
-            split any excess stablecoin balance (due to more collected from debt than debt outstanding) to discount any new deposits()
-
-            TODO: Combine multiple getters to save gas?
-        */
-        int totalStableCoinBalance = int(creditProvider.totalTokenStock()); // stable coin balance
-        int totalCreditBalance = int(creditProvider.getTotalBalance()); // credit balance
-        int totalOwners = int(creditProvider.getTotalOwners()).add(1);
-        int skew = totalCreditBalance.sub(totalStableCoinBalance);
-
-        // try to split between (total unique non zero balances on exchange / 2) if short stable coins
-        if (totalCreditBalance >= totalStableCoinBalance) {
-            return skew.div(totalOwners).mul(2);
-        } else {
-            return skew.div(totalOwners);
-        }   
     }
 
     function transferBalance(
@@ -292,7 +259,7 @@ contract OptionsExchange is ManagedContract {
     
     function getOptionSymbol(
         address udlFeed,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity
     )
@@ -304,7 +271,7 @@ contract OptionsExchange is ManagedContract {
             UnderlyingFeed(udlFeed).symbol(),
             "-",
             "E",
-            optType == OptionType.CALL ? "C" : "P",
+            optType == IOptionsExchange.OptionType.CALL ? "C" : "P",
             "-",
             MoreMath.toString(strike),
             "-",
@@ -315,7 +282,7 @@ contract OptionsExchange is ManagedContract {
     function writeOptions(
         address udlFeed,
         uint volume,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity,
         address to
@@ -356,16 +323,16 @@ contract OptionsExchange is ManagedContract {
         }
         uint coll = collateral[owner];
         collateral[owner] = coll.sub(
-            MoreMath.min(coll, calcCollateral(options[_tk], volume))
+            MoreMath.min(coll, collateralManager.calcCollateral(options[_tk], volume))
         );
     }
 
     function liquidateExpired(address _tk, address[] calldata owners) external {
 
-        OptionData memory opt = options[_tk];
+        IOptionsExchange.OptionData memory opt = options[_tk];
         OptionToken tk = OptionToken(_tk);
         require(getUdlNow(opt) >= opt.maturity, "option not expired");
-        uint iv = uint(calcIntrinsicValue(opt));
+        uint iv = uint(collateralManager.calcIntrinsicValue(opt));
 
         for (uint i = 0; i < owners.length; i++) {
             liquidateOptions(owners[i], opt, tk, true, iv);
@@ -374,21 +341,21 @@ contract OptionsExchange is ManagedContract {
 
     function liquidateOptions(address _tk, address owner) public returns (uint value) {
         
-        OptionData memory opt = options[_tk];
+        IOptionsExchange.OptionData memory opt = options[_tk];
         require(opt.udlFeed != address(0), "invalid token");
 
         OptionToken tk = OptionToken(_tk);
         require(tk.writtenVolume(owner) > 0, "invalid owner");
 
         bool isExpired = getUdlNow(opt) >= opt.maturity;
-        uint iv = uint(calcIntrinsicValue(opt));
+        uint iv = uint(collateralManager.calcIntrinsicValue(opt));
         
         value = liquidateOptions(owner, opt, tk, isExpired, iv);
     }
 
     function calcSurplus(address owner) public view returns (uint) {
         
-        uint coll = calcCollateral(owner, true);
+        uint coll = collateralManager.calcCollateral(owner, true);
         uint bal = creditProvider.balanceOf(owner);
         if (bal >= coll) {
             return bal.sub(coll);
@@ -397,50 +364,13 @@ contract OptionsExchange is ManagedContract {
     }
 
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
-        
-        int coll;
-        address[] memory _book = book[owner];
-
-        for (uint i = 0; i < _book.length; i++) {
-
-            address _tk = _book[i];
-            OptionToken tk = OptionToken(_tk);
-            OptionData memory opt = options[_tk];
-
-            uint written = tk.writtenVolume(owner);
-            uint holding = tk.balanceOf(owner);
-
-            if (is_regular == false) {
-                if (written > holding) {
-                    continue;
-                }
-            }
-
-            coll = coll.add(
-                calcIntrinsicValue(opt).mul(
-                    int(written).sub(int(holding))
-                )
-            ).add(int(calcCollateral(feeds[opt.udlFeed].upperVol, written, opt)));
-        }
-
-        // add split excess (could raise or lower collateral requirements)
-        coll = coll.add(collateralSkew());
-
-        coll = coll.div(int(_volumeBase));
-
-        if (is_regular == false) {
-            return uint(coll);
-        }
-
-        if (coll < 0)
-            return 0;
-        return uint(coll);
+        return collateralManager.calcCollateral(owner, is_regular);
     }
 
     function calcCollateral(
         address udlFeed,
         uint volume,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity
     )
@@ -448,35 +378,17 @@ contract OptionsExchange is ManagedContract {
         view
         returns (uint)
     {
-        (OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
-        return calcCollateral(opt, volume);
+        (IOptionsExchange.OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
+        return collateralManager.calcCollateral(opt, volume);
     }
 
     function calcExpectedPayout(address owner) external view returns (int payout) {
-
-        address[] memory _book = book[owner];
-
-        for (uint i = 0; i < _book.length; i++) {
-
-            OptionToken tk = OptionToken(_book[i]);
-            OptionData memory opt = options[_book[i]];
-
-            uint written = tk.writtenVolume(owner);
-            uint holding = tk.balanceOf(owner);
-
-            payout = payout.add(
-                calcIntrinsicValue(opt).mul(
-                    int(holding).sub(int(written))
-                )
-            );
-        }
-
-        payout = payout.div(int(_volumeBase));
+        payout = collateralManager.calcExpectedPayout(owner);
     }
 
     function calcIntrinsicValue(
         address udlFeed,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity
     )
@@ -484,8 +396,8 @@ contract OptionsExchange is ManagedContract {
         view
         returns (int)
     {
-        (OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
-        return calcIntrinsicValue(opt);
+        (IOptionsExchange.OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
+        return collateralManager.calcIntrinsicValue(opt);
     }
 
     function getUnderlyingPrice(string calldata symbol) external view returns (int) {
@@ -507,6 +419,14 @@ contract OptionsExchange is ManagedContract {
         feeds[udlFeed] = getFeedData(udlFeed);
     }
 
+    function getExchangeFeeds(address udlFeed) external view returns (IOptionsExchange.FeedData memory) {
+        return feeds[udlFeed];
+    }
+
+    function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory) {
+        return options[tkAddr];
+    }
+
     function getBook(address owner)
         external view
         returns (
@@ -524,7 +444,7 @@ contract OptionsExchange is ManagedContract {
 
         for (uint i = 0; i < tokens.length; i++) {
             OptionToken tk = OptionToken(tokens[i]);
-            OptionData memory opt = options[tokens[i]];
+            IOptionsExchange.OptionData memory opt = options[tokens[i]];
             if (i == 0) {
                 symbols = getOptionSymbol(opt);
             } else {
@@ -532,7 +452,7 @@ contract OptionsExchange is ManagedContract {
             }
             holding[i] = tk.balanceOf(owner);
             written[i] = tk.writtenVolume(owner);
-            iv[i] = calcIntrinsicValue(opt);
+            iv[i] = collateralManager.calcIntrinsicValue(opt);
         }
     }
 
@@ -571,7 +491,7 @@ contract OptionsExchange is ManagedContract {
     function writeOptionsInternal(
         address udlFeed,
         uint volume,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity,
         address to
@@ -583,7 +503,7 @@ contract OptionsExchange is ManagedContract {
         require(volume > 0, "invalid volume");
         require(maturity > settings.exchangeTime(), "invalid maturity");
 
-        (OptionData memory opt, string memory symbol) =
+        (IOptionsExchange.OptionData memory opt, string memory symbol) =
             createOptionInMemory(udlFeed, optType, strike, maturity);
 
         _tk = tokenAddress[symbol];
@@ -605,7 +525,7 @@ contract OptionsExchange is ManagedContract {
         }
         
         collateral[msg.sender] = collateral[msg.sender].add(
-            calcCollateral(opt, volume)
+            collateralManager.calcCollateral(opt, volume)
         );
 
         emit WriteOptions(_tk, msg.sender, to, volume);
@@ -613,21 +533,21 @@ contract OptionsExchange is ManagedContract {
 
     function createOptionInMemory(
         address udlFeed,
-        OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity
     )
         private
         view
-        returns (OptionData memory opt, string memory symbol)
+        returns (IOptionsExchange.OptionData memory opt, string memory symbol)
     {
-        opt = OptionData(udlFeed, optType, strike.toUint120(), maturity.toUint32());
+        opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), maturity.toUint32());
         symbol = getOptionSymbol(opt);
     }
 
     function liquidateOptions(
         address owner,
-        OptionData memory opt,
+        IOptionsExchange.OptionData memory opt,
         OptionToken tk,
         bool isExpired,
         uint iv
@@ -668,7 +588,7 @@ contract OptionsExchange is ManagedContract {
 
     function liquidateBeforeMaturity(
         address owner,
-        OptionData memory opt,
+        IOptionsExchange.OptionData memory opt,
         OptionToken tk,
         uint written,
         uint iv
@@ -676,11 +596,11 @@ contract OptionsExchange is ManagedContract {
         private
         returns (uint value)
     {
-        FeedData memory fd = feeds[opt.udlFeed];
+        IOptionsExchange.FeedData memory fd = feeds[opt.udlFeed];
 
 
-        uint volume = calcLiquidationVolume(owner, opt, fd, written);
-        value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
+        uint volume = collateralManager.calcLiquidationVolume(owner, opt, fd, written);
+        value = collateralManager.calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
 
         /* TODO:
@@ -700,58 +620,19 @@ contract OptionsExchange is ManagedContract {
         emit LiquidateEarly(address(tk), msg.sender, owner, volume);
     }
 
-    function calcLiquidationVolume(
-        address owner,
-        OptionData memory opt,
-        FeedData memory fd,
-        uint written
-    )
-        private
-        view
-        returns (uint volume)
-    {    
-        uint bal = creditProvider.balanceOf(owner);
-        uint coll = calcCollateral(owner, true);
-        require(coll > bal, "unfit for liquidation");
-
-        volume = coll.sub(bal).mul(_volumeBase).mul(written).div(
-            calcCollateral(
-                uint(fd.upperVol).sub(uint(fd.lowerVol)),
-                written,
-                opt
-            )
-        );
-
-        volume = MoreMath.min(volume, written);
-    }
-
-    function calcLiquidationValue(
-        OptionData memory opt,
-        uint vol,
-        uint written,
-        uint volume,
-        uint iv
-    )
-        private
-        view
-        returns (uint value)
-    {    
-        value = calcCollateral(vol, written, opt).add(iv).mul(volume).div(written);
-    }
-
-    function getFeedData(address udlFeed) private view returns (FeedData memory fd) {
+    function getFeedData(address udlFeed) public view returns (IOptionsExchange.FeedData memory fd) {
         
         UnderlyingFeed feed = UnderlyingFeed(udlFeed);
 
         uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
 
-        fd = FeedData(
+        fd = IOptionsExchange.FeedData(
             feed.calcLowerVolatility(uint(vol)).toUint120(),
             feed.calcUpperVolatility(uint(vol)).toUint120()
         );
     }
 
-    function getOptionSymbol(OptionData memory opt) public view returns (string memory symbol) {    
+    function getOptionSymbol(IOptionsExchange.OptionData memory opt) public view returns (string memory symbol) {    
 
         symbol = getOptionSymbol(
             opt.udlFeed,
@@ -761,56 +642,7 @@ contract OptionsExchange is ManagedContract {
         );
     }
 
-    function calcCollateral(
-        OptionData memory opt,
-        uint volume
-    )
-        private
-        view
-        returns (uint)
-    {
-        FeedData memory fd = feeds[opt.udlFeed];
-        if (fd.lowerVol == 0 || fd.upperVol == 0) {
-            fd = getFeedData(opt.udlFeed);
-        }
-
-        int coll = calcIntrinsicValue(opt).mul(int(volume)).add(
-            int(calcCollateral(fd.upperVol, volume, opt))
-        ).div(int(_volumeBase));
-
-        return coll > 0 ? uint(coll) : 0;
-    }
-    
-    function calcCollateral(uint vol, uint volume, OptionData memory opt) private view returns (uint) {
-        
-        return (vol.mul(volume).mul(
-            MoreMath.sqrt(daysToMaturity(opt)))
-        ).div(sqrtTimeBase);
-    }
-    
-    function calcIntrinsicValue(OptionData memory opt) private view returns (int value) {
-        
-        int udlPrice = getUdlPrice(opt);
-        int strike = int(opt.strike);
-
-        if (opt._type == OptionType.CALL) {
-            value = MoreMath.max(0, udlPrice.sub(strike));
-        } else if (opt._type == OptionType.PUT) {
-            value = MoreMath.max(0, strike.sub(udlPrice));
-        }
-    }
-    
-    function daysToMaturity(OptionData memory opt) private view returns (uint d) {
-        
-        uint _now = getUdlNow(opt);
-        if (opt.maturity > _now) {
-            d = (timeBase.mul(uint(opt.maturity).sub(uint(_now)))).div(1 days);
-        } else {
-            d = 0;
-        }
-    }
-
-    function getUdlPrice(OptionData memory opt) private view returns (int answer) {
+    function getUdlPrice(IOptionsExchange.OptionData memory opt) internal view returns (int answer) {
 
         if (opt.maturity > settings.exchangeTime()) {
             (,answer) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
@@ -819,7 +651,7 @@ contract OptionsExchange is ManagedContract {
         }
     }
 
-    function getUdlNow(OptionData memory opt) private view returns (uint timestamp) {
+    function getUdlNow(IOptionsExchange.OptionData memory opt) public view returns (uint timestamp) {
 
         (timestamp,) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
     }
