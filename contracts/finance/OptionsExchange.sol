@@ -4,16 +4,16 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
-import "../utils/ERC20.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/LiquidityPool.sol";
+import "../interfaces/ICreditProvider.sol";
 
+import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
-import "./CreditProvider.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
 import "../pools/LinearLiquidityPoolFactory.sol";
@@ -39,7 +39,7 @@ contract OptionsExchange is ManagedContract {
     }
     
     ProtocolSettings private settings;
-    CreditProvider private creditProvider;
+    ICreditProvider private creditProvider;
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
 
@@ -109,7 +109,7 @@ contract OptionsExchange is ManagedContract {
     function initialize(Deployer deployer) override internal {
 
         DOMAIN_SEPARATOR = OptionsExchange(getImplementation()).DOMAIN_SEPARATOR();
-        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
@@ -170,6 +170,8 @@ contract OptionsExchange is ManagedContract {
             This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account 
                 OR
             split any excess stablecoin balance (due to more collected from debt than debt outstanding) to discount any new deposits()
+
+            TODO: Combine multiple getters to save gas?
         */
         int totalStableCoinBalance = int(creditProvider.totalTokenStock()); // stable coin balance
         int totalCreditBalance = int(creditProvider.getTotalBalance()); // credit balance
@@ -820,5 +822,37 @@ contract OptionsExchange is ManagedContract {
     function getUdlNow(OptionData memory opt) private view returns (uint timestamp) {
 
         (timestamp,) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
+    }
+
+    function prefetchSample(address udlFeed) incentivized external {
+        UnderlyingFeed(udlFeed).prefetchSample();
+    }
+
+    function pprefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
+        UnderlyingFeed(udlFeed).prefetchDailyPrice(roundId);
+    }
+
+    function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
+        UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
+    }
+
+    modifier incentivized() {
+        uint256 startGas = gasleft();
+
+        _;
+        
+        uint256 gasUsed = startGas - gasleft();
+        address[] memory tokens = settings.getAllowedTokens();
+
+        /* TODO:
+            use gas price oracle to multiply current gas price by gas used, convert to $, debit exchange balance
+        */
+
+        uint256 creditingValue = 0e18;
+        
+        if (tokens.length > 0) {
+            creditProvider.addBalance(msg.sender, tokens[0], creditingValue);
+        }
+        
     }
 }

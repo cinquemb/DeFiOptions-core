@@ -13,4 +13,10 @@ interface UnderlyingFeed {
     function calcLowerVolatility(uint vol) external view returns (uint lowerVol);
 
     function calcUpperVolatility(uint vol) external view returns (uint upperVol);
+
+    function prefetchSample() external;
+
+    function prefetchDailyPrice(uint roundId) external;
+
+    function prefetchDailyVolatility(uint timespan) external;
 }
