@@ -63,20 +63,6 @@ contract OptionsExchange is ManagedContract {
         uint volume
     );
 
-    event LiquidateEarly(
-        address indexed token,
-        address indexed sender,
-        address indexed onwer,
-        uint volume
-    );
-
-    event LiquidateExpired(
-        address indexed token,
-        address indexed sender,
-        address indexed onwer,
-        uint volume
-    );
-
     constructor() public {
 
         uint chainId;
@@ -328,29 +314,11 @@ contract OptionsExchange is ManagedContract {
     }
 
     function liquidateExpired(address _tk, address[] calldata owners) external {
-
-        IOptionsExchange.OptionData memory opt = options[_tk];
-        OptionToken tk = OptionToken(_tk);
-        require(getUdlNow(opt) >= opt.maturity, "option not expired");
-        uint iv = uint(collateralManager.calcIntrinsicValue(opt));
-
-        for (uint i = 0; i < owners.length; i++) {
-            liquidateOptions(owners[i], opt, tk, true, iv);
-        }
+        collateralManager.liquidateExpired(_tk, owners);
     }
 
     function liquidateOptions(address _tk, address owner) public returns (uint value) {
-        
-        IOptionsExchange.OptionData memory opt = options[_tk];
-        require(opt.udlFeed != address(0), "invalid token");
-
-        OptionToken tk = OptionToken(_tk);
-        require(tk.writtenVolume(owner) > 0, "invalid owner");
-
-        bool isExpired = getUdlNow(opt) >= opt.maturity;
-        uint iv = uint(collateralManager.calcIntrinsicValue(opt));
-        
-        value = liquidateOptions(owner, opt, tk, isExpired, iv);
+        value = collateralManager.liquidateOptions(_tk, owner);
     }
 
     function calcSurplus(address owner) public view returns (uint) {
@@ -545,81 +513,6 @@ contract OptionsExchange is ManagedContract {
         symbol = getOptionSymbol(opt);
     }
 
-    function liquidateOptions(
-        address owner,
-        IOptionsExchange.OptionData memory opt,
-        OptionToken tk,
-        bool isExpired,
-        uint iv
-    )
-        private
-        returns (uint value)
-    {
-        uint written = tk.writtenVolume(owner);
-        iv = iv.mul(written);
-
-        if (isExpired) {
-            value = liquidateAfterMaturity(owner, tk, written, iv);
-            emit LiquidateExpired(address(tk), msg.sender, owner, written);
-        } else {
-            require(written > 0, "invalid volume");
-            value = liquidateBeforeMaturity(owner, opt, tk, written, iv);
-        }
-    }
-
-    function liquidateAfterMaturity(
-        address owner,
-        OptionToken tk,
-        uint written,
-        uint iv
-    )
-        private
-        returns (uint value)
-    {
-        if (iv > 0) {
-            value = iv.div(_volumeBase);
-            creditProvider.processPayment(owner, address(tk), value);
-        }
-
-        if (written > 0) {
-            tk.burn(owner, written);
-        }
-    }
-
-    function liquidateBeforeMaturity(
-        address owner,
-        IOptionsExchange.OptionData memory opt,
-        OptionToken tk,
-        uint written,
-        uint iv
-    )
-        private
-        returns (uint value)
-    {
-        IOptionsExchange.FeedData memory fd = feeds[opt.udlFeed];
-
-
-        uint volume = collateralManager.calcLiquidationVolume(owner, opt, fd, written);
-        value = collateralManager.calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
-            .div(_volumeBase);
-
-        /* TODO:
-            should be incentivized, i.e. compound gives 5% of collateral to liquidator 
-            could be done in multistep where 
-                - the first time triggers a margin call event for the owner (how to incentivize? 5% in credit tokens?)
-                - sencond step triggers the actual liquidation (incentivized, 5% of collateral liquidated)
-        */
-
-        
-        creditProvider.processPayment(owner, address(tk), value);
-
-        if (volume > 0) {
-            tk.burn(owner, volume);
-        }
-
-        emit LiquidateEarly(address(tk), msg.sender, owner, volume);
-    }
-
     function getFeedData(address udlFeed) public view returns (IOptionsExchange.FeedData memory fd) {
         
         UnderlyingFeed feed = UnderlyingFeed(udlFeed);
@@ -649,11 +542,6 @@ contract OptionsExchange is ManagedContract {
         } else {
             (,answer) = UnderlyingFeed(opt.udlFeed).getPrice(opt.maturity);
         }
-    }
-
-    function getUdlNow(IOptionsExchange.OptionData memory opt) public view returns (uint timestamp) {
-
-        (timestamp,) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
     }
 
     function prefetchSample(address udlFeed) incentivized external {

@@ -9,6 +9,7 @@ import "../interfaces/LiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../utils/SafeCast.sol";
+import "./OptionToken.sol";
 
 contract CollateralManager is ManagedContract {
 
@@ -23,6 +24,20 @@ contract CollateralManager is ManagedContract {
     uint private _volumeBase;
     uint private timeBase;
     uint private sqrtTimeBase;
+
+    event LiquidateEarly(
+        address indexed token,
+        address indexed sender,
+        address indexed onwer,
+        uint volume
+    );
+
+    event LiquidateExpired(
+        address indexed token,
+        address indexed sender,
+        address indexed onwer,
+        uint volume
+    );
 
     function initialize(Deployer deployer) override internal {
 
@@ -114,12 +129,12 @@ contract CollateralManager is ManagedContract {
         IOptionsExchange.FeedData memory fd,
         uint written
     )
-        public
+        private
         view
         returns (uint volume)
     {    
         uint bal = creditProvider.balanceOf(owner);
-        uint coll = exchange.calcCollateral(owner, true);
+        uint coll = calcCollateral(owner, true);
         require(coll > bal, "unfit for liquidation");
 
         volume = coll.sub(bal).mul(_volumeBase).mul(written).div(
@@ -140,7 +155,7 @@ contract CollateralManager is ManagedContract {
         uint volume,
         uint iv
     )
-        public
+        private
         view
         returns (uint value)
     {    
@@ -186,13 +201,117 @@ contract CollateralManager is ManagedContract {
         ).div(sqrtTimeBase);
     }
 
-    function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {
+    function liquidateExpired(address _tk, address[] calldata owners) external {
+
+        IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
+        OptionToken tk = OptionToken(_tk);
+        require(getUdlNow(opt) >= opt.maturity, "option not expired");
+        uint iv = uint(calcIntrinsicValue(opt));
+
+        for (uint i = 0; i < owners.length; i++) {
+            liquidateOptions(owners[i], opt, tk, true, iv);
+        }
+    }
+
+    function liquidateOptions(address _tk, address owner) external returns (uint value) {
         
-        uint _now = exchange.getUdlNow(opt);
+        IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
+        require(opt.udlFeed != address(0), "invalid token");
+
+        OptionToken tk = OptionToken(_tk);
+        require(tk.writtenVolume(owner) > 0, "invalid owner");
+
+        bool isExpired = getUdlNow(opt) >= opt.maturity;
+        uint iv = uint(calcIntrinsicValue(opt));
+        
+        value = liquidateOptions(owner, opt, tk, isExpired, iv);
+    }
+
+    function liquidateOptions(
+        address owner,
+        IOptionsExchange.OptionData memory opt,
+        OptionToken tk,
+        bool isExpired,
+        uint iv
+    )
+        private
+        returns (uint value)
+    {
+        uint written = tk.writtenVolume(owner);
+        iv = iv.mul(written);
+
+        if (isExpired) {
+            value = liquidateAfterMaturity(owner, tk, written, iv);
+            emit LiquidateExpired(address(tk), msg.sender, owner, written);
+        } else {
+            require(written > 0, "invalid volume");
+            value = liquidateBeforeMaturity(owner, opt, tk, written, iv);
+        }
+    }
+
+    function liquidateAfterMaturity(
+        address owner,
+        OptionToken tk,
+        uint written,
+        uint iv
+    )
+        private
+        returns (uint value)
+    {
+        if (iv > 0) {
+            value = iv.div(_volumeBase);
+            creditProvider.processPayment(owner, address(tk), value);
+        }
+
+        if (written > 0) {
+            tk.burn(owner, written);
+        }
+    }
+
+    function liquidateBeforeMaturity(
+        address owner,
+        IOptionsExchange.OptionData memory opt,
+        OptionToken tk,
+        uint written,
+        uint iv
+    )
+        private
+        returns (uint value)
+    {
+        IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
+
+
+        uint volume = calcLiquidationVolume(owner, opt, fd, written);
+        value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
+            .div(_volumeBase);
+
+        /* TODO:
+            should be incentivized, i.e. compound gives 5% of collateral to liquidator 
+            could be done in multistep where 
+                - the first time triggers a margin call event for the owner (how to incentivize? 5% in credit tokens?)
+                - sencond step triggers the actual liquidation (incentivized, 5% of collateral liquidated)
+        */
+
+        
+        creditProvider.processPayment(owner, address(tk), value);
+
+        if (volume > 0) {
+            tk.burn(owner, volume);
+        }
+
+        emit LiquidateEarly(address(tk), msg.sender, owner, volume);
+    }
+
+    function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {
+        uint _now = getUdlNow(opt);
         if (opt.maturity > _now) {
             d = (timeBase.mul(uint(opt.maturity).sub(uint(_now)))).div(1 days);
         } else {
             d = 0;
         }
+    }
+
+    function getUdlNow(IOptionsExchange.OptionData memory opt) private view returns (uint timestamp) {
+        (timestamp,) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
     }
 }
