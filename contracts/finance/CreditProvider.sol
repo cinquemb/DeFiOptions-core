@@ -28,6 +28,7 @@ contract CreditProvider is ManagedContract {
 
     address private ctAddr;
     uint private _totalDebt;
+    uint private _totalOwners;
     uint private _totalBalance;
     uint private _totalAccruedFees;
 
@@ -49,6 +50,7 @@ contract CreditProvider is ManagedContract {
         callers[exchangeAddr] = 1;
         callers[address(settings)] = 1;
         callers[deployer.getContractAddress("CreditToken")] = 1;
+        callers[deployer.getContractAddress("CollateralManager")] = 1;
 
         ctAddr = address(creditToken);
     }
@@ -73,8 +75,15 @@ contract CreditProvider is ManagedContract {
         return _totalDebt;
     }
 
-    function ensureCaller(address addr) public view {
-        
+    function getTotalOwners() external view returns (uint) {
+        return _totalOwners;
+    }
+
+    function getTotalBalance() external view returns (uint) {
+        return _totalBalance;
+    }
+
+    function ensureCaller(address addr) external view {
         require(callers[addr] == 1, "unauthorized caller");
     }
 
@@ -86,7 +95,7 @@ contract CreditProvider is ManagedContract {
         issueCreditTokens(to, value);
     }
 
-    function balanceOf(address owner) public view returns (uint) {
+    function balanceOf(address owner) external view returns (uint) {
 
         return balances[owner];
     }
@@ -96,13 +105,9 @@ contract CreditProvider is ManagedContract {
         addBalance(to, token, value, false);
     }
 
-    function transferBalance(address from, address to, uint value) public {
-        
+    function transferBalance(address from, address to, uint value) external {
         ensureCaller();
-        
-        removeBalance(from, value);
-        addBalance(to, value);
-        emit TransferBalance(from, to, value);
+        transferBalanceInternal(from, to, value);
     }
     
     function depositTokens(address to, address token, uint value) external {
@@ -143,18 +148,18 @@ contract CreditProvider is ManagedContract {
 
             (uint v, uint b) = settings.getProcessingFee();
             if (v > 0) {
-                uint fee = MoreMath.min(value.mul(v).div(b), balanceOf(from));
+                uint fee = MoreMath.min(value.mul(v).div(b), balances[from]);
                 value = value.sub(fee);
                 _totalAccruedFees = _totalAccruedFees.add(fee);
             }
 
             uint credit;
-            if (balanceOf(from) < value) {
-                credit = value.sub(balanceOf(from));
-                value = balanceOf(from);
+            if (balances[from] < value) {
+                credit = value.sub(balances[from]);
+                value = balances[from];
             }
 
-            transferBalance(from, to, value);
+            transferBalanceInternal(from, to, value);
 
             if (credit > 0) {                
                 applyDebtInterestRate(from);
@@ -163,6 +168,15 @@ contract CreditProvider is ManagedContract {
                 emit AccumulateDebt(to, value);
             }
         }
+    }
+
+    function transferBalanceInternal(address from, address to, uint value) private {
+        
+        ensureCaller();
+        
+        removeBalance(from, value);
+        addBalance(to, value);
+        emit TransferBalance(from, to, value);
     }
     
     function addBalance(address to, address token, uint value, bool trusted) private {
@@ -187,6 +201,11 @@ contract CreditProvider is ManagedContract {
 
             uint burnt = burnDebt(owner, value);
             uint v = value.sub(burnt);
+
+            if (balances[owner] == 0) {
+                _totalOwners = _totalOwners.add(1);
+            }
+
             balances[owner] = balances[owner].add(v);
             _totalBalance =_totalBalance.add(v);
         }
@@ -195,7 +214,7 @@ contract CreditProvider is ManagedContract {
     function calcRawCollateralShortage(address owner) public view returns (uint) {
         // this represents the sum of the negative exposure of owner on the exchange from any part of their book where written is greater than holding
 
-        uint bal = balanceOf(owner);
+        uint bal = balances[owner];
         uint tcoll = IOptionsExchange(exchangeAddr).calcCollateral(owner, false);
         int coll = int(tcoll);
         int net = int(bal) - coll;
@@ -225,10 +244,10 @@ contract CreditProvider is ManagedContract {
         if (value > 0) {
             _totalBalance = _totalBalance.sub(value);
         } 
-    }
 
-    function getTotalBalance() public view returns (uint) {
-        return _totalBalance;
+        if (_totalOwners > 0 && balances[owner] == 0) {
+            _totalOwners = _totalOwners.sub(1);
+        }
     }
 
     function burnDebtAndTransferTokens(address to, uint value) private {
@@ -315,6 +334,6 @@ contract CreditProvider is ManagedContract {
     }
 
     function ensureCaller() private view {        
-        ensureCaller(msg.sender);
+        require(callers[msg.sender] == 1, "unauthorized caller");
     }
 }
