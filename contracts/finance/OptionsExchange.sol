@@ -127,12 +127,17 @@ contract OptionsExchange is ManagedContract {
         /* 
             if shortage:
                 deduct from creditited value;
+                burn debt any debt on credit provider balance
             if excesss
                 add to credited value;
         */        
         
         uint creditingValue = uint(int(value).sub(excessCollateral));
         creditProvider.addBalance(to, token, creditingValue);
+
+        if (excessCollateral > 0){
+            creditProvider.burnDebt(uint(excessCollateral)); 
+        }
     }
 
     function balanceOf(address owner) external view returns (uint) {

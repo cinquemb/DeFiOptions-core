@@ -269,6 +269,11 @@ contract CreditProvider is ManagedContract {
         transferTokens(to, value);
     }
 
+    function burnDebt(uint value) external returns (uint burnt) {
+        ensurePrimeCaller();
+        burnt = burnDebt(address(this), value);
+    }
+
     function burnDebt(address from, uint value) private returns (uint burnt) {
         
         uint d = applyDebtInterestRate(from);
