@@ -53,6 +53,7 @@ contract OptionsExchange is ManagedContract {
     
     event RemovePoolSymbol(string symbolSuffix);
     event WithdrawTokens(address indexed from, uint value);
+    event IncentiveReward(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
 
@@ -548,7 +549,7 @@ contract OptionsExchange is ManagedContract {
         UnderlyingFeed(udlFeed).prefetchSample();
     }
 
-    function pprefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
+    function prefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
         UnderlyingFeed(udlFeed).prefetchDailyPrice(roundId);
     }
 
@@ -565,14 +566,11 @@ contract OptionsExchange is ManagedContract {
         address[] memory tokens = settings.getAllowedTokens();
 
         /* TODO:
-            use gas price oracle to multiply current gas price by gas used, convert to $, debit exchange balance
+            use gas (chainlink) price oracle to multiply current gas price by gas used, convert to $, debit exchange balance, fixed for now
         */
 
-        uint256 creditingValue = 0e18;
-        
-        if (tokens.length > 0) {
-            creditProvider.addBalance(msg.sender, tokens[0], creditingValue);
-        }
-        
+        uint256 creditingValue = 10e18;        
+        creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+        emit IncentiveReward(msg.sender, creditingValue);    
     }
 }

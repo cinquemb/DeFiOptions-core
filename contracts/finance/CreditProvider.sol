@@ -25,6 +25,7 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private debts;
     mapping(address => uint) private debtsDate;
     mapping(address => uint) private callers;
+    mapping(address => uint) private primeCallers;
 
     address private ctAddr;
     uint private _totalDebt;
@@ -51,6 +52,11 @@ contract CreditProvider is ManagedContract {
         callers[address(settings)] = 1;
         callers[deployer.getContractAddress("CreditToken")] = 1;
         callers[deployer.getContractAddress("CollateralManager")] = 1;
+
+        primeCallers[exchangeAddr] = 1;
+        primeCallers[address(settings)] = 1;
+        primeCallers[deployer.getContractAddress("CreditToken")] = 1;
+        primeCallers[deployer.getContractAddress("CollateralManager")] = 1;
 
         ctAddr = address(creditToken);
     }
@@ -89,7 +95,7 @@ contract CreditProvider is ManagedContract {
 
     function issueCredit(address to, uint value) external {
         
-        ensureCaller();
+        ensurePrimeCaller();
 
         require(msg.sender == address(settings));
         issueCreditTokens(to, value);
@@ -135,6 +141,20 @@ contract CreditProvider is ManagedContract {
         debt = debts[addr];
         if (debt > 0) {
             debt = settings.applyDebtInterestRate(debt, debtsDate[addr]);
+        }
+    }
+
+    function processIncentivizationPayment(address to, uint credit) external {
+        
+        ensurePrimeCaller();
+        require(to != address(this), "invalid incentivization");
+
+        if (credit > 0) {
+            // add debt to credit provier, and increment exchange balance for user
+            applyDebtInterestRate(address(this));
+            setDebt(address(this), debts[address(this)].add(credit));
+            addBalance(to, credit);
+            emit AccumulateDebt(to, credit);
         }
     }
 
@@ -224,17 +244,6 @@ contract CreditProvider is ManagedContract {
 
         return uint(net * -1);
     }
-
-     /*
-    function getOptionsExchangeTotalExposure() public view returns (uint256) {
-        uint totalShortage = 0;
-        for (uint256 o_idx = 0; o_idx < bookOwnerIndecies.length; o_idx++){
-            uint256 b_idx = bookOwnerIndecies[o_idx];
-            uint shortage = calcRawCollateralShortage(bookOwners[b_idx]);
-            totalShortage += shortage;
-        }
-        return totalShortage;
-    }*/
     
     function removeBalance(address owner, uint value) private {
         
@@ -329,11 +338,15 @@ contract CreditProvider is ManagedContract {
     }
 
     function insertPoolCaller(address llp) external {
-        ensureCaller();
+        ensurePrimeCaller();
         callers[llp] = 1;
     }
 
     function ensureCaller() private view {        
         require(callers[msg.sender] == 1, "unauthorized caller");
+    }
+
+    function ensurePrimeCaller() private view {        
+        require(primeCallers[msg.sender] == 1, "unauthorized caller");
     }
 }
