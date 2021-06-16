@@ -50,12 +50,12 @@ contract CreditProvider is ManagedContract {
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         callers[exchangeAddr] = 1;
         callers[address(settings)] = 1;
-        callers[deployer.getContractAddress("CreditToken")] = 1;
+        callers[address(creditToken)] = 1;
         callers[deployer.getContractAddress("CollateralManager")] = 1;
 
         primeCallers[exchangeAddr] = 1;
         primeCallers[address(settings)] = 1;
-        primeCallers[deployer.getContractAddress("CreditToken")] = 1;
+        primeCallers[address(creditToken)] = 1;
         primeCallers[deployer.getContractAddress("CollateralManager")] = 1;
 
         ctAddr = address(creditToken);
