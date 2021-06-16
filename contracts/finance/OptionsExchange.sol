@@ -5,10 +5,11 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/LiquidityPool.sol";
+import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/ICollateralManager.sol";
+import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
@@ -26,12 +27,13 @@ contract OptionsExchange is ManagedContract {
     using SafeMath for uint;
     using SignedSafeMath for int;
     
+    IUnderlyingVault private vault;
     ProtocolSettings private settings;
     ICreditProvider private creditProvider;
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
     ICollateralManager private collateralManager;
-    
+
     mapping(address => uint) public collateral;
     mapping(address => IOptionsExchange.OptionData) private options;
     mapping(address => IOptionsExchange.FeedData) private feeds;
@@ -39,17 +41,12 @@ contract OptionsExchange is ManagedContract {
 
     mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
-    mapping(address => uint) public nonces;
     
     uint private _volumeBase;
     uint private timeBase;
     uint private sqrtTimeBase;
 
     string[] private poolSymbols;
-    bytes32 public DOMAIN_SEPARATOR;
-    // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-    bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
-    string private constant _name = "OptionsExchange";
     
     event RemovePoolSymbol(string symbolSuffix);
     event WithdrawTokens(address indexed from, uint value);
@@ -64,39 +61,17 @@ contract OptionsExchange is ManagedContract {
         uint volume
     );
 
-    constructor() public {
-
-        uint chainId;
-        assembly {
-            chainId := chainid()
-        }
-        DOMAIN_SEPARATOR = keccak256(
-            abi.encode(
-                keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
-                keccak256(bytes(_name)),
-                keccak256(bytes('1')),
-                chainId,
-                address(this)
-            )
-        );
-    }
-
     function initialize(Deployer deployer) override internal {
-
-        DOMAIN_SEPARATOR = OptionsExchange(getImplementation()).DOMAIN_SEPARATOR();
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = ICollateralManager(deployer.getContractAddress("CollateralManager"));
+        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
 
         _volumeBase = 1e18;
         timeBase = 1e18;
         sqrtTimeBase = 1e9;
-    }
-    
-    function name() external pure returns (string memory) {
-        return _name;
     }
 
     function volumeBase() external view returns (uint) {
@@ -120,8 +95,9 @@ contract OptionsExchange is ManagedContract {
 
     function depositTokens(address to, address token, uint value) public {
 
-        ERC20 t = ERC20(token);
+        IERC20 t = IERC20(token);
         int excessCollateral = collateralManager.collateralSkew();
+
         t.transferFrom(msg.sender, address(creditProvider), value);
 
         /* 
@@ -157,28 +133,14 @@ contract OptionsExchange is ManagedContract {
         ensureFunds(from);
     }
 
-    function transferBalance(
-        address from, 
-        address to, 
-        uint value,
-        uint maxValue,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        external
-    {
-        require(maxValue >= value, "insufficient permit value");
-        permit(from, to, maxValue, deadline, v, r, s);
-        creditProvider.transferBalance(from, to, value);
-        ensureFunds(from);
-    }
-
     function transferBalance(address to, uint value) external {
-
         creditProvider.transferBalance(msg.sender, to, value);
         ensureFunds(msg.sender);
+    }
+
+    function underlyingBalance(address owner, address _tk) external view returns (uint) {
+
+        return vault.balanceOf(owner, _tk);
     }
     
     function withdrawTokens(uint value) external {
@@ -188,12 +150,24 @@ contract OptionsExchange is ManagedContract {
         emit WithdrawTokens(msg.sender, value);
     }
 
-    function createSymbol(string memory symbol, address udlFeed) public returns (address tk) {
+    function createSymbol(
+        address udlFeed,
+        IOptionsExchange.OptionType optType,
+        uint strike, 
+        uint maturity
+    )
+        public
+        returns (address tk)
+    {
+        (IOptionsExchange.OptionData memory opt, string memory symbol) =
+            createOptionInMemory(udlFeed, optType, strike, maturity);
 
         require(tokenAddress[symbol] == address(0), "already created");
         tk = optionTokenFactory.create(symbol, udlFeed);
         tokenAddress[symbol] = tk;
+        options[tk] = opt;
         prefetchFeedData(udlFeed);
+
         emit CreateSymbol(tk, msg.sender);
     }
 
@@ -210,7 +184,7 @@ contract OptionsExchange is ManagedContract {
 
     function listPoolSymbols() external view returns (string memory available) {
         for (uint i = 0; i < poolSymbols.length; i++) {
-            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
             if (llp.maturity() > settings.exchangeTime()) {
                 available = listPoolSymbolHelper(available, poolSymbols[i]);
             }
@@ -219,7 +193,7 @@ contract OptionsExchange is ManagedContract {
 
     function listExpiredPoolSymbols() external view returns (string memory available) {
         for (uint i = 0; i < poolSymbols.length; i++) {
-            LiquidityPool llp = LiquidityPool(poolAddress[poolSymbols[i]]);
+            ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
             if (llp.maturity() < settings.exchangeTime()) {
                 available = listPoolSymbolHelper(available, poolSymbols[i]);
             }
@@ -239,7 +213,7 @@ contract OptionsExchange is ManagedContract {
     function removePoolSymbol(string calldata symbolSuffix) external {
         require(poolAddress[symbolSuffix] != address(0), "pool does not exist");
 
-        LiquidityPool llp = LiquidityPool(poolAddress[symbolSuffix]);
+        ILiquidityPool llp = ILiquidityPool(poolAddress[symbolSuffix]);
         require(llp.getOwner() == msg.sender, "not owner");
         require(llp.maturity() >= settings.exchangeTime(), "cannot remove before maturity");
         
@@ -282,7 +256,36 @@ contract OptionsExchange is ManagedContract {
         external 
         returns (address _tk)
     {
-        (_tk) = writeOptionsInternal(udlFeed, volume, optType, strike, maturity, to);
+        (IOptionsExchange.OptionData memory opt, string memory symbol) =
+            createOptionInMemory(udlFeed, optType, strike, maturity);
+        (_tk) = writeOptionsInternal(opt, symbol, volume, to);
+        ensureFunds(msg.sender);
+    }
+
+    function writeCovered(
+        address udlFeed,
+        uint volume,
+        uint strike, 
+        uint maturity,
+        address to
+    )
+        external 
+        returns (address _tk)
+    {
+        (IOptionsExchange.OptionData memory opt, string memory symbol) =
+            createOptionInMemory(udlFeed, IOptionsExchange.OptionType.CALL, strike, maturity);
+        _tk = tokenAddress[symbol];
+
+        if (_tk == address(0)) {
+            _tk = createSymbol(opt.udlFeed, IOptionsExchange.OptionType.CALL, strike, maturity);
+        }
+        
+        address underlying = getUnderlyingAddr(opt);
+        require(underlying != address(0), "underlying token not set");
+        IERC20(underlying).transferFrom(msg.sender, address(vault), volume);
+        vault.lock(msg.sender, _tk, volume);
+
+        writeOptionsInternal(opt, symbol, volume, to);
         ensureFunds(msg.sender);
     }
     
@@ -308,15 +311,32 @@ contract OptionsExchange is ManagedContract {
         ensureFunds(from);
     }
 
-    function cleanUp(address _tk, address owner, uint volume) public {
+    function release(address owner, uint udl, uint coll) external {
+
+        OptionToken tk = OptionToken(msg.sender);
+        require(tokenAddress[tk.symbol()] == msg.sender, "unauthorized release");
+
+        IOptionsExchange.OptionData memory opt = options[msg.sender];
+
+        if (udl > 0) {
+            vault.release(owner,  msg.sender, opt.udlFeed, udl);
+        }
+        
+        if (coll > 0) {
+            uint c = collateral[owner];
+            collateral[owner] = c.sub(
+                MoreMath.min(c, collateralManager.calcCollateral(opt, coll))
+            );
+        }
+    }
+
+    function cleanUp(address owner, address _tk) public {
+
         OptionToken tk = OptionToken(_tk);
+
         if (tk.balanceOf(owner) == 0 && tk.writtenVolume(owner) == 0) {
             Arrays.removeItem(book[owner], _tk);
         }
-        uint coll = collateral[owner];
-        collateral[owner] = coll.sub(
-            MoreMath.min(coll, collateralManager.calcCollateral(options[_tk], volume))
-        );
     }
 
     function liquidateExpired(address _tk, address[] calldata owners) external {
@@ -335,6 +355,12 @@ contract OptionsExchange is ManagedContract {
             return bal.sub(coll);
         }
         return 0;
+    }
+
+    function setCollateral(address owner) external {
+        /* UNUSED IN ANY CONTRACTS, DOES THIS NEED TO BE AN INCENTIVIZED FUNCTION */
+
+        collateral[owner] = collateralManager.calcCollateral(owner, true);
     }
 
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
@@ -408,12 +434,14 @@ contract OptionsExchange is ManagedContract {
             address[] memory tokens,
             uint[] memory holding,
             uint[] memory written,
+            uint[] memory uncovered,
             int[] memory iv
         )
     {
         tokens = book[owner];
         holding = new uint[](tokens.length);
         written = new uint[](tokens.length);
+        uncovered = new uint[](tokens.length);
         iv = new int[](tokens.length);
 
         for (uint i = 0; i < tokens.length; i++) {
@@ -426,6 +454,7 @@ contract OptionsExchange is ManagedContract {
             }
             holding[i] = tk.balanceOf(owner);
             written[i] = tk.writtenVolume(owner);
+            uncovered[i] = tk.uncoveredVolume(owner);
             iv[i] = collateralManager.calcIntrinsicValue(opt);
         }
     }
@@ -437,52 +466,22 @@ contract OptionsExchange is ManagedContract {
         );
     }
 
-    function permit(
-        address from,
-        address to,
-        uint value,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        private
-    {
-        require(deadline >= settings.exchangeTime(), "permit expired");
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(PERMIT_TYPEHASH, from, to, value, nonces[from]++, deadline)
-                )
-            )
-        );
-        address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress != address(0) && recoveredAddress == from, "invalid signature");
-    }
-
     function writeOptionsInternal(
-        address udlFeed,
+        IOptionsExchange.OptionData memory opt,
+        string memory symbol,
         uint volume,
-        IOptionsExchange.OptionType optType,
-        uint strike, 
-        uint maturity,
         address to
     )
         private 
         returns (address _tk)
     {
-        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
+        require(settings.getUdlFeed(opt.udlFeed) > 0, "feed not allowed");
         require(volume > 0, "invalid volume");
-        require(maturity > settings.exchangeTime(), "invalid maturity");
-
-        (IOptionsExchange.OptionData memory opt, string memory symbol) =
-            createOptionInMemory(udlFeed, optType, strike, maturity);
+        require(opt.maturity > settings.exchangeTime(), "invalid maturity");
 
         _tk = tokenAddress[symbol];
         if (_tk == address(0)) {
-            _tk = createSymbol(symbol, udlFeed);
+            _tk = createSymbol(opt.udlFeed, opt._type, opt.strike, opt.maturity);
         }
 
         OptionToken tk = OptionToken(_tk);
@@ -498,9 +497,12 @@ contract OptionsExchange is ManagedContract {
             options[_tk] = opt;
         }
         
-        collateral[msg.sender] = collateral[msg.sender].add(
-            collateralManager.calcCollateral(opt, volume)
-        );
+        uint v = MoreMath.min(volume, tk.uncoveredVolume(msg.sender));
+        if (v > 0) {
+            collateral[msg.sender] = collateral[msg.sender].add(
+                collateralManager.calcCollateral(opt, v)
+            );
+        }
 
         emit WriteOptions(_tk, msg.sender, to, volume);
     }
@@ -548,6 +550,11 @@ contract OptionsExchange is ManagedContract {
         } else {
             (,answer) = UnderlyingFeed(opt.udlFeed).getPrice(opt.maturity);
         }
+    }
+
+    function getUnderlyingAddr(IOptionsExchange.OptionData memory opt) private view returns (address) {
+        
+        return UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
     }
 
     function prefetchSample(address udlFeed) incentivized external {

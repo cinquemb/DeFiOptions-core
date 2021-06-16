@@ -28,6 +28,7 @@ contract ChainlinkFeed is UnderlyingFeed {
     mapping(uint => mapping(uint => uint)) private dailyVolatilities;
 
     string private _symbol;
+    address private udlAddr;
     Sample[] private samples;
     uint private offset;
     int private priceN;
@@ -35,6 +36,7 @@ contract ChainlinkFeed is UnderlyingFeed {
 
     constructor(
         string memory _sb,
+        address _udlAddr,
         address _aggregator,
         address _time,
         uint _offset,
@@ -44,6 +46,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         public
     {
         _symbol = _sb;
+        udlAddr = _udlAddr;
         aggregator = AggregatorV3Interface(_aggregator);
         time = TimeProvider(_time);
         offset = _offset;
@@ -61,6 +64,11 @@ contract ChainlinkFeed is UnderlyingFeed {
     function symbol() override external view returns (string memory) {
 
         return _symbol;
+    }
+
+    function getUnderlyingAddr() override external view returns (address) {
+
+        return udlAddr;
     }
 
     function getLatestPrice() override external view returns (uint timestamp, int price) {

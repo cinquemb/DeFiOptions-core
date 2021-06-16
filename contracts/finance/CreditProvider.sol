@@ -5,7 +5,7 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
-import "../utils/ERC20.sol";
+import "../interfaces/IERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
@@ -19,7 +19,6 @@ contract CreditProvider is ManagedContract {
     
     ProtocolSettings private settings;
     CreditToken private creditToken;
-    address private exchangeAddr;
 
     mapping(address => uint) private balances;
     mapping(address => uint) private debts;
@@ -28,10 +27,13 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private primeCallers;
 
     address private ctAddr;
+    address private exchangeAddr;
+
     uint private _totalDebt;
     uint private _totalOwners;
     uint private _totalBalance;
     uint private _totalAccruedFees;
+
 
     event DepositTokens(address indexed to, address indexed token, uint value);
 
@@ -43,20 +45,28 @@ contract CreditProvider is ManagedContract {
 
     event BurnDebt(address indexed from, uint value);
 
+    event AccrueFees(address indexed from, uint value);
+
     function initialize(Deployer deployer) override internal {
 
         creditToken = CreditToken(deployer.getContractAddress("CreditToken"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
+        address vaultAddr = deployer.getContractAddress("UnderlyingVault");
+        address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
+        
         callers[exchangeAddr] = 1;
         callers[address(settings)] = 1;
         callers[address(creditToken)] = 1;
-        callers[deployer.getContractAddress("CollateralManager")] = 1;
+        callers[vaultAddr] = 1;
+        callers[collateralManagerAddr] = 1;
 
         primeCallers[exchangeAddr] = 1;
         primeCallers[address(settings)] = 1;
         primeCallers[address(creditToken)] = 1;
-        primeCallers[deployer.getContractAddress("CollateralManager")] = 1;
+        primeCallers[vaultAddr] = 1;
+        primeCallers[collateralManagerAddr] = 1;
+
 
         ctAddr = address(creditToken);
     }
@@ -66,7 +76,7 @@ contract CreditProvider is ManagedContract {
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length; i++) {
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
-            uint value = ERC20(tokens[i]).balanceOf(address(this));
+            uint value = IERC20(tokens[i]).balanceOf(address(this));
             v = v.add(value.mul(b).div(r));
         }
     }
@@ -118,7 +128,7 @@ contract CreditProvider is ManagedContract {
     
     function depositTokens(address to, address token, uint value) external {
 
-        ERC20(token).transferFrom(msg.sender, address(this), value);
+        IERC20(token).transferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
     }
@@ -170,7 +180,7 @@ contract CreditProvider is ManagedContract {
             if (v > 0) {
                 uint fee = MoreMath.min(value.mul(v).div(b), balances[from]);
                 value = value.sub(fee);
-                _totalAccruedFees = _totalAccruedFees.add(fee);
+                emit AccrueFees(from, value);
             }
 
             uint credit;
@@ -185,7 +195,7 @@ contract CreditProvider is ManagedContract {
                 applyDebtInterestRate(from);
                 setDebt(from, debts[from].add(credit));
                 addBalance(to, credit);
-                emit AccumulateDebt(to, value);
+                emit AccumulateDebt(to, credit);
             }
         }
     }
@@ -317,7 +327,7 @@ contract CreditProvider is ManagedContract {
 
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length && value > 0; i++) {
-            ERC20 t = ERC20(tokens[i]);
+            IERC20 t = IERC20(tokens[i]);
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
             if (b != 0) {
                 uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));

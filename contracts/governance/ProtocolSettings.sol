@@ -27,6 +27,7 @@ contract ProtocolSettings is ManagedContract {
 
     mapping(address => int) private underlyingFeeds;
     mapping(address => Rate) private tokenRates;
+    mapping(address => mapping(address => address[])) private paths;
 
     address private owner;
     address[] private tokens;
@@ -34,7 +35,13 @@ contract ProtocolSettings is ManagedContract {
     Rate[] private debtInterestRates;
     Rate[] private creditInterestRates;
     Rate private processingFee;
+
+    uint private circulatingSupply;
     uint private volatilityPeriod;
+
+    address private swapRouter;
+    address private swapToken;
+    Rate private swapTolerance;
 
     uint private MAX_UINT;
     
@@ -83,6 +90,19 @@ contract ProtocolSettings is ManagedContract {
 
         require(msg.sender == owner || owner == address(0));
         owner = _owner;
+    }
+
+    function getCirculatingSupply() external view returns (uint) {
+
+        return circulatingSupply;
+    }
+
+    function setCirculatingSupply(uint supply) external {
+
+        ensureWritePrivilege();
+        require(supply <= govToken.totalSupply(), "invalid supply");
+        require(supply > circulatingSupply, "cannot decrease supply");
+        circulatingSupply = supply;
     }
 
     function getTokenRate(address token) external view returns (uint v, uint b) {
@@ -212,6 +232,47 @@ contract ProtocolSettings is ManagedContract {
     function getVolatilityPeriod() external view returns(uint) {
 
         return volatilityPeriod;
+    }
+
+    function setSwapRouterInfo(address router, address token) external {
+        
+        ensureWritePrivilege();
+        swapRouter = router;
+        swapToken = token;
+    }
+
+    function getSwapRouterInfo() external view returns (address router, address token) {
+
+        router = swapRouter;
+        token = swapToken;
+    }
+
+    function setSwapRouterTolerance(uint r, uint b) external {
+        
+        ensureWritePrivilege();
+        swapTolerance = Rate(r, b, MAX_UINT);
+    }
+
+    function getSwapRouterTolerance() external view returns (uint r, uint b) {
+
+        r = swapTolerance.value;
+        b = swapTolerance.base;
+    }
+
+    function setSwapPath(address from, address to, address[] calldata path) external {
+
+        ensureWritePrivilege();
+        paths[from][to] = path;
+    }
+
+    function getSwapPath(address from, address to) external view returns (address[] memory path) {
+
+        path = paths[from][to];
+        if (path.length == 0) {
+            path = new address[](2);
+            path[0] = from;
+            path[1] = to;
+        }
     }
 
     function applyRates(Rate[] storage rates, uint value, uint date) private view returns (uint) {

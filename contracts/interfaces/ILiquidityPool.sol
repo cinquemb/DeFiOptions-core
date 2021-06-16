@@ -1,6 +1,6 @@
 pragma solidity >=0.6.0;
 
-interface LiquidityPool {
+interface ILiquidityPool {
 
     event AddSymbol(string optSymbol);
     
@@ -33,10 +33,6 @@ interface LiquidityPool {
     function queryBuy(string calldata optSymbol) external view returns (uint price, uint volume);
 
     function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
-
-    function poolBalanceOf(address from) external view returns (uint balance);
-
-    function totalSupply() external view returns (uint);
 
     function buy(
         string calldata optSymbol,

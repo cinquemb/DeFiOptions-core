@@ -5,9 +5,10 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/LiquidityPool.sol";
+import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/IUnderlyingVault.sol";
 import "../utils/SafeCast.sol";
 import "./OptionToken.sol";
 
@@ -17,6 +18,7 @@ contract CollateralManager is ManagedContract {
     using SafeMath for uint;
     using SignedSafeMath for int;
     
+    IUnderlyingVault private vault;
     ProtocolSettings private settings;
     ICreditProvider private creditProvider;
     IOptionsExchange private exchange;
@@ -44,6 +46,7 @@ contract CollateralManager is ManagedContract {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
 
         _volumeBase = 1e18;
         timeBase = 1e18;
@@ -73,9 +76,9 @@ contract CollateralManager is ManagedContract {
 
     function calcExpectedPayout(address owner) external view returns (int payout) {
 
-        (,address[] memory _book, uint[] memory _holding, uint[] memory _written, int[] memory _iv) = exchange.getBook(owner);
+        (,address[] memory _tokens, uint[] memory _holding, uint[] memory _written,, int[] memory _iv) = exchange.getBook(owner);
 
-        for (uint i = 0; i < _book.length; i++) {
+        for (uint i = 0; i < _tokens.length; i++) {
             payout = payout.add(
                 _iv[i].mul(
                     int(_holding[i]).sub(int(_written[i]))
@@ -89,24 +92,24 @@ contract CollateralManager is ManagedContract {
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
         
         int coll;
-        (,address[] memory _book, uint[] memory _holding, uint[] memory _written, int[] memory _iv) = exchange.getBook(owner);
+        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
 
-        for (uint i = 0; i < _book.length; i++) {
+        for (uint i = 0; i < _tokens.length; i++) {
 
-            address _tk = _book[i];
+            address _tk = _tokens[i];
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
 
             if (is_regular == false) {
-                if (_written[i] > _holding[i]) {
+                if (_uncovered[i] > _holding[i]) {
                     continue;
                 }
             }
 
             coll = coll.add(
                 _iv[i].mul(
-                    int(_written[i]).sub(int(_holding[i]))
+                    int(_uncovered[i]).sub(int(_holding[i]))
                 )
-            ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _written[i], opt)));
+            ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
         }
 
         // add split excess (could raise or lower collateral requirements)
@@ -191,6 +194,11 @@ contract CollateralManager is ManagedContract {
             int(calcCollateral(fd.upperVol, volume, opt))
         ).div(int(_volumeBase));
 
+        if (opt._type == IOptionsExchange.OptionType.PUT) {
+            int max = int(uint(opt.strike).mul(volume).div(_volumeBase));
+            coll = MoreMath.min(coll, max);
+        }
+
         return coll > 0 ? uint(coll) : 0;
     }
     
@@ -237,11 +245,13 @@ contract CollateralManager is ManagedContract {
         private
         returns (uint value)
     {
-        uint written = tk.writtenVolume(owner);
+        uint written = isExpired ?
+            tk.writtenVolume(owner) :
+            tk.uncoveredVolume(owner);
         iv = iv.mul(written);
 
         if (isExpired) {
-            value = liquidateAfterMaturity(owner, tk, written, iv);
+            value = liquidateAfterMaturity(owner, tk, opt.udlFeed, written, iv);
             emit LiquidateExpired(address(tk), msg.sender, owner, written);
         } else {
             require(written > 0, "invalid volume");
@@ -249,9 +259,12 @@ contract CollateralManager is ManagedContract {
         }
     }
 
+
+
     function liquidateAfterMaturity(
         address owner,
         OptionToken tk,
+        address feed,
         uint written,
         uint iv
     )
@@ -260,8 +273,11 @@ contract CollateralManager is ManagedContract {
     {
         if (iv > 0) {
             value = iv.div(_volumeBase);
+            vault.liquidate(owner, address(tk), feed, value);
             creditProvider.processPayment(owner, address(tk), value);
         }
+
+        vault.release(owner, address(tk), feed, uint(-1));
 
         if (written > 0) {
             tk.burn(owner, written);
@@ -280,7 +296,6 @@ contract CollateralManager is ManagedContract {
     {
         IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
 
-
         uint volume = calcLiquidationVolume(owner, opt, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
@@ -291,8 +306,6 @@ contract CollateralManager is ManagedContract {
                 - the first time triggers a margin call event for the owner (how to incentivize? 5% in credit tokens?)
                 - sencond step triggers the actual liquidation (incentivized, 5% of collateral liquidated)
         */
-
-        
         creditProvider.processPayment(owner, address(tk), value);
 
         if (volume > 0) {

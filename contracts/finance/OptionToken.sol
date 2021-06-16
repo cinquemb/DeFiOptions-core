@@ -67,10 +67,17 @@ contract OptionToken is RedeemableToken {
             _totalSupply = _totalSupply.sub(value);
         }
         
-        _issued[owner] = w.sub(value);
+        uint uc = uncoveredVolume(owner);
+        uint coll = MoreMath.min(value, uc);
+
+        w = w.sub(value);
+        _issued[owner] = w;
         _unliquidatedVolume = _unliquidatedVolume.sub(value);
 
-        IOptionsExchange(exchangeAddr).cleanUp(address(this), owner, value);
+        uint udl = value > uc ? value.sub(uc) : 0;
+
+        IOptionsExchange(exchangeAddr).release(owner, udl, coll);
+        IOptionsExchange(exchangeAddr).cleanUp(owner, address(this));
         emit Transfer(owner, address(0), value);
     }
 
@@ -83,8 +90,10 @@ contract OptionToken is RedeemableToken {
         return _unliquidatedVolume;
     }
 
-    function totalSupply() external view returns (uint) {
-        return _totalSupply;
+    function uncoveredVolume(address owner) public view returns (uint) {
+        uint covered = IOptionsExchange(exchangeAddr).underlyingBalance(owner, address(this));
+        uint w = _issued[owner];
+        return w > covered ? w.sub(covered) : 0;
     }
 
     function redeemAllowed() override public view returns (bool) {
@@ -92,10 +101,9 @@ contract OptionToken is RedeemableToken {
         return _unliquidatedVolume == 0;
     }
 
-    function afterRedeem(address owner, uint, uint val) override internal {
-
-        IOptionsExchange(exchangeAddr).cleanUp(address(this), owner, val);
-        emit Transfer(owner, address(0), val);
+    function afterRedeem(address owner, uint, uint value) override internal {
+        IOptionsExchange(exchangeAddr).cleanUp(owner, address(this));
+        emit Transfer(owner, address(0), value);
     }
 
     function emitTransfer(address from, address to, uint value) override internal {

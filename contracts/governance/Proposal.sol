@@ -1,11 +1,11 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../interfaces/TimeProvider.sol";
-import "../interfaces/LiquidityPool.sol";
+import "../interfaces/IERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "./GovToken.sol";
+import "./ProtocolSettings.sol";
 
 abstract contract Proposal {
 
@@ -17,9 +17,9 @@ abstract contract Proposal {
 
     enum Status { PENDING, OPEN, APPROVED, REJECTED }
 
-    TimeProvider private time;
     GovToken private govToken;
-    LiquidityPool private llpToken;
+    IERC20 private llpToken;
+    ProtocolSettings private settings;
 
     mapping(address => int) private votes;
     
@@ -33,24 +33,24 @@ abstract contract Proposal {
     bool private closed;
 
     constructor(
-        address _time,
         address _govToken,
+        address _settings,
         Quorum _quorum,
         VoteType  _voteType,
         uint _expiresAt
     )
         public
     {
-        time = TimeProvider(_time);
+        settings = ProtocolSettings(_settings);
         voteType = _voteType;
 
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
             govToken = GovToken(_govToken);
             require(_quorum != Quorum.QUADRATIC, "cant be quadratic");
         } else if (voteType == VoteType.POOL_SETTINGS) {
-            llpToken = LiquidityPool(_govToken);
+            llpToken = IERC20(_govToken);
             require(_quorum == Quorum.QUADRATIC, "must be quadratic");
-            require(_expiresAt > time.getNow() && _expiresAt.sub(time.getNow()) > 1 days, "too short expiry");
+            require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
         } else {
             revert("vote type not specified");
         }
@@ -118,7 +118,7 @@ abstract contract Proposal {
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
             balance = govToken.balanceOf(msg.sender);
         } else {
-            balance = llpToken.poolBalanceOf(msg.sender);
+            balance = llpToken.balanceOf(msg.sender);
         }
         
         require(balance > 0);
@@ -143,19 +143,18 @@ abstract contract Proposal {
         ensureIsActive();
 
         if (quorum == Proposal.Quorum.QUADRATIC) {
-
             if (yea.add(nay) < MoreMath.sqrt(llpToken.totalSupply())) {
-                require(expiresAt < time.getNow());
+                require(expiresAt < settings.exchangeTime());
             }
 
             if (yea > nay) {
                 status = Status.APPROVED;
-                execute();
+                executePool(llpToken);
             } else {
                 status = Status.REJECTED;
             }
         } else {
-            uint total = govToken.totalSupply();
+            uint total = settings.getCirculatingSupply();
             
             uint v;
             
@@ -169,7 +168,7 @@ abstract contract Proposal {
 
             if (yea > v) {
                 status = Status.APPROVED;
-                execute();
+                execute(settings);
             } else if (nay >= v) {
                 status = Status.REJECTED;
             } else {
@@ -181,7 +180,9 @@ abstract contract Proposal {
         closed = true;
     }
 
-    function execute() public virtual;
+    function execute(ProtocolSettings _settings) public virtual;
+
+    function executePool(IERC20 _llp) public virtual;
 
     function ensureIsActive() private view {
 
@@ -189,7 +190,7 @@ abstract contract Proposal {
         require(status == Status.OPEN);
         
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
-            require(expiresAt > time.getNow());
+            require(expiresAt > settings.exchangeTime());
         }      
     }
 

@@ -16,6 +16,7 @@ const LinearAnySlopeInterpolator = artifacts.require("LinearAnySlopeInterpolator
 const MockChainLinkFeed = artifacts.require("ChainlinkFeed");
 const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 const YieldTracker = artifacts.require("YieldTracker");
+const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 
 module.exports = async function(deployer) {
@@ -31,6 +32,7 @@ module.exports = async function(deployer) {
   const ct = await deployer.deploy(CreditToken);
   const gt = await deployer.deploy(GovToken);
   const yt = await deployer.deploy(YieldTracker);
+  const uv = await deployer.deploy(UnderlyingVault);
   const lasit = await deployer.deploy(LinearAnySlopeInterpolator);
   const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
@@ -85,6 +87,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);
   await deployer4.setContractAddress("YieldTracker", yt.address);
+  await deployer4.setContractAddress("UnderlyingVault", uv.address);
 
   await deployer4.deploy();
 

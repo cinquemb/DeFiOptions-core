@@ -11,6 +11,7 @@ import "../../common/actors/PoolTrader.sol";
 import "../../common/mock/ERC20Mock.sol";
 import "../../common/mock/EthFeedMock.sol";
 import "../../common/mock/TimeProviderMock.sol";
+import "../../common/mock/UniswapV2RouterMock.sol";
 
 contract Base {
     
@@ -42,9 +43,9 @@ contract Base {
     OptionsExchange.OptionType CALL = OptionsExchange.OptionType.CALL;
     OptionsExchange.OptionType PUT = OptionsExchange.OptionType.PUT;
     
-    LinearLiquidityPool.Operation NONE = LinearLiquidityPool.Operation.NONE;
-    LinearLiquidityPool.Operation BUY = LinearLiquidityPool.Operation.BUY;
-    LinearLiquidityPool.Operation SELL = LinearLiquidityPool.Operation.SELL;
+    LiquidityPool.Operation NONE = LiquidityPool.Operation.NONE;
+    LiquidityPool.Operation BUY = LiquidityPool.Operation.BUY;
+    LiquidityPool.Operation SELL = LiquidityPool.Operation.SELL;
 
     uint120[] x;
     uint120[] y;
@@ -62,18 +63,20 @@ contract Base {
         pool = exchange.createPool("DEFAULT", "TEST");
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
 
+        erc20.reset();
+
+        settings.setOwner(address(this));
+        settings.setAllowedToken(address(erc20), 1, 1);
+        settings.setUdlFeed(address(feed), 1);
+
         pool.setParameters(
             spread,
             reserveRatio,
             90 days
         );
 
-        settings.setOwner(address(this));
-        settings.setAllowedToken(address(erc20), 1, 1);
-        settings.setUdlFeed(address(feed), 1);
-
-        bob = new PoolTrader(address(erc20), address(exchange), address(pool), address(feed));
-        alice = new PoolTrader(address(erc20), address(exchange), address(pool), address(feed));
+        bob = createPoolTrader(address(erc20));
+        alice = createPoolTrader(address(erc20));
 
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
@@ -115,7 +118,7 @@ contract Base {
             200 * volumeBase  // sell stock
         );
 
-        exchange.createSymbol(symbol, address(feed));
+        exchange.createSymbol(address(feed), CALL, strike, maturity);
     }
 
     function calcCollateralUnit() internal view returns (uint) {
