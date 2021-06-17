@@ -2171,7 +2171,8 @@ def main():
     #print(transaction.input)
     #print(provider.make_request("debug_traceTransaction", ["0x45e8d9a7ca159a0f6957534cb25412b4daa4243906ef2b6e93125246b1e27d05"]))
     #print(w3.eth.get_block('latest')['timestamp'])
-    #sys.exit()
+    #
+
     
     logging.basicConfig(level=logging.INFO)
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
@@ -2191,13 +2192,12 @@ def main():
 
 
     '''
-    print(credit_provider.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).balanceOf(linear_liquidity_pool.address))
-    print("tx-input -> 0xa606b94a000000000000000000000000bc177dc5f5d910069e6eda3f12d26a5f4dc3fe200000000000000000000000009f7d9386dc282417ffaac588e65e828be809e4ba00000000000000000000000000000000000000000000000000000000007ac0ad")
-    print(credit_provider.decode_function_input("0xa606b94a000000000000000000000000bc177dc5f5d910069e6eda3f12d26a5f4dc3fe200000000000000000000000009f7d9386dc282417ffaac588e65e828be809e4ba00000000000000000000000000000000000000000000000000000000007ac0ad"))
+    #print(credit_provider.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).balanceOf(linear_liquidity_pool.address))
+    print("tx-input -> 0xa53b0041")
+    print(options_exchange.decode_function_input("0xa53b0041"))
     sys.exit()
+
     '''
-
-
     '''
         INIT FEEDS FOR BTCUSDAGG
     '''
@@ -2250,37 +2250,32 @@ def main():
 
     avax_cchain_nonces = open(MMAP_FILE, "r+b")
 
+    tx_hashes = []
+    tx_hashes_good = 0
+    tx_fails = []
 
     # temp opx, llp, agent
     opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
     agent = Agent(None, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
     p_hash = transaction_helper(
         agent,
-        opx.functions.createPool(
+        opx.contract.functions.createPool(
             "DEFAULT",
             "TEST",
         ),
         8000000
     )
-    tmp_tx_hash = {'type': 'createPool', 'hash': sp_hash}
+    tmp_tx_hash = {'type': 'createPool', 'hash': p_hash}
+    print('pool creation hash:', tmp_tx_hash['hash'])
     receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
     tx_hashes.append(tmp_tx_hash)
-    print(tmp_tx_hash)
-    '''
-        TODO: NEED TO GET POOL ADDR AFTER CREATION FROM FACTORY
-    '''
-    print(receipt)
-    sys.exit()
-
-    linear_liquidity_pool_address = ''
-    linear_liquidity_pool = w3.eth.contract(LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes_good += receipt["status"]
-    
+    tx_hashes_good += receipt["status"]    
     if receipt["status"] == 0:
         print(receipt)
         tx_fails.append(tmp_tx_hash['type'])
-
+    logs = options_exchange.events.CreatePool().processReceipt(receipt)
+    linear_liquidity_pool_address = logs[0].args.token
+    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
 
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
@@ -2289,9 +2284,7 @@ def main():
         SETUP POOL:
             All options must have maturities under the pool maturity
     '''
-    tx_hashes = []
-    tx_hashes_good = 0
-    tx_fails = []
+
 
     pool_spread = 5 * (10**7) #5% 
     pool_reserve_ratio = 0 * (10**7) # 20% default

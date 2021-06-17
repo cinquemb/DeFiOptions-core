@@ -85,7 +85,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
         volumeBase = exchange.volumeBase();
-        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         serial = 1;
     }
 
@@ -184,22 +183,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         emit RemoveSymbol(optSymbol);
     }
 
-    /*function depositTokens(
-        address to,
-        address token,
-        uint value,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        override
-        external
-    {
-        IERC20Permit(token).permit(msg.sender, address(this), value, deadline, v, r, s);
-        depositTokens(to, token, value);
-    }*/
-
     function depositTokens(address to, address token, uint value) override public {
         uint b0 = exchange.balanceOf(address(this));
         depositTokensInExchange(token, value);
@@ -288,25 +271,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             (op == Operation.SELL) ? uint(param.sellStock).sub(optBal) : uint(param.buyStock).sub(optBal)
         );
     }
-    
-    /*function buy(
-        string calldata optSymbol,
-        uint price,
-        uint volume,
-        address token,
-        uint maxValue,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        override
-        external
-        returns (address _tk)
-    {        
-        IERC20Permit(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
-        _tk = buy(optSymbol, price, volume, token);
-    }*/
 
     function buy(string memory optSymbol, uint price, uint volume, address token)
         override
@@ -334,51 +298,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         emit Buy(_tk, msg.sender, price, volume);
     }
-
-    /*
-    function sell(
-        string memory optSymbol,
-        uint price,
-        uint volume,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        internal
-    {
-        require(volume > 0, "invalid volume");
-        ensureValidSymbol(optSymbol);
-
-        PricingParameters memory param = parameters[optSymbol];
-        
-        require(isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range");
-
-        price = validatePrice(price, param, Operation.SELL);
-
-        address _tk = exchange.resolveToken(optSymbol);
-        IOptionToken tk = IOptionToken(_tk);
-        if (deadline > 0) {
-            tk.permit(msg.sender, address(this), volume, deadline, v, r, s);
-        }
-        tk.transferFrom(msg.sender, address(this), volume);
-        
-        uint _written = tk.writtenVolume(address(this));
-        if (_written > 0) {
-            uint toBurn = MoreMath.min(_written, volume);
-            tk.burn(toBurn);
-        }
-
-        uint value = price.mul(volume).div(volumeBase);
-        exchange.transferBalance(msg.sender, value);
-
-        require(calcFreeBalance() > 0, "pool balance too low");
-
-        uint _holding = tk.balanceOf(address(this));
-        require(_holding <= param.sellStock, "excessive volume");
-
-        emit Sell(_tk, msg.sender, price, volume);
-    }*/
 
     function sell(string calldata optSymbol, uint price, uint volume) override external {
         
