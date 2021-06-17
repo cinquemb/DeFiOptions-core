@@ -16,7 +16,7 @@ interface ILiquidityPool {
 
     function yield(uint dt) external view returns (uint y);
 
-    function depositTokens(
+    /*function depositTokens(
         address to,
         address token,
         uint value,
@@ -24,7 +24,7 @@ interface ILiquidityPool {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external;
+    ) external;*/
 
     function depositTokens(address to, address token, uint value) external;
 
@@ -34,6 +34,7 @@ interface ILiquidityPool {
 
     function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
 
+    /*
     function buy(
         string calldata optSymbol,
         uint price,
@@ -47,12 +48,13 @@ interface ILiquidityPool {
     )
         external
         returns (address addr);
+    */
 
     function buy(string calldata optSymbol, uint price, uint volume, address token)
         external
         returns (address addr);
 
-    function sell(
+    /*function sell(
         string calldata optSymbol,
         uint price,
         uint volume,
@@ -62,6 +64,7 @@ interface ILiquidityPool {
         bytes32 s
     )
         external;
+        */
 
     function sell(string calldata optSymbol, uint price, uint volume) external;
 }

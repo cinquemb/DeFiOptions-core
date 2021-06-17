@@ -76,7 +76,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0xDf303c7b8845149895dc13B91E99B1E9243cA117',
+  "addr": '0x894E0346fd2132FAfb1E2Ea420f79F28c64405c0',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -2269,13 +2269,18 @@ def main():
     '''
         TODO: NEED TO GET POOL ADDR AFTER CREATION FROM FACTORY
     '''
+    print(receipt)
+    sys.exit()
+
     linear_liquidity_pool_address = ''
-    linear_liquidity_pool
+    linear_liquidity_pool = w3.eth.contract(LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
     receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
     tx_hashes_good += receipt["status"]
+    
     if receipt["status"] == 0:
         print(receipt)
         tx_fails.append(tmp_tx_hash['type'])
+
 
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)

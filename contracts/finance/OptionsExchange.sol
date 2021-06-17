@@ -11,7 +11,6 @@ import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/ICollateralManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
-import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";

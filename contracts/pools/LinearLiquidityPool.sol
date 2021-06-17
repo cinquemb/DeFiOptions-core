@@ -1,17 +1,13 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../interfaces/IInterpolator.sol";
 import "./LiquidityPool.sol";
 
 contract LinearLiquidityPool is LiquidityPool {
-    
-    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
-        LiquidityPool(_nm, _sb, _ownerAddr, _deployAddr) public {
-        Deployer deployer = Deployer(_deployAddr);
-        interpolatorAddr = deployer.getContractAddress("Interpolator");
-    }
 
+    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
+        LiquidityPool(_nm, _sb, _ownerAddr, _deployAddr) public {}
+    
     function name() override external view returns (string memory) {
         return string(abi.encodePacked(_name_prefix, _name));
     }
@@ -22,7 +18,7 @@ contract LinearLiquidityPool is LiquidityPool {
     }
 
     function writeOptions(
-        OptionToken tk,
+        IOptionToken tk,
         PricingParameters memory param,
         uint volume,
         address to
@@ -32,8 +28,9 @@ contract LinearLiquidityPool is LiquidityPool {
     {
         uint _written = tk.writtenVolume(address(this));
         require(_written.add(volume) <= param.buyStock, "excessive volume");
+        require(calcFreeBalance() > 0, "pool balance too low");
 
-        IOptionsExchange(exchangeAddr).writeOptions(
+        exchange.writeOptions(
             param.udlFeed,
             volume,
             param.optType,
@@ -42,7 +39,6 @@ contract LinearLiquidityPool is LiquidityPool {
             to
         );
         
-        require(calcFreeBalance() > 0, "pool balance too low");
     }
 
     function calcOptPrice(PricingParameters memory p, Operation op)
@@ -53,7 +49,7 @@ contract LinearLiquidityPool is LiquidityPool {
     {
         uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
         int udlPrice = getUdlPrice(p.udlFeed);
-        price = IInterpolator(interpolatorAddr).interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
+        price = interpolator.interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
     }
 
     function calcVolume(
@@ -70,7 +66,7 @@ contract LinearLiquidityPool is LiquidityPool {
         uint fb = calcFreeBalance();
         uint r = fractionBase.sub(reserveRatio);
 
-        uint coll = IOptionsExchange(exchangeAddr).calcCollateral(
+        uint coll = exchange.calcCollateral(
             p.udlFeed,
             volumeBase,
             p.optType,
@@ -87,17 +83,17 @@ contract LinearLiquidityPool is LiquidityPool {
 
         } else {
 
-            uint bal = IOptionsExchange(exchangeAddr).balanceOf(address(this));
+            uint bal = exchange.balanceOf(address(this));
 
-            uint poolColl = IOptionsExchange(exchangeAddr).collateral(address(this));
+            uint poolColl = exchange.collateral(address(this));
 
-            uint writtenColl = OptionToken(
-                IOptionsExchange(exchangeAddr).resolveToken(optSymbol)
+            uint writtenColl = IOptionToken(
+                exchange.resolveToken(optSymbol)
             ).writtenVolume(address(this)).mul(coll);
 
             poolColl = poolColl > writtenColl ? poolColl.sub(writtenColl) : 0;
             
-            uint iv = uint(IOptionsExchange(exchangeAddr).calcIntrinsicValue(
+            uint iv = uint(exchange.calcIntrinsicValue(
                 p.udlFeed,
                 p.optType,
                 p.strike,

@@ -21,7 +21,7 @@ contract OptionToken is RedeemableToken {
         public
     {    
         _symbol = _sb;
-        exchangeAddr = _issuer;
+        exchange = IOptionsExchange(_issuer);
     }
 
     function name() override external view returns (string memory) {
@@ -35,7 +35,7 @@ contract OptionToken is RedeemableToken {
 
     function issue(address from, address to, uint value) external {
 
-        require(msg.sender == exchangeAddr, "issuance unallowed");
+        require(msg.sender == address(exchange), "issuance unallowed");
         _issued[from] = _issued[from].add(value);
         addBalance(to, value);
         _totalSupply = _totalSupply.add(value);
@@ -51,14 +51,14 @@ contract OptionToken is RedeemableToken {
     function burn(address owner, uint value) public {
 
         require(
-            msg.sender == owner || msg.sender == exchangeAddr,
+            msg.sender == owner || msg.sender == address(exchange),
             "burn sender unallowed"
         );
 
         uint b = balanceOf(owner);
         uint w = _issued[owner];
         require(
-            b >= value && w >= value || (msg.sender == exchangeAddr && w >= value),
+            b >= value && w >= value || (msg.sender == address(exchange) && w >= value),
             "invalid burn value"
         );
 
@@ -76,8 +76,8 @@ contract OptionToken is RedeemableToken {
 
         uint udl = value > uc ? value.sub(uc) : 0;
 
-        IOptionsExchange(exchangeAddr).release(owner, udl, coll);
-        IOptionsExchange(exchangeAddr).cleanUp(owner, address(this));
+        exchange.release(owner, udl, coll);
+        exchange.cleanUp(owner, address(this));
         emit Transfer(owner, address(0), value);
     }
 
@@ -91,7 +91,7 @@ contract OptionToken is RedeemableToken {
     }
 
     function uncoveredVolume(address owner) public view returns (uint) {
-        uint covered = IOptionsExchange(exchangeAddr).underlyingBalance(owner, address(this));
+        uint covered = exchange.underlyingBalance(owner, address(this));
         uint w = _issued[owner];
         return w > covered ? w.sub(covered) : 0;
     }
@@ -102,13 +102,13 @@ contract OptionToken is RedeemableToken {
     }
 
     function afterRedeem(address owner, uint, uint value) override internal {
-        IOptionsExchange(exchangeAddr).cleanUp(owner, address(this));
+        exchange.cleanUp(owner, address(this));
         emit Transfer(owner, address(0), value);
     }
 
     function emitTransfer(address from, address to, uint value) override internal {
 
-        IOptionsExchange(exchangeAddr).transferOwnership(_symbol, from, to, value);
+        exchange.transferOwnership(_symbol, from, to, value);
         emit Transfer(from, to, value);
     }
 }
