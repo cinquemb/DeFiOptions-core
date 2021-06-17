@@ -23,11 +23,22 @@ contract CollateralManager is ManagedContract {
     ICreditProvider private creditProvider;
     IOptionsExchange private exchange;
 
-    uint private _volumeBase;
     uint private timeBase;
+    uint private _volumeBase;
     uint private sqrtTimeBase;
+    uint private collateralCallPeriod;
+
+
+    mapping(address => mapping(address => uint256)) private writerCollateralCall;
 
     event LiquidateEarly(
+        address indexed token,
+        address indexed sender,
+        address indexed onwer,
+        uint volume
+    );
+
+    event CollateralCall(
         address indexed token,
         address indexed sender,
         address indexed onwer,
@@ -51,6 +62,7 @@ contract CollateralManager is ManagedContract {
         _volumeBase = 1e18;
         timeBase = 1e18;
         sqrtTimeBase = 1e9;
+        collateralCallPeriod = 1 days;
     }
 
     function collateralSkew() public view returns (int) {
@@ -129,17 +141,24 @@ contract CollateralManager is ManagedContract {
     function calcLiquidationVolume(
         address owner,
         IOptionsExchange.OptionData memory opt,
+        address _tk,
         IOptionsExchange.FeedData memory fd,
         uint written
     )
         private
-        view
         returns (uint volume)
     {    
         uint bal = creditProvider.balanceOf(owner);
         uint coll = calcCollateral(owner, true);
-        require(coll > bal, "unfit for liquidation");
 
+        if (coll > bal) {
+            if (writerCollateralCall[owner][_tk] != 0) {
+                // cancel collateral call
+                writerCollateralCall[owner][_tk] = 0;
+            }
+        }
+        require(coll > bal, "Collateral Manager: unfit for liquidation");
+        
         volume = coll.sub(bal).mul(_volumeBase).mul(written).div(
             calcCollateral(
                 uint(fd.upperVol).sub(uint(fd.lowerVol)),
@@ -213,7 +232,7 @@ contract CollateralManager is ManagedContract {
 
         IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
         OptionToken tk = OptionToken(_tk);
-        require(getUdlNow(opt) >= opt.maturity, "option not expired");
+        require(getUdlNow(opt) >= opt.maturity, "Collateral Manager: option not expired");
         uint iv = uint(calcIntrinsicValue(opt));
 
         for (uint i = 0; i < owners.length; i++) {
@@ -227,7 +246,7 @@ contract CollateralManager is ManagedContract {
         require(opt.udlFeed != address(0), "invalid token");
 
         OptionToken tk = OptionToken(_tk);
-        require(tk.writtenVolume(owner) > 0, "invalid owner");
+        require(tk.writtenVolume(owner) > 0, "Collateral Manager: invalid owner");
 
         bool isExpired = getUdlNow(opt) >= opt.maturity;
         uint iv = uint(calcIntrinsicValue(opt));
@@ -254,7 +273,7 @@ contract CollateralManager is ManagedContract {
             value = liquidateAfterMaturity(owner, tk, opt.udlFeed, written, iv);
             emit LiquidateExpired(address(tk), msg.sender, owner, written);
         } else {
-            require(written > 0, "invalid volume");
+            require(written > 0, "Collateral Manager: invalid volume");
             value = liquidateBeforeMaturity(owner, opt, tk, written, iv);
         }
     }
@@ -295,24 +314,33 @@ contract CollateralManager is ManagedContract {
         returns (uint value)
     {
         IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
-
-        uint volume = calcLiquidationVolume(owner, opt, fd, written);
+        address tkAddr = address(tk);
+        uint volume = calcLiquidationVolume(owner, opt, tkAddr, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
+        uint256 creditingValue;
 
-        /* TODO:
-            should be incentivized, i.e. compound gives 5% of collateral to liquidator 
-            could be done in multistep where 
-                - the first time triggers a margin call event for the owner (how to incentivize? 5% in credit tokens?)
-                - sencond step triggers the actual liquidation (incentivized, 5% of collateral liquidated)
-        */
-        creditProvider.processPayment(owner, address(tk), value);
+
+        if (writerCollateralCall[owner][tkAddr] == 0){
+            // the first time triggers a margin call event for the owner (how to incentivize? 10$ in exchange credit)
+            writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
+            creditingValue = 10e18;
+            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+            emit CollateralCall(tkAddr, msg.sender, owner, volume);
+        } else {
+            require(settings.exchangeTime().sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
+        }
+
+        creditProvider.processPayment(owner, tkAddr, value);
+        // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance)
+        creditingValue = value.mul(5).div(100);
+        creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
 
         if (volume > 0) {
             tk.burn(owner, volume);
         }
 
-        emit LiquidateEarly(address(tk), msg.sender, owner, volume);
+        emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {

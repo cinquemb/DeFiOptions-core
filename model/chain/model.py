@@ -2262,7 +2262,8 @@ def main():
         ),
         8000000
     )
-    tmp_tx_hash = {'type': 'setParameters', 'hash': sp_hash}
+    tmp_tx_hash = {'type': 'createPool', 'hash': sp_hash}
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
     tx_hashes.append(tmp_tx_hash)
     print(tmp_tx_hash)
     '''
