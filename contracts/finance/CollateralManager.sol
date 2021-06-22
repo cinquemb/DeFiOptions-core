@@ -331,9 +331,9 @@ contract CollateralManager is ManagedContract {
             require(settings.exchangeTime().sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
         }
 
-        creditProvider.processPayment(owner, tkAddr, value);
-        // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance)
+        // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
         creditingValue = value.mul(5).div(100);
+        creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
         creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
 
         if (volume > 0) {

@@ -2254,28 +2254,35 @@ def main():
     tx_hashes_good = 0
     tx_fails = []
 
-    # temp opx, llp, agent
+    linear_liquidity_pool_address = None
+    linear_liquidity_pool = None
+
     opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
-    agent = Agent(None, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
-    p_hash = transaction_helper(
-        agent,
-        opx.contract.functions.createPool(
-            "DEFAULT",
-            "TEST",
-        ),
-        8000000
-    )
-    tmp_tx_hash = {'type': 'createPool', 'hash': p_hash}
-    print('pool creation hash:', tmp_tx_hash['hash'])
-    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
-    tx_hashes.append(tmp_tx_hash)
-    tx_hashes_good += receipt["status"]    
-    if receipt["status"] == 0:
-        print(receipt)
-        tx_fails.append(tmp_tx_hash['type'])
-    logs = options_exchange.events.CreatePool().processReceipt(receipt)
-    linear_liquidity_pool_address = logs[0].args.token
-    linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
+    if not linear_liquidity_pool_address:
+        # temp opx, llp, agent
+        agent = Agent(None, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
+        p_hash = transaction_helper(
+            agent,
+            opx.contract.functions.createPool(
+                "DEFAULT",
+                "TEST",
+            ),
+            8000000
+        )
+        tmp_tx_hash = {'type': 'createPool', 'hash': p_hash}
+        print(tmp_tx_hash)
+        receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+        tx_hashes.append(tmp_tx_hash)
+        tx_hashes_good += receipt["status"]    
+        if receipt["status"] == 0:
+            print(receipt)
+            tx_fails.append(tmp_tx_hash['type'])
+        logs = options_exchange.events.CreatePool().processReceipt(receipt)
+        print("linear pool address", logs[0].args.token)
+        linear_liquidity_pool_address = logs[0].args.token
+        linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
+    else:
+        linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
 
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
