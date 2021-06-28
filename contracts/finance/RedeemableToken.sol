@@ -11,7 +11,7 @@ abstract contract RedeemableToken is ERC20 {
 
     using SafeMath for uint;
 
-    address internal exchangeAddr;
+    IOptionsExchange internal exchange;
 
     function redeemAllowed() virtual public view returns(bool);
 
@@ -26,7 +26,7 @@ abstract contract RedeemableToken is ERC20 {
 
         require(redeemAllowed(), "redeemd not allowed");
 
-        uint valTotal = IOptionsExchange(exchangeAddr).balanceOf(address(this));
+        uint valTotal = exchange.balanceOf(address(this));
         uint valRemaining = valTotal;
         uint supplyTotal = _totalSupply;
         uint supplyRemaining = _totalSupply;
@@ -52,7 +52,7 @@ abstract contract RedeemableToken is ERC20 {
         if (bal > 0) {
             uint b = 1e3;
             val = MoreMath.round(valTotal.mul(bal.mul(b)).div(supplyTotal), b);
-            IOptionsExchange(exchangeAddr).transferBalance(owner, val);
+            exchange.transferBalance(owner, val);
             removeBalance(owner, bal);
         }
 

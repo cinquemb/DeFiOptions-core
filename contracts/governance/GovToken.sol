@@ -42,10 +42,6 @@ contract GovToken is ManagedContract, ERC20 {
         return _symbol;
     }
 
-    function totalSupply() external view returns (uint) {
-        return _totalSupply;
-    }
-
     function setInitialSupply(address owner, uint supply) public {
         
         require(_totalSupply == 0, "initial supply already set");

@@ -1,14 +1,14 @@
 pragma solidity >=0.6.0;
 
 import "../../../contracts/finance/OptionsExchange.sol";
-import "../../../contracts/interfaces/LiquidityPool.sol";
-import "../../../contracts/utils/ERC20.sol";
+import "../../../contracts/interfaces/IERC20.sol";
+import "../../../contracts/interfaces/ILiquidityPool.sol";
 
 contract PoolTrader {
     
-    ERC20 private erc20;
+    IERC20 private erc20;
     OptionsExchange private exchange;
-    LiquidityPool private pool;
+    ILiquidityPool private pool;
     
     address private addr;
     address private feed;
@@ -16,9 +16,9 @@ contract PoolTrader {
     
     constructor(address _erc20, address _exchange, address _pool, address _feed) public {
 
-        erc20 = ERC20(_erc20);
+        erc20 = IERC20(_erc20);
         exchange = OptionsExchange(_exchange);
-        pool = LiquidityPool(_pool);
+        pool = ILiquidityPool(_pool);
         addr = address(this);
         feed = _feed;
     }
@@ -63,7 +63,7 @@ contract PoolTrader {
     
     function sellToPool(string calldata symbol, uint price, uint volume) external {
         
-        ERC20(exchange.resolveToken(symbol)).approve(address(pool), price * volume / volumeBase);
+        IERC20(exchange.resolveToken(symbol)).approve(address(pool), price * volume / volumeBase);
         pool.sell(symbol, price, volume);
     }
     

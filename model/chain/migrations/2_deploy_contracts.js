@@ -16,11 +16,12 @@ const LinearAnySlopeInterpolator = artifacts.require("LinearAnySlopeInterpolator
 const MockChainLinkFeed = artifacts.require("ChainlinkFeed");
 const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 const YieldTracker = artifacts.require("YieldTracker");
+const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0xaEcef7C63969026948F60BaE9db549Dc0E18ffeD");
+  await deployer.deploy(Deployer4, "0x50c92bE94dd52d0245b2CC6B04542Fb48ab89293");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -31,6 +32,7 @@ module.exports = async function(deployer) {
   const ct = await deployer.deploy(CreditToken);
   const gt = await deployer.deploy(GovToken);
   const yt = await deployer.deploy(YieldTracker);
+  const uv = await deployer.deploy(UnderlyingVault);
   const lasit = await deployer.deploy(LinearAnySlopeInterpolator);
   const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
@@ -53,7 +55,8 @@ module.exports = async function(deployer) {
 
   const BTCUSDMockFeed = await deployer.deploy(
     MockChainLinkFeed, 
-    "BTC/USD", 
+    "BTC/USD",
+    "0x0000000000000000000000000000000000000000",
     BTCUSDAgg.address,//btc/usd feed mock
     timeProvider.address, //time provider address
     0,//offset
@@ -65,6 +68,7 @@ module.exports = async function(deployer) {
   const ETHUSDMockFeed = await deployer.deploy(
     MockChainLinkFeed, 
     "ETH/USD", 
+    "0x0000000000000000000000000000000000000000",
     ETHUSDAgg.address, //eth/usd feed mock
     timeProvider.address, //time provider address
     0,//offset
@@ -85,6 +89,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);
   await deployer4.setContractAddress("YieldTracker", yt.address);
+  await deployer4.setContractAddress("UnderlyingVault", uv.address);
 
   await deployer4.deploy();
 

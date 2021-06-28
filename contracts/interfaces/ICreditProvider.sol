@@ -12,4 +12,6 @@ interface ICreditProvider {
     function transferBalance(address from, address to, uint value) external;
     function withdrawTokens(address owner, uint value) external;
     function insertPoolCaller(address llp) external;
+    function processIncentivizationPayment(address to, uint credit) external;
+    function burnDebt(uint value) external returns (uint burnt);
 }
