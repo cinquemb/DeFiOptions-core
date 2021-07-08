@@ -28,7 +28,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         IOptionsExchange.OptionType optType;
         uint120 strike;
         uint32 maturity;
-        uint256 lastUpdateTime;
         uint32 t0;
         uint32 t1;
         uint120 buyStock;
@@ -103,7 +102,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function redeemAllowed() override public view returns (bool) {
         
-        return settings.exchangeTime() >= _maturity;
+        return block.timestamp >= _maturity;
     }
 
     function maturity() override external view returns (uint) {
@@ -145,7 +144,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             optSymbols.push(optSymbol);
         } else {
             if (msg.sender != owner) {
-                require(parameters[optSymbol].t1 < settings.exchangeTime(), "must be after t1");
+                require(parameters[optSymbol].t1 < block.timestamp, "must be after t1");
             }
         }
 
@@ -154,7 +153,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             optType,
             strike.toUint120(),
             _mt.toUint32(),
-            uint(settings.exchangeTime()),
             t0.toUint32(),
             t1.toUint32(),
             buyStock.toUint120(),
@@ -166,16 +164,18 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         emit AddSymbol(optSymbol);
     }
 
-    function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
+    function showSymbol(string calldata optSymbol) external view returns (uint32, uint120, uint120, uint120[] memory, uint120[] memory) {
+        return (parameters[optSymbol].t1, parameters[optSymbol].buyStock, parameters[optSymbol].sellStock, parameters[optSymbol].x, parameters[optSymbol].y);
+    }
 
+    function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
         ensureCaller();
         ranges[optSymbol][uint(op)] = Range(start.toUint120(), end.toUint120());
     }
 
-
     function removeSymbol(string calldata optSymbol) external {
         ensureCaller();
-        require(parameters[optSymbol].maturity >= settings.exchangeTime(), "cannot destroy befor maturity");
+        require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");
         
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
@@ -190,7 +190,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         int po = exchange.calcExpectedPayout(address(this));
         
         tracker.push(
-            settings.exchangeTime().toUint32(), uint(int(b0).add(po)), b1.sub(b0)
+            block.timestamp.toUint32(), uint(int(b0).add(po)), b1.sub(b0)
         );
 
         uint ts = _totalSupply;
@@ -209,7 +209,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function calcFreeBalance() public view returns (uint balance) {
-
         uint exBal = exchange.balanceOf(address(this));
         uint reserve = exBal.mul(reserveRatio).div(fractionBase);
         uint sp = exBal.sub(exchange.collateral(address(this)));
@@ -218,7 +217,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     
     function listSymbols() override external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > settings.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity > block.timestamp) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
@@ -226,7 +225,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function listExpiredSymbols() external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity < settings.exchangeTime()) {
+            if (parameters[optSymbols[i]].maturity < block.timestamp) {
                 available = listSymbolHelper(available, optSymbols[i]);
             }
         }
