@@ -43,7 +43,7 @@ contract OptionsExchange is ManagedContract {
 
     mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
-    mapping(address => string) private dexOracleAddress;
+    mapping(address => uint) private dexOracleAddress;
 
     uint private _volumeBase;
 
@@ -181,16 +181,17 @@ contract OptionsExchange is ManagedContract {
 
         poolSymbols.push(symbolSuffix);
         emit CreatePool(pool, msg.sender);
+        return pool;
     }
 
-    function createDexOracle(address underlying, address stable, address dexTokenPair) public returns (address pool) {
-        bytes32 memory dexTokenPairStr = bytes32((dexOracleAddress[dexTokenPair]);
-        require(dexTokenPairStr.length == 0, "already created");
-        (oracleAddr, aggAddr) = oracleFactory.create(underlying, stable, dexTokenPair);
-        dexOracleAddress[dexTokenPair] = pool;// TODO: GET TOKEN PAIR NAME
+    function createDexOracle(address underlying, address stable, address dexTokenPair) public returns (address) {
+        require(dexOracleAddress[dexTokenPair] == 0, "already created");
+        (address oracleAddr, address aggAddr) = oracleFactory.create(underlying, stable, dexTokenPair);
+        dexOracleAddress[dexTokenPair] = 1;
 
         dexOracleAddresses.push(dexTokenPair);
         emit CreateDexOracle(oracleAddr, aggAddr, msg.sender);
+        return oracleAddr;
     }
 
     function listPoolSymbols() external view returns (string memory available) {

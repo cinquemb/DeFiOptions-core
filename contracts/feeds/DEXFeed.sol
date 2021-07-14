@@ -28,6 +28,7 @@ contract DEXFeed is UnderlyingFeed {
     mapping(uint => mapping(uint => uint)) private dailyVolatilities;
 
     string private _symbol;
+    address private udlAddr;
     Sample[] private samples;
     uint private offset;
     int private priceN;
@@ -35,6 +36,7 @@ contract DEXFeed is UnderlyingFeed {
 
     constructor(
         string memory _sb,
+        address _udlAddr,
         address _aggregator,
         address _time,
         uint _offset,
@@ -46,6 +48,7 @@ contract DEXFeed is UnderlyingFeed {
         _symbol = _sb;
         aggregator = AggregatorV3Interface(_aggregator);
         time = TimeProvider(_time);
+        udlAddr = _udlAddr;
         offset = _offset;
         initialize(_timestamps, _prices);
     }
@@ -61,6 +64,11 @@ contract DEXFeed is UnderlyingFeed {
     function symbol() override external view returns (string memory) {
 
         return _symbol;
+    }
+
+    function getUnderlyingAddr() override external view returns (address) {
+
+        return udlAddr;
     }
 
     function getLatestPrice() override external view returns (uint timestamp, int price) {
@@ -166,7 +174,7 @@ contract DEXFeed is UnderlyingFeed {
         upperVol = vol.mul(3);
     }
 
-    function prefetchSample() external {
+    function prefetchSample() override external {
 
         (, int price,, uint timestamp,) = aggregator.latestRoundData();
         price = rescalePrice(price);
@@ -174,7 +182,7 @@ contract DEXFeed is UnderlyingFeed {
         samples.push(Sample(timestamp.toUint32(), price.toInt128()));
     }
 
-    function prefetchDailyPrice(uint roundId) external {
+    function prefetchDailyPrice(uint roundId) override external {
 
         int price;
         uint timestamp;
@@ -200,7 +208,7 @@ contract DEXFeed is UnderlyingFeed {
         }
     }
 
-    function prefetchDailyVolatility(uint timespan) external {
+    function prefetchDailyVolatility(uint timespan) override external {
 
         require(timespan.mod(1 days) == 0, "invalid timespan");
 

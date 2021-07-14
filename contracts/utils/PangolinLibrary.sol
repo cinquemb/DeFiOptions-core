@@ -1,7 +1,7 @@
 pragma solidity >=0.5.0;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import '@pangolindex/exchange-contracts/contracts/pangolin-core/interfaces/IPangolinPair.sol';
+import "./SafeMath.sol";
+import "@pangolindex/exchange-contracts/contracts/pangolin-core/interfaces/IPangolinPair.sol";
 
 library PangolinLibrary {
     using SafeMath for uint;

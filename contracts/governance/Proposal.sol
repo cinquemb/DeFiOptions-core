@@ -2,6 +2,7 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../interfaces/IERC20.sol";
+import '../interfaces/IDEXOracleV1.sol';
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "./GovToken.sol";
@@ -13,7 +14,7 @@ abstract contract Proposal {
 
     enum Quorum { SIMPLE_MAJORITY, TWO_THIRDS, QUADRATIC }
 
-    enum VoteType {PROTOCOL_SETTINGS, POOL_SETTINGS}
+    enum VoteType {PROTOCOL_SETTINGS, POOL_SETTINGS, ORACLE_SETTINGS}
 
     enum Status { PENDING, OPEN, APPROVED, REJECTED }
 
@@ -31,6 +32,7 @@ abstract contract Proposal {
     VoteType private voteType;
     uint private expiresAt;
     bool private closed;
+    address private proposer;
 
     constructor(
         address _govToken,
@@ -51,6 +53,9 @@ abstract contract Proposal {
             llpToken = IERC20(_govToken);
             require(_quorum == Quorum.QUADRATIC, "must be quadratic");
             require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
+        }  else if (voteType == VoteType.ORACLE_SETTINGS) {
+            govToken = GovToken(_govToken);
+            require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
         } else {
             revert("vote type not specified");
         }
@@ -59,6 +64,7 @@ abstract contract Proposal {
         status = Status.PENDING;
         expiresAt = _expiresAt;
         closed = false;
+        proposer = _govToken;
     }
 
     function getId() external view returns (uint) {
@@ -81,6 +87,11 @@ abstract contract Proposal {
         return status == Status.APPROVED && !closed;
     }
 
+    function isGovernanceSettingsAllowed() external view returns (bool) {
+
+        return (voteType == VoteType.ORACLE_SETTINGS) && isExecutionAllowed();
+    }
+
     function isPoolSettingsAllowed() external view returns (bool) {
 
         return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
@@ -98,11 +109,14 @@ abstract contract Proposal {
 
     function open(uint _id) external {
 
-        if (voteType == VoteType.PROTOCOL_SETTINGS) {
-            require(msg.sender == address(govToken)); 
-        } else {
+        if (voteType == VoteType.POOL_SETTINGS) {
             require(msg.sender == address(llpToken)); 
+        } else if (voteType == VoteType.ORACLE_SETTINGS) {
+            require(msg.sender == proposer);
+        } else {
+            require(msg.sender == address(govToken)); 
         }
+
         require(status == Status.PENDING);
         id = _id;
         status = Status.OPEN;
@@ -117,8 +131,10 @@ abstract contract Proposal {
 
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
             balance = govToken.balanceOf(msg.sender);
-        } else {
+        } else if (voteType == VoteType.POOL_SETTINGS) {
             balance = llpToken.balanceOf(msg.sender);
+        } else {
+            balance = govToken.balanceOf(msg.sender);
         }
         
         require(balance > 0);
@@ -143,13 +159,29 @@ abstract contract Proposal {
         ensureIsActive();
 
         if (quorum == Proposal.Quorum.QUADRATIC) {
-            if (yea.add(nay) < MoreMath.sqrt(llpToken.totalSupply())) {
+
+            uint256 total;
+
+            if (voteType == VoteType.POOL_SETTINGS) {
+                total = llpToken.totalSupply();
+            } else {
+                total = settings.getCirculatingSupply();
+            }
+
+            if (yea.add(nay) < MoreMath.sqrt(total)) {
                 require(expiresAt < settings.exchangeTime());
             }
 
             if (yea > nay) {
                 status = Status.APPROVED;
                 executePool(llpToken);
+
+                if (voteType == VoteType.POOL_SETTINGS) {
+                    executePool(llpToken);
+                } else {
+                    executeOracle(IDEXOracleV1(proposer));
+                }
+
             } else {
                 status = Status.REJECTED;
             }
@@ -183,6 +215,8 @@ abstract contract Proposal {
     function execute(ProtocolSettings _settings) public virtual;
 
     function executePool(IERC20 _llp) public virtual;
+
+    function executeOracle(IDEXOracleV1 _oracle) public virtual;
 
     function ensureIsActive() private view {
 

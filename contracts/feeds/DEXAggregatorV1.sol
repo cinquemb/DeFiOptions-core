@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "../interfaces/AggregatorV3Interface.sol";
-import '../interfaces/IDEXOracleV1.sol';
+import "../interfaces/IDEXOracleV1.sol";
 
 
 contract DEXAggregatorV1 is AggregatorV3Interface {
@@ -12,7 +12,7 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
-    addresss _dexOracle;
+    address _dexOracle;
 
 
     constructor(address dexOracle) public {
@@ -51,7 +51,7 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     }
 
     function appendUpdatedAt() internal {
-        uint256 ct = DEXOracleV1(_dexOracle).latestCapture();
+        uint256 ct = IDEXOracleV1(_dexOracle).latestCapture();
         require(ct != updatedAts[updatedAts.length-1], "DEXAggregatorV1: too soon");
         updatedAts.push(ct);
     }

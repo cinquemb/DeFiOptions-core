@@ -9,6 +9,7 @@ import "../feeds/DEXAggregatorV1.sol";
 contract DEXOracleFactory is ManagedContract {
 
     address private exchangeAddr;
+    address private deployerAddress;
 
     function initialize(Deployer deployer) override internal {
         deployerAddress = address(deployer);

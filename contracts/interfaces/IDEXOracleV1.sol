@@ -14,17 +14,18 @@
     limitations under the License.
 */
 
-pragma solidity ^0.5.17;
+pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../utils/Decimal.sol";
 
-contract IDEXOracleV1 {
-    function setup() public;
-    function capture() public returns (int256, bool);
+interface IDEXOracleV1 {
+    function capture() external returns (int256, bool);
     function pair() external view returns (address);
     function liveReserve() external view returns (uint256);
-    function latestPrice() public view returns (int256 memory);
-    function latestValid() public view returns (bool);
-    function latestCapture() public view returns (uint256);
+    function latestPrice() external view returns (int256);
+    function latestValid() external view returns (bool);
+    function latestCapture() external view returns (uint256);
+    function updateTwapPeriod(uint256 twapPeriod) external;
+    function registerProposal(address addr) external returns (uint id);
 }
