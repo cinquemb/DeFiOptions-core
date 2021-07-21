@@ -5,8 +5,8 @@ import "./LiquidityPool.sol";
 
 contract LinearLiquidityPool is LiquidityPool {
 
-    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
-        LiquidityPool(_nm, _sb, _ownerAddr, _deployAddr) public {}
+    constructor(string memory _nm, string memory _sb, address _deployAddr)
+        LiquidityPool(_nm, _sb, _deployAddr) public {}
     
     function name() override external view returns (string memory) {
         return string(abi.encodePacked(_name_prefix, _name));

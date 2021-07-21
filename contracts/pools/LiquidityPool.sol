@@ -46,7 +46,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     string internal constant _symbol_prefix = "LLPTK-";
     string internal constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
 
-    address private owner;
     address private creditProviderAddr;
 
     IYieldTracker private tracker;
@@ -68,13 +67,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     
     string[] private optSymbols;
 
-    constructor(string memory _nm, string memory _sb, address _ownerAddr, address _deployAddr)
+    constructor(string memory _nm, string memory _sb, address _deployAddr)
         ERC20(string(abi.encodePacked(_name_prefix, _nm)))
         public
     {    
         _symbol = _sb;
         _name = _nm;
-        owner = _ownerAddr;
 
         Deployer deployer = Deployer(_deployAddr);
         fractionBase = 1e9;
@@ -94,7 +92,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     )
         external
     {
-        ensureOwner();
+        ensureCaller();
         spread = _spread;
         reserveRatio = _reserveRatio;
         _maturity = _mt;
@@ -111,7 +109,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function getOwner() override external view returns (address) {
-        return owner;
+        // returns the proposal address of the caller, used in removing pool symbols from exchange
+        return proposalsMap[proposingId[msg.sender]];
     }
 
     function yield(uint dt) override external view returns (uint y) {
@@ -140,12 +139,9 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         string memory optSymbol = exchange.getOptionSymbol(opt);
 
         if (parameters[optSymbol].x.length == 0) {
-            ensureOwner();
             optSymbols.push(optSymbol);
         } else {
-            if (msg.sender != owner) {
-                require(parameters[optSymbol].t1 < block.timestamp, "must be after t1");
-            }
+            require(parameters[optSymbol].t1 < block.timestamp, "must be after t1");
         }
 
         parameters[optSymbol] = PricingParameters(
@@ -451,18 +447,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function ensureCaller() private view {
-        if (owner != address(0)) {
-            if (msg.sender != owner) {
-                IProposal p = IProposal(msg.sender);
-                require(proposalsMap[p.getId()] == msg.sender, "proposal not registered");
-                require(p.isPoolSettingsAllowed(), "not allowed");
-            }
-        } else {
-            require(owner == address(0) || msg.sender == owner, "unauthorized caller");
-        }
-    }
-
-    function ensureOwner() private view {
-        require(owner == address(0) || msg.sender == owner, "unauthorized caller");
+        IProposal p = IProposal(msg.sender);
+        require(proposalsMap[p.getId()] == msg.sender, "proposal not registered");
+        require(p.isPoolSettingsAllowed(), "not allowed");
     }
 }

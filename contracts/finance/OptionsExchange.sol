@@ -175,7 +175,7 @@ contract OptionsExchange is ManagedContract {
     function createPool(string memory nameSuffix, string memory symbolSuffix) public returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
-        pool = poolFactory.create(nameSuffix, symbolSuffix, msg.sender);
+        pool = poolFactory.create(nameSuffix, symbolSuffix);
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
 

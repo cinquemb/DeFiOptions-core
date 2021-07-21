@@ -13,8 +13,8 @@ contract LinearLiquidityPoolFactory is ManagedContract {
         deployerAddress = address(deployer);
     }
 
-    function create(string calldata name, string calldata symbolSuffix, address owner) external returns (address) {
-        LinearLiquidityPool llp = new LinearLiquidityPool(name, symbolSuffix, owner, deployerAddress);
+    function create(string calldata name, string calldata symbolSuffix) external returns (address) {
+        LinearLiquidityPool llp = new LinearLiquidityPool(name, symbolSuffix, deployerAddress);
         return address(llp);
     }
 }
