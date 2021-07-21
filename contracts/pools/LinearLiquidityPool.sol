@@ -27,7 +27,7 @@ contract LinearLiquidityPool is LiquidityPool {
         override
     {
         uint _written = tk.writtenVolume(address(this));
-        require(_written.add(volume) <= param.buyStock, "excessive volume");
+        require(_written.add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
         require(calcFreeBalance() > 0, "pool balance too low");
 
         exchange.writeOptions(
@@ -47,7 +47,7 @@ contract LinearLiquidityPool is LiquidityPool {
         view
         returns (uint price)
     {
-        uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
+        uint f = op == Operation.BUY ? p.bsStockSpread[2].add(fractionBase) : fractionBase.sub(p.bsStockSpread[2]);
         int udlPrice = getUdlPrice(p.udlFeed);
         price = interpolator.interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
     }

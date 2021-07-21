@@ -30,8 +30,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint32 maturity;
         uint32 t0;
         uint32 t1;
-        uint120 buyStock;
-        uint120 sellStock;
+        uint[3] bsStockSpread; //buyStock bsStockSpread[0], sellStock bsStockSpread[1], spread bsStockSpread[2]
         uint120[] x;
         uint120[] y;
     }
@@ -60,7 +59,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     uint private serial;
     uint private _maturity;
 
-    uint internal spread;
     uint internal volumeBase;
     uint internal reserveRatio;
     uint internal fractionBase;
@@ -86,14 +84,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function setParameters(
-        uint _spread,
         uint _reserveRatio,
         uint _mt
     )
         external
     {
         ensureCaller();
-        spread = _spread;
         reserveRatio = _reserveRatio;
         _maturity = _mt;
     }
@@ -126,8 +122,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint t1,
         uint120[] calldata x,
         uint120[] calldata y,
-        uint buyStock,
-        uint sellStock
+        uint[3] calldata bsStockSpread
     )
         external
     {
@@ -151,8 +146,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             _mt.toUint32(),
             t0.toUint32(),
             t1.toUint32(),
-            buyStock.toUint120(),
-            sellStock.toUint120(),
+            bsStockSpread,
             x,
             y
         );
@@ -161,7 +155,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function showSymbol(string calldata optSymbol) external view returns (uint32, uint120, uint120, uint120[] memory, uint120[] memory) {
-        return (parameters[optSymbol].t1, parameters[optSymbol].buyStock, parameters[optSymbol].sellStock, parameters[optSymbol].x, parameters[optSymbol].y);
+        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0].toUint120(), parameters[optSymbol].bsStockSpread[1].toUint120(), parameters[optSymbol].x, parameters[optSymbol].y);
     }
 
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
@@ -263,7 +257,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
         volume = MoreMath.min(
             calcVolume(optSymbol, param, price, op),
-            (op == Operation.SELL) ? uint(param.sellStock).sub(optBal) : uint(param.buyStock).sub(optBal)
+            (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
         );
     }
 
@@ -321,7 +315,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         require(calcFreeBalance() > 0, "pool balance too low");
 
         uint _holding = tk.balanceOf(address(this));
-        require(_holding <= param.sellStock, "excessive volume");
+        require(_holding <= param.bsStockSpread[1].toUint120(), "excessive volume");
 
         emit Sell(_tk, msg.sender, price, volume);
     }
