@@ -24,9 +24,9 @@ contract ProtocolSettings is ManagedContract {
     TimeProvider private time;
     CreditProvider private creditProvider;
     GovToken private govToken;
-
     mapping(address => int) private underlyingFeeds;
     mapping(address => Rate) private tokenRates;
+    mapping(address => bool) private poolCreditTradeable;
     mapping(address => mapping(address => address[])) private paths;
 
     address private owner;
@@ -301,6 +301,15 @@ contract ProtocolSettings is ManagedContract {
                 break;
             }
         }
+    }
+
+    function setPoolCreditTradable(address poolAddress, bool isTradable) external {
+        ensureWritePrivilege();
+        poolCreditTradeable[poolAddress] = isTradable;
+    }
+
+    function checkPoolCreditTradable(address poolAddress) external view returns (bool) {
+        return poolCreditTradeable[poolAddress];
     }
 
     function ensureWritePrivilege() private view {

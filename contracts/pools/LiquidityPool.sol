@@ -21,25 +21,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     using SafeMath for uint;
     using SignedSafeMath for int;
 
-    enum Operation { NONE, BUY, SELL }
-
-    struct PricingParameters {
-        address udlFeed;
-        IOptionsExchange.OptionType optType;
-        uint120 strike;
-        uint32 maturity;
-        uint32 t0;
-        uint32 t1;
-        uint[3] bsStockSpread; //buyStock bsStockSpread[0], sellStock bsStockSpread[1], spread bsStockSpread[2]
-        uint120[] x;
-        uint120[] y;
-    }
-
-    struct Range {
-        uint120 start;
-        uint120 end;
-    }
-
     string internal _name;
     string internal _symbol;
     string internal constant _symbol_prefix = "LLPTK-";
@@ -109,8 +90,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         return proposalsMap[proposingId[msg.sender]];
     }
 
-    function yield(uint dt) override external view returns (uint y) {
-        y = tracker.yield(address(this), dt);
+    function yield(uint dt) override external view returns (uint) {
+        return tracker.yield(address(this), dt);
     }
 
     function addSymbol(
@@ -130,8 +111,9 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         require(_mt < _maturity, "invalid maturity");
         require(x.length > 0 && x.length.mul(2) == y.length, "invalid pricing surface");
 
-        IOptionsExchange.OptionData memory opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
-        string memory optSymbol = exchange.getOptionSymbol(opt);
+        string memory optSymbol = exchange.getOptionSymbol(
+            IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())
+        );
 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
@@ -292,13 +274,15 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         require(isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range");
 
-        price = receivePayment(param, price, volume, token);
+        (uint price, uint value) = receivePayment(param, price, volume, token);
 
         _tk = exchange.resolveToken(optSymbol);
         IOptionToken tk = IOptionToken(_tk);
         uint _holding = tk.balanceOf(address(this));
 
         if (volume > _holding) {
+            // only credit the amount excess what is already available
+            ICreditProvider(creditProviderAddr).borrowLiquidity(address(this), value.sub(calcFreeBalance()));
             writeOptions(tk, param, volume, msg.sender);
         } else {
             tk.transfer(msg.sender, volume);
@@ -337,25 +321,30 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         
         uint _written = tk.writtenVolume(address(this));
         if (_written > 0) {
-            uint toBurn = MoreMath.min(_written, volume);
-            tk.burn(toBurn);
+            tk.burn(
+                MoreMath.min(_written, volume)
+            );
         }
 
         uint value = price.mul(volume).div(volumeBase);
         exchange.transferBalance(msg.sender, value);
+        uint freeBal = calcFreeBalance();
 
-        require(calcFreeBalance() > 0, "pool balance too low");
+        if (freeBal == 0) {
+            // only credit the amount excess what is already available
+            ICreditProvider(creditProviderAddr).borrowLiquidity(address(this), value);
+        }
 
-        uint _holding = tk.balanceOf(address(this));
-        require(_holding <= param.bsStockSpread[1].toUint120(), "excessive volume");
+        require(freeBal > 0, "pool balance too low");
+        // holding <= sellStock
+        require(tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "excessive volume");
 
         emit Sell(_tk, msg.sender, price, volume);
     }
 
     function sell(string calldata optSymbol, uint price, uint volume) override external {
         
-        bytes32 x;
-        sell(optSymbol, price, volume, 0, 0, x, x);
+        sell(optSymbol, price, volume, 0, 0, "", "");
     }
 
     function isInRange(
@@ -382,7 +371,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         address token
     )
         private
-        returns (uint)
+        returns (uint, uint)
     {
         price = validatePrice(price, param, Operation.BUY);
         uint value = price.mul(volume).div(volumeBase);
@@ -395,7 +384,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             exchange.transferBalance(msg.sender, address(this), value);
         }
 
-        return price;
+        return (price, value);
     }
 
     function validatePrice(
@@ -415,11 +404,11 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function valueOf(address account) external view returns (uint) {
-
-        int exBal = int(exchange.balanceOf(address(this)));
-        int payout = exchange.calcExpectedPayout(address(this));
-        return uint(exBal.add(payout))
-            .mul(balanceOf(account)).div(totalSupply());
+        return uint(
+            int(exchange.balanceOf(address(this))).add(//exBal
+                exchange.calcExpectedPayout(address(this)) //payout
+            )
+        ).mul(balanceOf(account)).div(totalSupply());
     }
     
     function writeOptions(
@@ -449,15 +438,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         returns (uint volume);
 
     function getUdlPrice(address udlFeed) internal view returns (int udlPrice) {
-
-        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
-        (, udlPrice) = feed.getLatestPrice();
+        (, udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
     }
 
     function depositTokensInExchange(address token, uint value) private {
         
-        IERC20 t = IERC20(token);
-        t.transferFrom(msg.sender, creditProviderAddr, value);
+        IERC20(token).transferFrom(msg.sender, creditProviderAddr, value);
         ICreditProvider(creditProviderAddr).addBalance(address(this), token, value);
     }
 
@@ -480,7 +466,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function ensureCaller() private view {
         IProposal p = IProposal(msg.sender);
-        require(proposalsMap[p.getId()] == msg.sender, "proposal not registered");
-        require(p.isPoolSettingsAllowed(), "not allowed");
+        require((proposalsMap[p.getId()] == msg.sender) && p.isPoolSettingsAllowed(), "proposal not allowed/registered");
     }
 }

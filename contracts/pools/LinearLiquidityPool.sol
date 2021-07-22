@@ -26,8 +26,7 @@ contract LinearLiquidityPool is LiquidityPool {
         internal
         override
     {
-        uint _written = tk.writtenVolume(address(this));
-        require(_written.add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
+        require(tk.writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
         require(calcFreeBalance() > 0, "pool balance too low");
 
         exchange.writeOptions(
@@ -47,9 +46,14 @@ contract LinearLiquidityPool is LiquidityPool {
         view
         returns (uint price)
     {
-        uint f = op == Operation.BUY ? p.bsStockSpread[2].add(fractionBase) : fractionBase.sub(p.bsStockSpread[2]);
-        int udlPrice = getUdlPrice(p.udlFeed);
-        price = interpolator.interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
+        price = interpolator.interpolate(
+            getUdlPrice(p.udlFeed),
+            p.t0,
+            p.t1,
+            p.x,
+            p.y,
+            (op == Operation.BUY) ? p.bsStockSpread[2].add(fractionBase) : fractionBase.sub(p.bsStockSpread[2])
+        );
     }
 
     function calcVolume(
@@ -63,7 +67,6 @@ contract LinearLiquidityPool is LiquidityPool {
         view
         returns (uint volume)
     {
-        uint fb = calcFreeBalance();
         uint r = fractionBase.sub(reserveRatio);
 
         uint coll = exchange.calcCollateral(
@@ -77,7 +80,7 @@ contract LinearLiquidityPool is LiquidityPool {
         if (op == Operation.BUY) {
 
             volume = coll <= price ? uint(-1) :
-                fb.mul(volumeBase).div(
+                calcFreeBalance().mul(volumeBase).div(
                     coll.sub(price.mul(r).div(fractionBase))
                 );
 

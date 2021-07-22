@@ -168,6 +168,22 @@ contract CreditProvider is ManagedContract {
         }
     }
 
+    function borrowLiquidity(address to, uint credit) external {
+        
+        ensureCaller();
+        require(to != address(this), "invalid borrower");
+        require(callers[to] == 1, "invalid pool");
+        require(settings.checkPoolCreditTradable(to) == true, "pool cant trade on credit");
+
+        if (credit > 0) {
+            // add debt to credit provier, and increment exchange balance for liquidity pool
+            applyDebtInterestRate(address(this));
+            setDebt(address(this), debts[address(this)].add(credit));
+            addBalance(to, credit);
+            emit AccumulateDebt(to, credit);
+        }
+    }
+
     function processPayment(address from, address to, uint value) external {
         
         ensureCaller();
