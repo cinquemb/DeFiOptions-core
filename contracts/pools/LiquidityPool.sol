@@ -261,6 +261,25 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         );
     }
 
+    function buy(
+        string calldata optSymbol,
+        uint price,
+        uint volume,
+        address token,
+        uint maxValue,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        override
+        external
+        returns (address _tk)
+    {        
+        IOptionToken(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
+        _tk = buy(optSymbol, price, volume, token);
+    }
+
     function buy(string memory optSymbol, uint price, uint volume, address token)
         override
         public
@@ -288,8 +307,18 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         emit Buy(_tk, msg.sender, price, volume);
     }
 
-    function sell(string calldata optSymbol, uint price, uint volume) override external {
-        
+    function sell(
+        string memory optSymbol,
+        uint price,
+        uint volume,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        override
+        public
+    {
         require(volume > 0, "invalid volume");
         ensureValidSymbol(optSymbol);
 
@@ -301,6 +330,9 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         address _tk = exchange.resolveToken(optSymbol);
         IOptionToken tk = IOptionToken(_tk);
+        if (deadline > 0) {
+            tk.permit(msg.sender, address(this), volume, deadline, v, r, s);
+        }
         tk.transferFrom(msg.sender, address(this), volume);
         
         uint _written = tk.writtenVolume(address(this));
@@ -318,6 +350,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         require(_holding <= param.bsStockSpread[1].toUint120(), "excessive volume");
 
         emit Sell(_tk, msg.sender, price, volume);
+    }
+
+    function sell(string calldata optSymbol, uint price, uint volume) override external {
+        
+        bytes32 x;
+        sell(optSymbol, price, volume, 0, 0, x, x);
     }
 
     function isInRange(

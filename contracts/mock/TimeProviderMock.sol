@@ -3,7 +3,7 @@ pragma solidity >=0.6.0;
 import "../deployment/ManagedContract.sol";
 import "../interfaces/TimeProvider.sol";
 
-contract TimeProviderMock is TimeProvider, ManagedContract {
+contract TimeProviderMock is ManagedContract, TimeProvider {
     
     uint offset = 0;
     int fixedTime = -1;

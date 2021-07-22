@@ -24,9 +24,34 @@ interface ILiquidityPool {
 
     function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
 
+    function buy(
+        string calldata optSymbol,
+        uint price,
+        uint volume,
+        address token,
+        uint maxValue,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external
+        returns (address addr);
+
     function buy(string calldata optSymbol, uint price, uint volume, address token)
         external
         returns (address addr);
+
+    function sell(
+        string calldata optSymbol,
+        uint price,
+        uint volume,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external;
 
     function sell(string calldata optSymbol, uint price, uint volume) external;
 }
