@@ -282,7 +282,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         if (volume > _holding) {
             // only credit the amount excess what is already available
-            ICreditProvider(creditProviderAddr).borrowLiquidity(address(this), value.sub(calcFreeBalance()));
+            ICreditProvider(creditProviderAddr).borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()));
             writeOptions(tk, param, volume, msg.sender);
         } else {
             tk.transfer(msg.sender, volume);
@@ -332,7 +332,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         if (freeBal == 0) {
             // only credit the amount excess what is already available
-            ICreditProvider(creditProviderAddr).borrowLiquidity(address(this), value);
+            ICreditProvider(creditProviderAddr).borrowSellLiquidity(address(this), value);
         }
 
         require(freeBal > 0, "pool balance too low");

@@ -13,6 +13,7 @@ interface ICreditProvider {
     function withdrawTokens(address owner, uint value) external;
     function insertPoolCaller(address llp) external;
     function processIncentivizationPayment(address to, uint credit) external;
-    function borrowLiquidity(address to, uint credit) external;
+    function borrowBuyLiquidity(address to, uint credit) external;
+    function borrowSellLiquidity(address to, uint credit) external;
     function burnDebt(uint value) external returns (uint burnt);
 }
