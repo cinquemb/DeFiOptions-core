@@ -5,6 +5,7 @@ interface ICreditProvider {
     function addBalance(address to, address token, uint value) external;
     function balanceOf(address owner) external view returns (uint);
     function totalTokenStock() external view returns (uint v);
+    function grantTokens(address to, uint value) external;
     function getTotalOwners() external view returns (uint);
     function getTotalBalance() external view returns (uint);
     function ensureCaller(address addr) external view;

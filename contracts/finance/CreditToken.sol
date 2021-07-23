@@ -7,11 +7,13 @@ import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/MoreMath.sol";
-import "./CreditProvider.sol";
+import "../utils/Decimal.sol";
+import "../interfaces/ICreditProvider.sol";
 
 contract CreditToken is ManagedContract, ERC20 {
 
     using SafeMath for uint;
+    using Decimal for Decimal.D256;
 
     struct WithdrawQueueItem {
         address addr;
@@ -20,17 +22,20 @@ contract CreditToken is ManagedContract, ERC20 {
     }
 
     ProtocolSettings private settings;
-    CreditProvider private creditProvider;
+    ICreditProvider private creditProvider;
 
     mapping(address => uint) private creditDates;
+    mapping(address => uint) private lastRedeemTime;
     mapping(address => WithdrawQueueItem) private queue;
 
-    string private constant _name = "Credit Token";
-    string private constant _symbol = "CREDTK";
+    string private constant _name = "DeFi Options Credit Token";
+    string private constant _symbol = "CDTK";
 
     address private issuer;
     address private headAddr;
     address private tailAddr;
+
+    uint timeLock = 60 * 60 * 24; // 24 withdrawl time lock per addr
 
     constructor() ERC20(_name) public {
         
@@ -41,7 +46,7 @@ contract CreditToken is ManagedContract, ERC20 {
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         issuer = deployer.getContractAddress("CreditIssuer");
     }
 
@@ -69,6 +74,29 @@ contract CreditToken is ManagedContract, ERC20 {
         }
     }
 
+    function redeemForTokens() external {
+        uint b = creditProvider.totalTokenStock();
+
+        require(b > 0, "CDTK: please wait to redeem");
+        /*
+            this is to avoid looping over credit dates and indivual balances, may need to use earliest credit date?
+                - may need a linked listed storing credit date reference?
+        */
+        uint theoreticalMaxBal = settings.applyCreditInterestRate(_totalSupply, creditDates[msg.sender]);
+
+        if (b > theoreticalMaxBal) {
+            withdrawTokens(msg.sender, balanceOf(msg.sender));
+        } else {
+            uint diffTime = settings.exchangeTime().sub(lastRedeemTime[msg.sender]);
+            require(diffTime > timeLock, "CDTK: Must wait until time lock has passed");
+            Decimal.D256 memory withdrawalPct = Decimal.ratio(balances[msg.sender], theoreticalMaxBal);
+            uint currWitdrawalLimit = withdrawalPct.mul(b).asUint256();
+            require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");
+            withdrawTokens(msg.sender, currWitdrawalLimit);
+            lastRedeemTime[msg.sender] = settings.exchangeTime();
+        }
+    }
+
     function requestWithdraw(uint value) public {
 
         uint sent;
@@ -78,7 +106,7 @@ contract CreditToken is ManagedContract, ERC20 {
         if (sent < value) {
             enqueueWithdraw(msg.sender, value.sub(sent));
         }
-    }
+    } 
 
     function processWithdraws() public {
         
