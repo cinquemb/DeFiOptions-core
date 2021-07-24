@@ -89,7 +89,7 @@ contract CreditToken is ManagedContract, ERC20 {
         } else {
             uint diffTime = settings.exchangeTime().sub(lastRedeemTime[msg.sender]);
             require(diffTime > timeLock, "CDTK: Must wait until time lock has passed");
-            Decimal.D256 memory withdrawalPct = Decimal.ratio(balances[msg.sender], theoreticalMaxBal);
+            Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), theoreticalMaxBal);
             uint currWitdrawalLimit = withdrawalPct.mul(b).asUint256();
             require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");
             withdrawTokens(msg.sender, currWitdrawalLimit);
