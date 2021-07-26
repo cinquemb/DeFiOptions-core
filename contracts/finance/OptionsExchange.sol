@@ -3,7 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../governance/ProtocolSettings.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
@@ -28,7 +28,7 @@ contract OptionsExchange is ManagedContract {
     using SignedSafeMath for int;
     
     IUnderlyingVault private vault;
-    ProtocolSettings private settings;
+    IProtocolSettings private settings;
     ICreditProvider private creditProvider;
     DEXOracleFactory private oracleFactory;
     ICollateralManager private collateralManager;
@@ -66,7 +66,7 @@ contract OptionsExchange is ManagedContract {
 
     function initialize(Deployer deployer) override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = ICollateralManager(deployer.getContractAddress("CollateralManager"));

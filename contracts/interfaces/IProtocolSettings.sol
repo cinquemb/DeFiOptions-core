@@ -8,5 +8,8 @@ interface IProtocolSettings {
 	function checkPoolSellCreditTradable(address poolAddress) external view returns (bool);
 	function applyCreditInterestRate(uint value, uint date) external view returns (uint);
     function getTokenRate(address token) external view returns (uint v, uint b);
+    function getUdlFeed(address addr) external view returns (int);
+    function getVolatilityPeriod() external view returns(uint);
+    function getAllowedTokens() external view returns (address[] memory);
     function exchangeTime() external view returns (uint256);
 }

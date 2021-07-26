@@ -21,8 +21,6 @@ contract CreditToken is ManagedContract, ERC20 {
     ICreditProvider private creditProvider;
 
     mapping(address => uint) private creditDates;
-    mapping(address => uint) private proposingId;
-    mapping(uint => address) private proposalsMap;
 
     string private constant _name = "DeFi Options Credit Token";
     string private constant _symbol = "CDTK";
