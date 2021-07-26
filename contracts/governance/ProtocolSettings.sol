@@ -41,6 +41,10 @@ contract ProtocolSettings is ManagedContract {
     uint private circulatingSupply;
     uint private volatilityPeriod;
 
+    uint private creditTimeLock = 60 * 60 * 24; // 24h withdrawl time lock for 
+    uint private minCreditTimeLock = 60 * 60 * 2; // 2h min withdrawl time lock
+    uint private maxCreditTimeLock = 60 * 60 * 48; // 48h min withdrawl time lock
+
     address private swapRouter;
     address private swapToken;
     Rate private swapTolerance;
@@ -303,6 +307,12 @@ contract ProtocolSettings is ManagedContract {
                 break;
             }
         }
+    }
+
+    function updateCreditWithdrawlTimeLock(uint duration) external {
+        ensureWritePrivilege();
+        require(duration >= minCreditTimeLock && duration <= maxCreditTimeLock, "CDTK: outside of time lock range");
+        creditTimeLock = duration;
     }
 
     function setPoolBuyCreditTradable(address poolAddress, bool isTradable) external {

@@ -3,22 +3,26 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../governance/ProtocolSettings.sol";
 import "../utils/ERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Decimal.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IProposal.sol";
+
 
 contract CreditToken is ManagedContract, ERC20 {
 
     using SafeMath for uint;
     using Decimal for Decimal.D256;
 
-    ProtocolSettings private settings;
+    IProtocolSettings private settings;
     ICreditProvider private creditProvider;
 
     mapping(address => uint) private creditDates;
+    mapping(address => uint) private proposingId;
+    mapping(uint => address) private proposalsMap;
 
     string private constant _name = "DeFi Options Credit Token";
     string private constant _symbol = "CDTK";
@@ -27,7 +31,7 @@ contract CreditToken is ManagedContract, ERC20 {
     address private headAddr;
     address private tailAddr;
 
-    uint timeLock = 60 * 60 * 24; // 24 withdrawl time lock
+    uint private serial;
 
     constructor() ERC20(_name) public {
         
@@ -37,7 +41,7 @@ contract CreditToken is ManagedContract, ERC20 {
 
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         issuer = deployer.getContractAddress("CreditIssuer");
     }
@@ -80,7 +84,7 @@ contract CreditToken is ManagedContract, ERC20 {
             withdrawTokens(msg.sender, balanceOf(msg.sender));
         } else {
             uint diffCreditTime = settings.exchangeTime().sub(creditDates[msg.sender]);
-            require(diffCreditTime > timeLock && creditDates[msg.sender] != 0, "CDTK: Must wait until time lock has passed");
+            require(diffCreditTime > settings.getCreditWithdrawlTimeLock() && creditDates[msg.sender] != 0, "CDTK: Must wait until time lock has passed");
             Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), theoreticalMaxBal);
             uint currWitdrawalLimit = withdrawalPct.mul(b).asUint256();
             require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");

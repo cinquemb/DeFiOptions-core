@@ -174,7 +174,6 @@ abstract contract Proposal {
 
             if (yea > nay) {
                 status = Status.APPROVED;
-                executePool(llpToken);
 
                 if (voteType == VoteType.POOL_SETTINGS) {
                     executePool(llpToken);
