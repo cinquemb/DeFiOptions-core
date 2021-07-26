@@ -6,10 +6,10 @@ import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IERC20.sol";
+import "../interfaces/ICreditToken.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
-import "./CreditToken.sol";
 
 
 contract CreditProvider is ManagedContract {
@@ -18,7 +18,7 @@ contract CreditProvider is ManagedContract {
     using SignedSafeMath for int;
     
     ProtocolSettings private settings;
-    CreditToken private creditToken;
+    ICreditToken private creditToken;
 
     mapping(address => uint) private balances;
     mapping(address => uint) private debts;
@@ -49,7 +49,7 @@ contract CreditProvider is ManagedContract {
 
     function initialize(Deployer deployer) override internal {
 
-        creditToken = CreditToken(deployer.getContractAddress("CreditToken"));
+        creditToken = ICreditToken(deployer.getContractAddress("CreditToken"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         address vaultAddr = deployer.getContractAddress("UnderlyingVault");
