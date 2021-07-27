@@ -8,9 +8,10 @@ import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/IOptionToken.sol";
 import "../interfaces/IUnderlyingVault.sol";
 import "../utils/SafeCast.sol";
-import "./OptionToken.sol";
+
 
 contract CollateralManager is ManagedContract {
 
@@ -231,7 +232,7 @@ contract CollateralManager is ManagedContract {
     function liquidateExpired(address _tk, address[] calldata owners) external {
 
         IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
-        OptionToken tk = OptionToken(_tk);
+        IOptionToken tk = IOptionToken(_tk);
         require(getUdlNow(opt) >= opt.maturity, "Collateral Manager: option not expired");
         uint iv = uint(calcIntrinsicValue(opt));
 
@@ -245,7 +246,7 @@ contract CollateralManager is ManagedContract {
         IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
         require(opt.udlFeed != address(0), "invalid token");
 
-        OptionToken tk = OptionToken(_tk);
+        IOptionToken tk = IOptionToken(_tk);
         require(tk.writtenVolume(owner) > 0, "Collateral Manager: invalid owner");
 
         bool isExpired = getUdlNow(opt) >= opt.maturity;
@@ -257,7 +258,7 @@ contract CollateralManager is ManagedContract {
     function liquidateOptions(
         address owner,
         IOptionsExchange.OptionData memory opt,
-        OptionToken tk,
+        IOptionToken tk,
         bool isExpired,
         uint iv
     )
@@ -282,7 +283,7 @@ contract CollateralManager is ManagedContract {
 
     function liquidateAfterMaturity(
         address owner,
-        OptionToken tk,
+        IOptionToken tk,
         address feed,
         uint written,
         uint iv
@@ -306,7 +307,7 @@ contract CollateralManager is ManagedContract {
     function liquidateBeforeMaturity(
         address owner,
         IOptionsExchange.OptionData memory opt,
-        OptionToken tk,
+        IOptionToken tk,
         uint written,
         uint iv
     )

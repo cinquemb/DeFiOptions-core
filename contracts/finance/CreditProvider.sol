@@ -154,6 +154,20 @@ contract CreditProvider is ManagedContract {
         }
     }
 
+    function processEarlyLpWithdrawal(address to, uint credit) external {
+        
+        ensureCaller();
+        require(to != address(this), "invalid incentivization");
+
+        if (credit > 0) {
+            // add debt to credit provier, and issue credit tokens to withdrawing lp addresss
+            applyDebtInterestRate(address(this));
+            setDebt(address(this), debts[address(this)].add(credit));
+            issueCreditTokens(to, credit);
+            emit AccumulateDebt(to, credit);
+        }
+    }
+
     function processIncentivizationPayment(address to, uint credit) external {
         
         ensurePrimeCaller();

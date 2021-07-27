@@ -38,4 +38,5 @@ interface IOptionsExchange {
     function cleanUp(address owner, address _tk) external;
     function release(address owner, uint udl, uint coll) external;
     function transferOwnership(string calldata symbol, address from, address to, uint value) external;
+    function processEarlyLpWithdrawal(address to, uint credit) external;
 }

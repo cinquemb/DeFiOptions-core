@@ -5,7 +5,9 @@ interface IOptionToken {
     function transfer(address recipient, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
     function burn(uint value) external;
+    function burn(address owner, uint value) external;
     function writtenVolume(address owner) external view returns (uint);
+    function uncoveredVolume(address owner) external view returns (uint);
     function permit(
         address owner, 
         address spender,

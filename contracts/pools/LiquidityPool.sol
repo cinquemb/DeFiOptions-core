@@ -60,7 +60,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         creditProviderAddr = deployer.getContractAddress("CreditProvider");
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
-        volumeBase = exchange.volumeBase();
+        volumeBase = 1e18;//exchange.volumeBase();
         serial = 1;
     }
 
@@ -232,7 +232,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function queryHelper(string memory optSymbol, Operation op) private view returns (uint price, uint volume) {
-        ensureValidSymbol(optSymbol);
         PricingParameters memory param = parameters[optSymbol];
         price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
@@ -268,8 +267,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         returns (address _tk)
     {
         require(volume > 0, "invalid volume");
-        ensureValidSymbol(optSymbol);
-
         PricingParameters memory param = parameters[optSymbol];
 
         require(isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range");
@@ -304,8 +301,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         public
     {
         require(volume > 0, "invalid volume");
-        ensureValidSymbol(optSymbol);
-
         PricingParameters memory param = parameters[optSymbol];
         
         require(isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range");
@@ -445,11 +440,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         
         IERC20(token).transferFrom(msg.sender, creditProviderAddr, value);
         ICreditProvider(creditProviderAddr).addBalance(address(this), token, value);
-    }
-
-    function ensureValidSymbol(string memory optSymbol) private view {
-
-        require(parameters[optSymbol].udlFeed != address(0), "invalid optSymbol");
     }
 
     function registerProposal(address addr) external returns (uint id) {
