@@ -59,11 +59,11 @@ abstract contract RedeemableToken is ERC20 {
         afterRedeem(owner, bal, val);
     }
 
-    function withdrawEarly(address owner) external returns (uint value) {        
-        uint bal = balanceOf(owner);
+    function withdrawEarly() external returns (uint value) {        
+        uint bal = balanceOf(msg.sender);
         
         if (bal > 0) {
-            // burn owners pool tokens, but issue them credit tokens
+            // burn msg.sender pool tokens, but issue them credit tokens
             uint b = 1e3;
             value = MoreMath.round(
                 exchange.balanceOf(
@@ -76,8 +76,8 @@ abstract contract RedeemableToken is ERC20 {
                 b
             );
             // this will fail if not called from pool and revert tx
-            exchange.processEarlyLpWithdrawal(owner, value);
-            removeBalance(owner, bal);
+            exchange.processEarlyLpWithdrawal(msg.sender, value);
+            removeBalance(msg.sender, bal);
         }
     }
 
