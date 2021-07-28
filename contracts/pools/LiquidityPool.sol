@@ -119,10 +119,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
-        } else {
-            require(parameters[optSymbol].t1 < block.timestamp, "must be after t1");
         }
-
+        
         parameters[optSymbol] = PricingParameters(
             udlFeed,
             optType,
