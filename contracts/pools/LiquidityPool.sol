@@ -26,11 +26,10 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     string internal constant _symbol_prefix = "LLPTK-";
     string internal constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
 
-    address private creditProviderAddr;
-
     IYieldTracker private tracker;
     IProtocolSettings private settings;
     IInterpolator internal interpolator;
+    ICreditProvider private creditProvider;
 
     mapping(address => uint) private proposingId;
     mapping(uint => address) private proposalsMap;
@@ -41,6 +40,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     uint private _maturity;
 
     uint internal volumeBase;
+    uint internal withdrawFee;
     uint internal reserveRatio;
     uint internal fractionBase;
     
@@ -57,7 +57,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         fractionBase = 1e9;
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProviderAddr = deployer.getContractAddress("CreditProvider");
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
         volumeBase = 1e18;//exchange.volumeBase();
@@ -66,12 +66,14 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function setParameters(
         uint _reserveRatio,
+        uint _withdrawFee,
         uint _mt
     )
         external
     {
         ensureCaller();
         reserveRatio = _reserveRatio;
+        withdrawFee = _withdrawFee;
         _maturity = _mt;
     }
 
@@ -93,7 +95,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     function yield(uint dt) override external view returns (uint) {
         return tracker.yield(address(this), dt);
     }
-
+    
     function addSymbol(
         address udlFeed,
         uint strike,
@@ -156,14 +158,11 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function depositTokens(address to, address token, uint value) override public {
-        uint b0 = exchange.balanceOf(address(this));
+        (uint b0, int po) = getBalanceAndPayout();
         depositTokensInExchange(token, value);
         uint b1 = exchange.balanceOf(address(this));
-        int po = exchange.calcExpectedPayout(address(this));
         
-        tracker.push(
-            block.timestamp.toUint32(), uint(int(b0).add(po)), b1.sub(b0)
-        );
+        tracker.push(int(b0).add(po), b1.sub(b0).toInt256());
 
         uint ts = _totalSupply;
         int expBal = po.add(int(b1));
@@ -178,6 +177,42 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         addBalance(to, v);
         _totalSupply = ts.add(v);
         emitTransfer(address(0), to, v);
+    }
+
+    function withdraw(uint amount) override external {
+
+        uint bal = balanceOf(msg.sender);
+        require(bal >= amount, "insufficient caller balance");
+
+        uint val = valueOf(msg.sender).mul(amount).div(bal);
+        uint discountedValue = val.mul(fractionBase.sub(withdrawFee)).div(fractionBase);
+        uint freeBal = calcFreeBalance();
+        
+        if (discountedValue > freeBal) {
+            //issue them credit tokens in excess of free balance
+            creditProvider.processEarlyLpWithdrawal(
+                msg.sender,
+                discountedValue.sub(freeBal)
+            );
+        }
+
+        if (freeBal > 0) {
+            (uint b0, int po) = getBalanceAndPayout();
+            
+            exchange.transferBalance(
+                address(this), 
+                msg.sender, 
+                (discountedValue <= freeBal) ? discountedValue : freeBal
+            );
+            
+            tracker.push(
+                int(b0).add(po), 
+                -(((discountedValue <= freeBal) ? val : freeBal).toInt256())
+            );
+        }
+        
+        removeBalance(msg.sender, amount);
+        emitTransfer(msg.sender, address(0), amount);
     }
 
     function calcFreeBalance() public view returns (uint balance) {
@@ -275,11 +310,10 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         _tk = exchange.resolveToken(optSymbol);
         IOptionToken tk = IOptionToken(_tk);
-        uint _holding = tk.balanceOf(address(this));
 
-        if (volume > _holding) {
+        if (volume > tk.balanceOf(address(this))) {
             // only credit the amount excess what is already available
-            ICreditProvider(creditProviderAddr).borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()));
+            creditProvider.borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()));
             writeOptions(tk, param, volume, msg.sender);
         } else {
             tk.transfer(msg.sender, volume);
@@ -322,15 +356,25 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         }
 
         uint value = price.mul(volume).div(volumeBase);
+        
         exchange.transferBalance(msg.sender, value);
-        uint freeBal = calcFreeBalance();
+        
+        /*
+            //TODO: figure out how to lower gas for this, and decide if writers should be able to sell to the pool against future exchange cashflows?
+            uint freeBal = calcFreeBalance();
 
-        if (freeBal == 0) {
-            // only credit the amount excess what is already available
-            ICreditProvider(creditProviderAddr).borrowSellLiquidity(address(this), value);
-        }
-
-        require(freeBal > 0, "pool balance too low");
+            if (freeBal == 0) {
+                if (settings.checkPoolSellCreditTradable(address(this))) {
+                    // only credit the amount excess what is already available
+                    creditProvider.borrowSellLiquidity(address(this), value);
+                } else {
+                    // need to only run if pool cant sell against future exchange cashflows
+                    require(freeBal > 0, "pool balance too low");
+                }
+            }
+        */
+        
+        require(calcFreeBalance() > 0, "pool balance too low");
         // holding <= sellStock
         require(tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "excessive volume");
 
@@ -340,6 +384,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     function sell(string calldata optSymbol, uint price, uint volume) override external {
         
         sell(optSymbol, price, volume, 0, 0, "", "");
+    }
+
+    function getBalanceAndPayout() private view returns (uint bal, int pOut) {
+        
+        bal = exchange.balanceOf(address(this));
+        pOut = exchange.calcExpectedPayout(address(this));
     }
 
     function isInRange(
@@ -398,12 +448,10 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         );
     }
 
-    function valueOf(address account) external view returns (uint) {
-        return uint(
-            int(exchange.balanceOf(address(this))).add(//exBal
-                exchange.calcExpectedPayout(address(this)) //payout
-            )
-        ).mul(balanceOf(account)).div(totalSupply());
+    function valueOf(address ownr) public view returns (uint) {
+        (uint bal, int pOut) = getBalanceAndPayout();
+        return uint(int(bal).add(pOut))
+            .mul(balanceOf(ownr)).div(totalSupply());
     }
     
     function writeOptions(
@@ -438,8 +486,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function depositTokensInExchange(address token, uint value) private {
         
-        IERC20(token).transferFrom(msg.sender, creditProviderAddr, value);
-        ICreditProvider(creditProviderAddr).addBalance(address(this), token, value);
+        IERC20(token).transferFrom(msg.sender, address(creditProvider), value);
+        creditProvider.addBalance(address(this), token, value);
     }
 
     function registerProposal(address addr) external returns (uint id) {

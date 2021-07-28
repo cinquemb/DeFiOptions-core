@@ -59,28 +59,6 @@ abstract contract RedeemableToken is ERC20 {
         afterRedeem(owner, bal, val);
     }
 
-    function withdrawEarly() external returns (uint value) {        
-        uint bal = balanceOf(msg.sender);
-        
-        if (bal > 0) {
-            // burn msg.sender pool tokens, but issue them credit tokens
-            uint b = 1e3;
-            value = MoreMath.round(
-                exchange.balanceOf(
-                    address(this)
-                ).mul(
-                    bal.mul(b)
-                ).div(
-                    _totalSupply
-                ), 
-                b
-            );
-            // this will fail if not called from pool and revert tx
-            exchange.processEarlyLpWithdrawal(msg.sender, value);
-            removeBalance(msg.sender, bal);
-        }
-    }
-
     function afterRedeem(address owner, uint bal, uint val) virtual internal {
 
     }

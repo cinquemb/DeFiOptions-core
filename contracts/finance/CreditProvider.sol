@@ -157,7 +157,7 @@ contract CreditProvider is ManagedContract {
     function processEarlyLpWithdrawal(address to, uint credit) external {
         
         ensureCaller();
-        require(to != address(this), "invalid incentivization");
+        require(to != address(this), "invalid withrawal request");
 
         if (credit > 0) {
             // add debt to credit provier, and issue credit tokens to withdrawing lp addresss

@@ -478,10 +478,6 @@ contract OptionsExchange is ManagedContract {
         );
     }
 
-    function processEarlyLpWithdrawal(address to, uint credit) external {
-        creditProvider.processEarlyLpWithdrawal(to, credit);
-    }
-
     function writeOptionsInternal(
         IOptionsExchange.OptionData memory opt,
         string memory symbol,
