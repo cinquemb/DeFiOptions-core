@@ -28,6 +28,8 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => Rate) private tokenRates;
     mapping(address => bool) private poolBuyCreditTradeable;
     mapping(address => bool) private poolSellCreditTradeable;
+    mapping(address => bool) private udlIncentiveBlacklist;
+    mapping(address => bool) private dexAggIncentiveBlacklist;
 
     mapping(address => mapping(address => address[])) private paths;
 
@@ -309,15 +311,27 @@ contract ProtocolSettings is ManagedContract {
         }
     }
 
+    /* CREDIT TOKEN SETTINGS */
+
+    function getCreditWithdrawlTimeLock() external view returns (uint) {
+        return creditTimeLock;
+    }
+
     function updateCreditWithdrawlTimeLock(uint duration) external {
         ensureWritePrivilege();
         require(duration >= minCreditTimeLock && duration <= maxCreditTimeLock, "CDTK: outside of time lock range");
         creditTimeLock = duration;
     }
 
+    /* POOL CREDIT SETTINGS */
+
     function setPoolBuyCreditTradable(address poolAddress, bool isTradable) external {
         ensureWritePrivilege();
         poolBuyCreditTradeable[poolAddress] = isTradable;
+    }
+
+    function checkPoolBuyCreditTradable(address poolAddress) external view returns (bool) {
+        return poolBuyCreditTradeable[poolAddress];
     }
 
     function setPoolSellCreditTradable(address poolAddress, bool isTradable) external {
@@ -325,14 +339,29 @@ contract ProtocolSettings is ManagedContract {
         poolSellCreditTradeable[poolAddress] = isTradable;
     }
 
-    function checkPoolBuyCreditTradable(address poolAddress) external view returns (bool) {
-        return poolBuyCreditTradeable[poolAddress];
-    }
+    /* FEED INCENTIVES SETTINGS*/
 
     function checkPoolSellCreditTradable(address poolAddress) external view returns (bool) {
         return poolSellCreditTradeable[poolAddress];
     }
 
+    function setUdlIncentiveBlacklist(address udlAddr, bool isIncentivizable) external {
+        ensureWritePrivilege();
+        udlIncentiveBlacklist[udlAddr] = isIncentivizable;
+    }
+
+    function checkUdlIncentiveBlacklist(address udlAddr) external view returns (bool) {
+        return udlIncentiveBlacklist[udlAddr];
+    }
+
+    function setDexAggIncentiveBlacklist(address dexAggAddress, bool isIncentivizable) external {
+        ensureWritePrivilege();
+        dexAggIncentiveBlacklist[dexAggAddress] = isIncentivizable;
+    }
+
+    function checkDexAggIncentiveBlacklist(address dexAggAddress) external view returns (bool) {
+        return dexAggIncentiveBlacklist[dexAggAddress];
+    }
     function ensureWritePrivilege() private view {
 
         if (msg.sender != owner) {

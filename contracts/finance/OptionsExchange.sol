@@ -18,7 +18,8 @@ import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
-import "../feeds/DEXOracleFactory.sol";
+import "../feeds/DEXFeedFactory.sol";
+import "../feeds/DEXAggregatorV1.sol";
 import "../pools/LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ManagedContract {
@@ -30,32 +31,34 @@ contract OptionsExchange is ManagedContract {
     IUnderlyingVault private vault;
     IProtocolSettings private settings;
     ICreditProvider private creditProvider;
-    DEXOracleFactory private oracleFactory;
+    DEXFeedFactory private dexFeedFactory;
     ICollateralManager private collateralManager;
 
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
 
     mapping(address => uint) public collateral;
+
     mapping(address => IOptionsExchange.OptionData) private options;
     mapping(address => IOptionsExchange.FeedData) private feeds;
     mapping(address => address[]) private book;
 
     mapping(string => address) private poolAddress;
     mapping(string => address) private tokenAddress;
-    mapping(address => uint) private dexOracleAddress;
+    mapping(address => address) private dexFeedAddress;
+
+    
 
     uint private _volumeBase;
 
     string[] private poolSymbols;
-    address[] private dexOracleAddresses;
+    address[] private dexFeedAddresses;
     
-    event RemovePoolSymbol(string symbolSuffix);
     event WithdrawTokens(address indexed from, uint value);
     event IncentiveReward(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
-    event CreateDexOracle(address indexed oracle, address indexed oracleAgg, address indexed sender);
+    event CreateDexFeed(address indexed feed, address indexed sender);
 
     event WriteOptions(
         address indexed token,
@@ -184,23 +187,17 @@ contract OptionsExchange is ManagedContract {
         return pool;
     }
 
-    function createDexOracle(address underlying, address stable, address dexTokenPair) public returns (address) {
-        require(dexOracleAddress[dexTokenPair] == 0, "already created");
-        (address oracleAddr, address aggAddr) = oracleFactory.create(underlying, stable, dexTokenPair);
-        dexOracleAddress[dexTokenPair] = 1;
-
-        dexOracleAddresses.push(dexTokenPair);
-        emit CreateDexOracle(oracleAddr, aggAddr, msg.sender);
-        return oracleAddr;
-    }
-
-    function listPoolSymbols() external view returns (string memory available) {
-        for (uint i = 0; i < poolSymbols.length; i++) {
+    function listPoolSymbols(uint offset, uint range) external view returns (string memory available) {
+        for (uint i = offset; i < range; i++) {
             ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
             if (llp.maturity() > settings.exchangeTime()) {
                 available = listPoolSymbolHelper(available, poolSymbols[i]);
             }
         }
+    }
+
+    function totalPoolSymbols() external view returns (uint) {
+        return poolSymbols.length;
     }
 
     function listExpiredPoolSymbols() external view returns (string memory available) {
@@ -222,17 +219,36 @@ contract OptionsExchange is ManagedContract {
         return buffer;
     }
 
-    function removePoolSymbol(string calldata symbolSuffix) external {
-        require(poolAddress[symbolSuffix] != address(0), "pool does not exist");
+    function getPoolAddress(string calldata poolSymbol) external view returns (address)  {
+        return poolAddress[poolSymbol];
+    }
 
-        ILiquidityPool llp = ILiquidityPool(poolAddress[symbolSuffix]);
-        require(llp.getOwner() == msg.sender, "not owner");
-        require(llp.maturity() >= settings.exchangeTime(), "cannot remove before maturity");
-        
-        poolAddress[symbolSuffix] = address(0);
-        Arrays.removeItem(poolSymbols, symbolSuffix);
-        emit RemovePoolSymbol(symbolSuffix);
+    function createDexFeed(address underlying, address stable, address dexTokenPair) public returns (address) {
+        require(dexFeedAddress[dexTokenPair] == address(0), "already created");
+        address feedAddr = dexFeedFactory.create(underlying, stable, dexTokenPair);
+        dexFeedAddress[dexTokenPair] = feedAddr;
 
+        dexFeedAddresses.push(dexTokenPair);
+        emit CreateDexFeed(feedAddr, msg.sender);
+        return feedAddr;
+    }
+
+    function listDexFeedAddrs(uint offset, uint range) external view returns (address[] memory) {
+        address[] memory feedAddrs;
+        uint i_idx = 0;
+        for (uint i = offset; i < range; i++) {
+            feedAddrs[i_idx] = dexFeedAddresses[i];
+            i_idx++;
+        }
+        return feedAddrs;
+    }
+
+    function totalDexFeedAddrs() external view returns (uint) {
+        return dexFeedAddresses.length;
+    }
+
+    function getDexFeedAddress(address dexTokenPair) external view returns (address)  {
+        return dexFeedAddress[dexTokenPair];
     }
     
     function getOptionSymbol(
@@ -565,19 +581,27 @@ contract OptionsExchange is ManagedContract {
     }
 
     function getUnderlyingAddr(IOptionsExchange.OptionData memory opt) private view returns (address) {
-        
         return UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
     }
 
+    function incrementRoundDexAgg(address dexAggAddr) incentivized external {
+        // this is needed to provide data for UnderlyingFeed that originate from a dex
+        require(settings.checkDexAggIncentiveBlacklist(dexAggAddr) == false, "blacklisted for incentives");
+        DEXAggregatorV1(dexAggAddr).incrementRound();
+    }
+
     function prefetchSample(address udlFeed) incentivized external {
+        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
         UnderlyingFeed(udlFeed).prefetchSample();
     }
 
     function prefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
+        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
         UnderlyingFeed(udlFeed).prefetchDailyPrice(roundId);
     }
 
     function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
+        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
         UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
     }
 
@@ -588,10 +612,6 @@ contract OptionsExchange is ManagedContract {
         
         uint256 gasUsed = startGas - gasleft();
         address[] memory tokens = settings.getAllowedTokens();
-
-        /* TODO:
-            use gas (chainlink) price oracle to multiply current gas price by gas used, convert to $, debit exchange balance, fixed for now
-        */
 
         uint256 creditingValue = 10e18;        
         creditProvider.processIncentivizationPayment(msg.sender, creditingValue);

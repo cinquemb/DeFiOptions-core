@@ -176,10 +176,6 @@ contract ChainlinkFeed is UnderlyingFeed {
 
     function prefetchSample() override external {
 
-        /* TODO:
-            should be incentivized at end if passess (based on gas price * gas used * settings controlled premium, converted to dollars)
-        */
-
         (, int price,, uint timestamp,) = aggregator.latestRoundData();
         price = rescalePrice(price);
         require(timestamp > samples[samples.length - 1].timestamp, "already up to date");
@@ -187,10 +183,6 @@ contract ChainlinkFeed is UnderlyingFeed {
     }
 
     function prefetchDailyPrice(uint roundId) override external {
-
-        /* TODO:
-            should be incentivized at end if passess (based on gas price * gas used * settings controlled premium, converted to dollars)
-        */
 
         int price;
         uint timestamp;
@@ -217,11 +209,7 @@ contract ChainlinkFeed is UnderlyingFeed {
     }
 
     function prefetchDailyVolatility(uint timespan) override external {
-
-        /* TODO:
-            should be incentivized at end if passess (based on gas price * gas used * settings controlled premium, converted to dollars)
-        */
-
+    
         require(timespan.mod(1 days) == 0, "invalid timespan");
 
         if (dailyVolatilities[timespan][today()] == 0) {

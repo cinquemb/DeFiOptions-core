@@ -71,8 +71,6 @@ contract CollateralManager is ManagedContract {
             This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account 
                 OR
             split any excess stablecoin balance (due to more collected from debt than debt outstanding) to discount any new deposits()
-
-            TODO: Combine multiple getters to save gas?
         */
         int totalStableCoinBalance = int(creditProvider.totalTokenStock()); // stable coin balance
         int totalCreditBalance = int(creditProvider.getTotalBalance()); // credit balance

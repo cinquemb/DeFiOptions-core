@@ -32,6 +32,10 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
 
     }
 
+    function oracle() external view returns (address) {
+        return _dexOracle;
+    }
+
     function incrementRound() external {
         appendUpdatedAt();
         appendAnswer();

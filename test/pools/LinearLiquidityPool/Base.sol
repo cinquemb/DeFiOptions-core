@@ -70,6 +70,7 @@ contract Base {
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
 
+        //TODO: agent needs to deposit in pool and create proposal for this
         pool.setParameters(
             spread,
             reserveRatio,
@@ -106,6 +107,8 @@ contract Base {
             30e18,  40e18,  50e18,  50e18, 110e18, 170e18, 230e18,
             25e18,  35e18,  45e18,  45e18, 105e18, 165e18, 225e18
         ];
+
+        //TODO: agent needs to deposit in pool and create proposal for this, need to specify spread
         
         pool.addSymbol(
             address(feed),
