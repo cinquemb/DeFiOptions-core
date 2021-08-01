@@ -5,7 +5,7 @@
 Experimental DeFi options trading smart contracts enabling long and short positions for call and put tokenized, collateralized, cash settable european style options.
 
 <p align="center">
-<img src="https://github.com/DeFiOptions/DeFiOptions-core/blob/master/diagram.PNG?raw=true" width="500" />
+<img src="https://github.com/DeFiOptions/DeFiOptions-core/blob/master/diagramV2.PNG?raw=true" width="500" />
 </p>
 
 A dynamic approach was implemented for ensuring collateral for writing options, making use of favorable writer's open option positions for decreasing total required balance provided as collateral.
