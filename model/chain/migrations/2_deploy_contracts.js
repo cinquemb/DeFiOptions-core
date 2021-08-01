@@ -10,7 +10,7 @@ const CollateralManager = artifacts.require("CollateralManager");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
-const DEXOracleFactory = artifacts.require("DEXOracleFactory");
+const DEXFeedFactory = artifacts.require("DEXFeedFactory");
 
 const LinearLiquidityPoolFactory = artifacts.require("LinearLiquidityPoolFactory");
 const LinearAnySlopeInterpolator = artifacts.require("LinearAnySlopeInterpolator");
@@ -23,7 +23,7 @@ const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0xd9a3ba7b23B59af0Ac09556060C7fcEFF444d9e9");
+  await deployer.deploy(Deployer4, "0x80D5b21aADDF9D8141dAe6b21b63cd8d04d96A8d");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -43,8 +43,8 @@ module.exports = async function(deployer) {
   console.log("exchange is at: "+ exchange.address);
   const poolFactory = await deployer.deploy(LinearLiquidityPoolFactory);
   console.log("poolFactory is at: "+ poolFactory.address);
-  const dexOracleFactory = await deployer.deploy(DEXOracleFactory);
-  console.log("dexOracleFactory is at: "+ dexOracleFactory.address);
+  const dexFeedFactory = await deployer.deploy(DEXFeedFactory);
+  console.log("dexFeedFactory is at: "+ dexFeedFactory.address);
 
   const collateralManager = await deployer.deploy(CollateralManager);
 
@@ -91,7 +91,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("GovToken", gt.address);
   await deployer4.setContractAddress("ProtocolSettings", settings.address);
   await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
-  await deployer4.setContractAddress("DEXOracleFactory", dexOracleFactory.address);
+  await deployer4.setContractAddress("DEXFeedFactory", dexFeedFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);
   await deployer4.setContractAddress("YieldTracker", yt.address);
   await deployer4.setContractAddress("UnderlyingVault", uv.address);
@@ -108,6 +108,6 @@ module.exports = async function(deployer) {
   console.log("OptionsExchangeAddress is at: "+ OptionsExchangeAddress);
   const LinearLiquidityPoolFactoryAddress = await deployer4.getContractAddress("LinearLiquidityPoolFactory");
   console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
-  const DEXOracleFactoryAddress = await deployer4.getContractAddress("DEXOracleFactory");
-  console.log("DEXOracleFactoryAddress is at: "+ DEXOracleFactoryAddress);
+  const DEXFeedFactoryAddress = await deployer4.getContractAddress("DEXFeedFactory");
+  console.log("DEXFeedFactoryAddress is at: "+ DEXFeedFactoryAddress);
 };
