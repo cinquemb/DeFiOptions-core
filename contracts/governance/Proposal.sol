@@ -169,7 +169,7 @@ abstract contract Proposal {
             }
 
             if (yea.add(nay) < MoreMath.sqrt(total)) {
-                require(expiresAt < settings.exchangeTime());
+                require(expiresAt > settings.exchangeTime(), "not enough votes before expiry");
             }
 
             if (yea > nay) {
