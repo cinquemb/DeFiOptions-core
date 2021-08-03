@@ -68,6 +68,14 @@ contract GovToken is ManagedContract, ERC20 {
         proposals.push(id);
     }
 
+    function proposalCount() external view returns (uint) {
+        return serial;
+    }
+
+    function proposalAddr(uint id) external view returns (address) {
+        return address(proposalsMap[id]);
+    }
+
     function isRegisteredProposal(address addr) public view returns (bool) {
         
         Proposal p = Proposal(addr);

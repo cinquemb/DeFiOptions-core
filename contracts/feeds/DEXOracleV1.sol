@@ -175,6 +175,14 @@ contract DEXOracleV1 is IDEXOracleV1 {
         proposingId[addr] = id;
     }
 
+    function proposalCount() override external view returns (uint) {
+        return serial;
+    }
+
+    function proposalAddr(uint id) override external view returns (address) {
+        return proposalsMap[id];
+    }
+
     function stablecoin() internal view returns (address) {
         return _stablecoin;
     }
@@ -197,9 +205,7 @@ contract DEXOracleV1 is IDEXOracleV1 {
 
     modifier onlyGovernance() {
         IProposal p = IProposal(msg.sender);
-        require(proposalsMap[p.getId()] == msg.sender, "proposal not registered");
-        require(p.isOracleSettingsAllowed(), "not allowed");
-
+        require(proposalsMap[p.getId()] == msg.sender && p.isOracleSettingsAllowed(), "DEXOracleV1: proposal not registered or not allowed");
         _;
     }
 

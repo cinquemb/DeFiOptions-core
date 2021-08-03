@@ -78,4 +78,9 @@ interface ILiquidityPool {
         external;
 
     function sell(string calldata optSymbol, uint price, uint volume) external;
+    function registerProposal(address addr) external returns (uint id);
+
+    function proposalCount() external view returns (uint);
+
+    function proposalAddr(uint id) external view returns (address);
 }

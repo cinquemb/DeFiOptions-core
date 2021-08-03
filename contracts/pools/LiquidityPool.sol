@@ -110,8 +110,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         external
     {
         ensureCaller();
-        require(_mt < _maturity, "invalid maturity");
-        require(x.length > 0 && x.length.mul(2) == y.length, "invalid pricing surface");
+        require(x.length > 0 && x.length.mul(2) == y.length && _mt < _maturity, "invalid pricing surface or maturity");
 
         string memory optSymbol = exchange.getOptionSymbol(
             IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())
@@ -120,7 +119,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
         }
-        
+
         parameters[optSymbol] = PricingParameters(
             udlFeed,
             optType,
@@ -299,10 +298,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         public
         returns (address _tk)
     {
-        require(volume > 0, "invalid volume");
         PricingParameters memory param = parameters[optSymbol];
-
-        require(isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range");
+        require(volume > 0 && isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range or invalid volume");
 
         (uint price, uint value) = receivePayment(param, price, volume, token);
 
@@ -332,10 +329,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         override
         public
     {
-        require(volume > 0, "invalid volume");
-        PricingParameters memory param = parameters[optSymbol];
-        
-        require(isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range");
+        PricingParameters memory param = parameters[optSymbol];        
+        require(volume > 0 && isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range or invalid volume");
 
         price = validatePrice(price, param, Operation.SELL);
 
@@ -372,10 +367,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             }
         */
         
-        require(calcFreeBalance() > 0, "pool balance too low");
         // holding <= sellStock
-        require(tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "excessive volume");
-
+        require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
         emit Sell(_tk, msg.sender, price, volume);
     }
 
@@ -488,7 +481,15 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         creditProvider.addBalance(address(this), token, value);
     }
 
-    function registerProposal(address addr) external returns (uint id) {
+    function proposalCount() override external view returns (uint) {
+        return serial;
+    }
+
+    function proposalAddr(uint id) override external view returns (address) {
+        return proposalsMap[id];
+    }
+
+    function registerProposal(address addr) override external returns (uint id) {
         require(
             proposingId[addr] == 0,
             "already proposed"
