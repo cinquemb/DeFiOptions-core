@@ -2,7 +2,6 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../interfaces/IERC20.sol";
-import '../interfaces/IDEXOracleV1.sol';
 import "../utils/MoreMath.sol";
 import "../utils/SafeMath.sol";
 import "./GovToken.sol";
@@ -87,11 +86,6 @@ abstract contract Proposal {
         return status == Status.APPROVED && !closed;
     }
 
-    function isGovernanceSettingsAllowed() external view returns (bool) {
-
-        return (voteType == VoteType.ORACLE_SETTINGS) && isExecutionAllowed();
-    }
-
     function isPoolSettingsAllowed() external view returns (bool) {
 
         return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
@@ -99,7 +93,7 @@ abstract contract Proposal {
 
     function isProtocolSettingsAllowed() public view returns (bool) {
 
-        return (voteType == VoteType.PROTOCOL_SETTINGS) && isExecutionAllowed();
+        return ((voteType == VoteType.PROTOCOL_SETTINGS) || (voteType == VoteType.ORACLE_SETTINGS)) && isExecutionAllowed();
     }
 
     function isClosed() public view returns (bool) {
@@ -111,8 +105,6 @@ abstract contract Proposal {
 
         if (voteType == VoteType.POOL_SETTINGS) {
             require(msg.sender == address(llpToken)); 
-        } else if (voteType == VoteType.ORACLE_SETTINGS) {
-            require(msg.sender == proposer);
         } else {
             require(msg.sender == address(govToken)); 
         }
@@ -178,7 +170,7 @@ abstract contract Proposal {
                 if (voteType == VoteType.POOL_SETTINGS) {
                     executePool(llpToken);
                 } else {
-                    executeOracle(IDEXOracleV1(proposer));
+                    execute(settings);
                 }
 
             } else {
@@ -214,8 +206,6 @@ abstract contract Proposal {
     function execute(ProtocolSettings _settings) public virtual;
 
     function executePool(IERC20 _llp) public virtual;
-
-    function executeOracle(IDEXOracleV1 _oracle) public virtual;
 
     function ensureIsActive() private view {
 

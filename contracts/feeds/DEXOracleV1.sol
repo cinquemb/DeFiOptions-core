@@ -41,15 +41,15 @@ contract DEXOracleV1 is IDEXOracleV1 {
     uint256 internal _reserve;
     uint256 internal _cumulative;
     uint256 internal _lastCapture;
-    uint256 internal _twapPeriodMax = 60 * 60 * 24; // 1 day
-    uint256 internal _twapPeriod = 60 * 60 * 24; // 1 day
-    uint256 internal _twapPeriodMin = 60 * 60 * 2; // 2 hours
+    uint256 internal _twapPeriodDefault = 60 * 60 * 24; // 1 day
+
 
     bool private _latestValid;
     bool internal _initialized;
 
     uint32 internal _timestamp;
     int256 private _latestPrice;
+
 
     IPangolinPair internal _pair;
 
@@ -84,9 +84,15 @@ contract DEXOracleV1 is IDEXOracleV1 {
      */
     function capture() override public onlyExchange returns (int256, bool) {
         uint256 currentTime = IProtocolSettings(_settings).exchangeTime();
+        uint256 _twapPeriod = IProtocolSettings(_settings).getDexOracleTwapPeriod(address(this));
 
         if (_lastCapture != 0) {
-            require(SafeMath.sub(currentTime, _lastCapture) >= _twapPeriod, "DEXOracleV1: too soon");
+            require(
+                SafeMath.sub(
+                    currentTime,
+                    _lastCapture
+                ) >= ((_twapPeriod == 0) ? _twapPeriodDefault : _twapPeriod), "DEXOracleV1: too soon"
+            );
         }
 
         if (_initialized) {
@@ -157,32 +163,6 @@ contract DEXOracleV1 is IDEXOracleV1 {
         return lastReserve;
     }
 
-    function updateTwapPeriod(uint256 twapPeriod) override external onlyGovernance {
-        require((_twapPeriod >= _twapPeriodMin) && (_twapPeriod <= _twapPeriodMax), "DEXOracleV1: outside of twap bounds");
-
-        _twapPeriod = twapPeriod;
-    }
-
-    function registerProposal(address addr) override external returns (uint id) {
-        require(
-            proposingId[addr] == 0,
-            "already proposed"
-        );
-
-        id = serial++;
-        IProposal(addr).open(id);
-        proposalsMap[id] = addr;
-        proposingId[addr] = id;
-    }
-
-    function proposalCount() override external view returns (uint) {
-        return serial;
-    }
-
-    function proposalAddr(uint id) override external view returns (address) {
-        return proposalsMap[id];
-    }
-
     function stablecoin() internal view returns (address) {
         return _stablecoin;
     }
@@ -201,12 +181,6 @@ contract DEXOracleV1 is IDEXOracleV1 {
 
     function latestCapture() override public view returns (uint256) {
         return _lastCapture;
-    }
-
-    modifier onlyGovernance() {
-        IProposal p = IProposal(msg.sender);
-        require(proposalsMap[p.getId()] == msg.sender && p.isOracleSettingsAllowed(), "DEXOracleV1: proposal not registered or not allowed");
-        _;
     }
 
     modifier onlyExchange() {

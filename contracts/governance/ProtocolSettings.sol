@@ -25,6 +25,7 @@ contract ProtocolSettings is ManagedContract {
     CreditProvider private creditProvider;
     GovToken private govToken;
     mapping(address => int) private underlyingFeeds;
+    mapping(address => uint256) private dexOracleTwapPeriod;
     mapping(address => Rate) private tokenRates;
     mapping(address => bool) private poolBuyCreditTradeable;
     mapping(address => bool) private poolSellCreditTradeable;
@@ -46,6 +47,9 @@ contract ProtocolSettings is ManagedContract {
     uint private creditTimeLock = 60 * 60 * 24; // 24h withdrawl time lock for 
     uint private minCreditTimeLock = 60 * 60 * 2; // 2h min withdrawl time lock
     uint private maxCreditTimeLock = 60 * 60 * 48; // 48h min withdrawl time lock
+
+    uint256 internal _twapPeriodMax = 60 * 60 * 24; // 1 day
+    uint256 internal _twapPeriodMin = 60 * 60 * 2; // 2 hours
 
     address private swapRouter;
     address private swapToken;
@@ -362,6 +366,19 @@ contract ProtocolSettings is ManagedContract {
     function checkDexAggIncentiveBlacklist(address dexAggAddress) external view returns (bool) {
         return dexAggIncentiveBlacklist[dexAggAddress];
     }
+
+    /* DEX ORACLE SETTINGS */
+
+    function setDexOracleTwapPeriod(address dexOracleAddress, uint256 _twapPeriod) external {
+        ensureWritePrivilege();
+        require((_twapPeriod >= _twapPeriodMin) && (_twapPeriod <= _twapPeriodMax), "outside of twap bounds");
+        dexOracleTwapPeriod[dexOracleAddress] = _twapPeriod;
+    }
+
+    function getDexOracleTwapPeriod(address dexOracleAddress) external view returns (uint256) {
+        return dexOracleTwapPeriod[dexOracleAddress];
+    }
+
     function ensureWritePrivilege() private view {
 
         if (msg.sender != owner) {

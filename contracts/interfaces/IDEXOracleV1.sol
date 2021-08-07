@@ -26,8 +26,4 @@ interface IDEXOracleV1 {
     function latestPrice() external view returns (int256);
     function latestValid() external view returns (bool);
     function latestCapture() external view returns (uint256);
-    function updateTwapPeriod(uint256 twapPeriod) external;
-    function registerProposal(address addr) external returns (uint id);
-    function proposalCount() external view returns (uint);
-    function proposalAddr(uint id) external view returns (address);
 }
