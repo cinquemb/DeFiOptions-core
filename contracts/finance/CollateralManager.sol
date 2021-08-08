@@ -322,18 +322,22 @@ contract CollateralManager is ManagedContract {
 
         if (writerCollateralCall[owner][tkAddr] == 0){
             // the first time triggers a margin call event for the owner (how to incentivize? 10$ in exchange credit)
-            writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
-            creditingValue = 10e18;
-            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
-            emit CollateralCall(tkAddr, msg.sender, owner, volume);
+            if (msg.sender != owner) {
+                writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
+                creditingValue = 10e18;
+                creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+                emit CollateralCall(tkAddr, msg.sender, owner, volume);
+            }
         } else {
             require(settings.exchangeTime().sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
         }
 
-        // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
-        creditingValue = value.mul(5).div(100);
-        creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
-        creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+        if (msg.sender != owner){
+            // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
+            creditingValue = value.mul(5).div(100);
+            creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
+            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+        }
 
         if (volume > 0) {
             tk.burn(owner, volume);
