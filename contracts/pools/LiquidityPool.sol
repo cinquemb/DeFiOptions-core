@@ -135,8 +135,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         emit AddSymbol(optSymbol);
     }
 
-    function showSymbol(string calldata optSymbol) external view returns (uint32, uint120, uint120, uint120[] memory, uint120[] memory) {
-        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0].toUint120(), parameters[optSymbol].bsStockSpread[1].toUint120(), parameters[optSymbol].x, parameters[optSymbol].y);
+    function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
+        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
     }
 
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
@@ -304,14 +304,13 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         (uint price, uint value) = receivePayment(param, price, volume, token);
 
         _tk = exchange.resolveToken(optSymbol);
-        IOptionToken tk = IOptionToken(_tk);
 
-        if (volume > tk.balanceOf(address(this))) {
+        if (volume > IOptionToken(_tk).balanceOf(address(this))) {
             // only credit the amount excess what is already available
             creditProvider.borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()));
-            writeOptions(tk, param, volume, msg.sender);
+            writeOptions(_tk, param, volume, msg.sender);
         } else {
-            tk.transfer(msg.sender, volume);
+            IOptionToken(_tk).transfer(msg.sender, volume);
         }
 
         emit Buy(_tk, msg.sender, price, volume);
@@ -348,25 +347,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             );
         }
 
-        uint value = price.mul(volume).div(volumeBase);
-        
+        uint value = price.mul(volume).div(volumeBase);        
         exchange.transferBalance(msg.sender, value);
-        
-        /*
-            //TODO: figure out how to lower gas for this, and decide if writers should be able to sell to the pool against future exchange cashflows?
-            uint freeBal = calcFreeBalance();
-
-            if (freeBal == 0) {
-                if (settings.checkPoolSellCreditTradable(address(this))) {
-                    // only credit the amount excess what is already available
-                    creditProvider.borrowSellLiquidity(address(this), value);
-                } else {
-                    // need to only run if pool cant sell against future exchange cashflows
-                    require(freeBal > 0, "pool balance too low");
-                }
-            }
-        */
-        
         // holding <= sellStock
         require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
         emit Sell(_tk, msg.sender, price, volume);
@@ -446,7 +428,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
     
     function writeOptions(
-        IOptionToken tk,
+        address _tk,
         PricingParameters memory param,
         uint volume,
         address to

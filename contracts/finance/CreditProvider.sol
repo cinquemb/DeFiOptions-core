@@ -182,12 +182,6 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function borrowSellLiquidity(address to, uint credit) external {
-        ensureCaller();
-        require(settings.checkPoolSellCreditTradable(to) == true, "pool cant buy on credit");
-        borrowLiquidity(to, credit);
-    }
-
     function borrowBuyLiquidity(address to, uint credit) external {
         ensureCaller();
         require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");

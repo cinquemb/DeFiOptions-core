@@ -18,7 +18,7 @@ contract LinearLiquidityPool is LiquidityPool {
     }
 
     function writeOptions(
-        IOptionToken tk,
+        address _tk,
         PricingParameters memory param,
         uint volume,
         address to
@@ -26,7 +26,7 @@ contract LinearLiquidityPool is LiquidityPool {
         internal
         override
     {
-        require(tk.writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
+        require(IOptionToken(_tk).writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
         require(calcFreeBalance() > 0, "pool balance too low");
 
         exchange.writeOptions(
