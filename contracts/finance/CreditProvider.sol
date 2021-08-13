@@ -26,7 +26,6 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private callers;
     mapping(address => uint) private primeCallers;
 
-    address private ctAddr;
     address private exchangeAddr;
 
     uint private _totalDebt;
@@ -66,9 +65,6 @@ contract CreditProvider is ManagedContract {
         primeCallers[address(creditToken)] = 1;
         primeCallers[vaultAddr] = 1;
         primeCallers[collateralManagerAddr] = 1;
-
-
-        ctAddr = address(creditToken);
     }
 
     function totalTokenStock() external view returns (uint v) {
@@ -122,7 +118,7 @@ contract CreditProvider is ManagedContract {
     }
 
     function transferBalance(address from, address to, uint value) external {
-        ensureCaller();
+        ensurePrimeCaller();
         transferBalanceInternal(from, to, value);
     }
     
@@ -135,14 +131,14 @@ contract CreditProvider is ManagedContract {
 
     function withdrawTokens(address owner, uint value) external {
         
-        ensureCaller();
+        ensurePrimeCaller();
         removeBalance(owner, value);
         burnDebtAndTransferTokens(owner, value);
     }
 
     function grantTokens(address to, uint value) external {
         
-        ensureCaller();
+        ensurePrimeCaller();
         burnDebtAndTransferTokens(to, value);
     }
 
@@ -201,7 +197,7 @@ contract CreditProvider is ManagedContract {
     }
 
     function processPayment(address from, address to, uint value) external {
-        ensureCaller();
+        ensurePrimeCaller();
 
         require(from != to);
 
@@ -233,7 +229,7 @@ contract CreditProvider is ManagedContract {
 
     function transferBalanceInternal(address from, address to, uint value) private {
         
-        ensureCaller();
+        ensurePrimeCaller();
         
         removeBalance(from, value);
         addBalance(to, value);
@@ -249,7 +245,7 @@ contract CreditProvider is ManagedContract {
             }
             
             (uint r, uint b) = settings.getTokenRate(token);
-            require(r != 0 && token != ctAddr, "token not allowed");
+            require(r != 0 && token != address(creditToken), "token not allowed");
             value = value.mul(b).div(r);
             addBalance(to, value);
             emit TransferBalance(address(0), to, value);
@@ -354,7 +350,7 @@ contract CreditProvider is ManagedContract {
 
     function transferTokens(address to, uint value) private {
         
-        require(to != address(this) && to != ctAddr, "invalid token transfer address");
+        require(to != address(this) && to != address(creditToken), "invalid token transfer address");
 
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length && value > 0; i++) {
@@ -375,12 +371,12 @@ contract CreditProvider is ManagedContract {
 
     function issueCreditTokens(address to, uint value) private {
         
-        (uint r, uint b) = settings.getTokenRate(ctAddr);
+        (uint r, uint b) = settings.getTokenRate(address(creditToken));
         if (b != 0) {
             value = value.mul(r).div(b);
         }
         creditToken.issue(to, value);
-        emit WithdrawTokens(to, ctAddr, value);
+        emit WithdrawTokens(to, address(creditToken), value);
     }
 
     function insertPoolCaller(address llp) external {

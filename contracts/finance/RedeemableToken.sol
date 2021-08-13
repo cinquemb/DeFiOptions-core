@@ -1,10 +1,9 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../../contracts/utils/Arrays.sol";
-import "../../contracts/utils/ERC20.sol";
-import "../../contracts/utils/SafeMath.sol";
-import "../../contracts/utils/MoreMath.sol";
+import "../utils/Arrays.sol";
+import "../utils/ERC20.sol";
+import "../utils/MoreMath.sol";
 import "../interfaces/IOptionsExchange.sol";
 
 abstract contract RedeemableToken is ERC20 {

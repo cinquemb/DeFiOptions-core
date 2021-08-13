@@ -1,15 +1,14 @@
 pragma solidity >=0.6.0;
 
 import "../deployment/ManagedContract.sol";
-import "../governance/ProtocolSettings.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IERC20.sol";
+import "../interfaces/IERC20Details.sol";
 import "../interfaces/IUniswapV2Router01.sol";
 import "../interfaces/TimeProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/ICreditProvider.sol";
 import "../utils/MoreMath.sol";
-import "../utils/SafeMath.sol";
-import "../utils/SignedSafeMath.sol";
-import "./CreditProvider.sol";
 
 contract UnderlyingVault is ManagedContract {
 
@@ -17,8 +16,8 @@ contract UnderlyingVault is ManagedContract {
     using SignedSafeMath for int;
 
     TimeProvider private time;
-    ProtocolSettings private settings;
-    CreditProvider private creditProvider;
+    IProtocolSettings private settings;
+    ICreditProvider private creditProvider;
     
     mapping(address => uint) private callers;
     mapping(address => mapping(address => uint)) private allocation;
@@ -32,8 +31,8 @@ contract UnderlyingVault is ManagedContract {
     function initialize(Deployer deployer) override internal {
 
         time = TimeProvider(deployer.getContractAddress("TimeProvider"));
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = CreditProvider(deployer.getContractAddress("CreditProvider"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         
         callers[deployer.getContractAddress("OptionsExchange")] = 1;
     }

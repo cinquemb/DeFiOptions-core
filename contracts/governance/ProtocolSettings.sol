@@ -3,13 +3,11 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../finance/CreditProvider.sol";
 import "../interfaces/TimeProvider.sol";
+import "../interfaces/IProposal.sol";
+import "../interfaces/IGovToken.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
-import "../utils/SafeMath.sol";
-import "./GovToken.sol";
-import "./Proposal.sol";
 
 contract ProtocolSettings is ManagedContract {
 
@@ -22,8 +20,8 @@ contract ProtocolSettings is ManagedContract {
     }
 
     TimeProvider private time;
-    CreditProvider private creditProvider;
-    GovToken private govToken;
+    IGovToken private govToken;
+    
     mapping(address => int) private underlyingFeeds;
     mapping(address => uint256) private dexOracleTwapPeriod;
     mapping(address => Rate) private tokenRates;
@@ -60,8 +58,7 @@ contract ProtocolSettings is ManagedContract {
 
         owner = deployer.getOwner();
         time = TimeProvider(deployer.getPayableContractAddress("TimeProvider"));
-        creditProvider = CreditProvider(deployer.getPayableContractAddress("CreditProvider"));
-        govToken = GovToken(deployer.getPayableContractAddress("GovToken"));
+        govToken = IGovToken(deployer.getPayableContractAddress("GovToken"));
 
         MAX_UINT = uint(-1);
 
@@ -373,7 +370,7 @@ contract ProtocolSettings is ManagedContract {
     function ensureWritePrivilege() private view {
 
         if (msg.sender != owner) {
-            Proposal p = Proposal(msg.sender);
+            IProposal p = IProposal(msg.sender);
             require(govToken.isRegisteredProposal(msg.sender), "proposal not registered");
             require(p.isProtocolSettingsAllowed(), "not allowed");
         }

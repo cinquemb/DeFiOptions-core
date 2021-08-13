@@ -2,10 +2,8 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../interfaces/IERC20.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../utils/MoreMath.sol";
-import "../utils/SafeMath.sol";
-import "./GovToken.sol";
-import "./ProtocolSettings.sol";
 
 abstract contract Proposal {
 
@@ -17,9 +15,9 @@ abstract contract Proposal {
 
     enum Status { PENDING, OPEN, APPROVED, REJECTED }
 
-    GovToken private govToken;
+    IERC20 private govToken;
     IERC20 private llpToken;
-    ProtocolSettings private settings;
+    IProtocolSettings private settings;
 
     mapping(address => int) private votes;
     
@@ -42,18 +40,18 @@ abstract contract Proposal {
     )
         public
     {
-        settings = ProtocolSettings(_settings);
+        settings = IProtocolSettings(_settings);
         voteType = _voteType;
 
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
-            govToken = GovToken(_govToken);
+            govToken = IERC20(_govToken);
             require(_quorum != Quorum.QUADRATIC, "cant be quadratic");
         } else if (voteType == VoteType.POOL_SETTINGS) {
             llpToken = IERC20(_govToken);
             require(_quorum == Quorum.QUADRATIC, "must be quadratic");
             require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
         }  else if (voteType == VoteType.ORACLE_SETTINGS) {
-            govToken = GovToken(_govToken);
+            govToken = IERC20(_govToken);
             require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
         } else {
             revert("vote type not specified");
@@ -157,7 +155,7 @@ abstract contract Proposal {
             if (voteType == VoteType.POOL_SETTINGS) {
                 total = llpToken.totalSupply();
             } else {
-                total = settings.getCirculatingSupply();
+                total = uint256(settings.getCirculatingSupply());
             }
 
             if (yea.add(nay) < MoreMath.sqrt(total)) {
@@ -203,7 +201,7 @@ abstract contract Proposal {
         closed = true;
     }
 
-    function execute(ProtocolSettings _settings) public virtual;
+    function execute(IProtocolSettings _settings) public virtual;
 
     function executePool(IERC20 _llp) public virtual;
 

@@ -4,22 +4,21 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../governance/ProtocolSettings.sol";
-import "../utils/SafeMath.sol";
-import "../utils/SignedSafeMath.sol";
+import "../interfaces/IProtocolSettings.sol";
+import "../utils/MoreMath.sol";
 
 contract LinearAnySlopeInterpolator is ManagedContract {
 
     using SafeMath for uint;
     using SignedSafeMath for int;
     
-    ProtocolSettings private settings;
+    IProtocolSettings private settings;
 
     uint private fractionBase;
 
     function initialize(Deployer deployer) override internal {
         
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         fractionBase = 1e9;
     }
 

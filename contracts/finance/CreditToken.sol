@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../utils/ERC20.sol";
-import "../utils/SafeMath.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Decimal.sol";
 import "../interfaces/IProtocolSettings.sol";
