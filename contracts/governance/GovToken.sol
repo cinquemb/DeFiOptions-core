@@ -19,7 +19,7 @@ contract GovToken is ManagedContract, ERC20 {
     mapping(address => uint) private proposingDate;
 
     string private constant _name = "Governance Token";
-    string private constant _symbol = "GOVTK";
+    string private constant _symbol = "DODv2";
 
     uint private serial;
     uint[] private proposals;

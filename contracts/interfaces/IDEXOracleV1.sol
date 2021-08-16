@@ -1,5 +1,5 @@
 /*
-    Copyright 2021 DeFi Options, based on the works of the Empty Set Squad
+    Copyright 2021 DeFi Options DAO, based on the works of the Empty Set Squad
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import "../utils/Decimal.sol";
 interface IDEXOracleV1 {
     function capture() external returns (int256, bool);
     function pair() external view returns (address);
+    function stablecoin() external view returns (address);
     function liveReserve() external view returns (uint256);
     function latestPrice() external view returns (int256);
     function latestValid() external view returns (bool);

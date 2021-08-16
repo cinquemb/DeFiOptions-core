@@ -209,7 +209,7 @@ contract OptionsExchange is ManagedContract {
         }
     }
 
-    function listPoolSymbolHelper(string memory buffer, string memory poolSymbol) internal pure returns (string memory) {
+    function listPoolSymbolHelper(string memory buffer, string memory poolSymbol) private pure returns (string memory) {
         if (bytes(buffer).length == 0) {
             buffer = poolSymbol;
         } else {
@@ -571,7 +571,7 @@ contract OptionsExchange is ManagedContract {
         );
     }
 
-    function getUdlPrice(IOptionsExchange.OptionData memory opt) internal view returns (int answer) {
+    function getUdlPrice(IOptionsExchange.OptionData memory opt) private view returns (int answer) {
 
         if (opt.maturity > settings.exchangeTime()) {
             (,answer) = UnderlyingFeed(opt.udlFeed).getLatestPrice();

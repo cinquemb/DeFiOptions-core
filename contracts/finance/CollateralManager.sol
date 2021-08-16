@@ -220,7 +220,7 @@ contract CollateralManager is ManagedContract {
         return coll > 0 ? uint(coll) : 0;
     }
     
-    function calcCollateral(uint vol, uint volume, IOptionsExchange.OptionData memory opt) internal view returns (uint) {
+    function calcCollateral(uint vol, uint volume, IOptionsExchange.OptionData memory opt) private view returns (uint) {
         
         return (vol.mul(volume).mul(
             MoreMath.sqrt(daysToMaturity(opt)))

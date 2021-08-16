@@ -42,7 +42,7 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
         appendRoundId();
     }
 
-    function appendRoundId() internal {
+    function appendRoundId() private {
         if (answers.length > 1) {
             rounds[latestRound++] = answers.length;
         } else {
@@ -50,11 +50,11 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
         }
     }
 
-    function appendAnswer() internal {
+    function appendAnswer() private {
         answers.push(IDEXOracleV1(_dexOracle).latestPrice());
     }
 
-    function appendUpdatedAt() internal {
+    function appendUpdatedAt() private {
         uint256 ct = IDEXOracleV1(_dexOracle).latestCapture();
         require(ct != updatedAts[updatedAts.length-1], "DEXAggregatorV1: too soon");
         updatedAts.push(ct);

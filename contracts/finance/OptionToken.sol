@@ -12,7 +12,7 @@ contract OptionToken is RedeemableToken {
 
     mapping(address => uint) private _issued;
 
-    string private constant _prefix = "Option Redeemable Token: ";
+    string private constant _prefix = "DeFi Options DAO Option Redeemable Token: ";
     string private _symbol;
     uint private _unliquidatedVolume;
 

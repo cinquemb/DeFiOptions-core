@@ -45,8 +45,8 @@ contract ProtocolSettings is ManagedContract {
     uint private minCreditTimeLock = 60 * 60 * 2; // 2h min withdrawl time lock
     uint private maxCreditTimeLock = 60 * 60 * 48; // 48h min withdrawl time lock
 
-    uint256 internal _twapPeriodMax = 60 * 60 * 24; // 1 day
-    uint256 internal _twapPeriodMin = 60 * 60 * 2; // 2 hours
+    uint256 private _twapPeriodMax = 60 * 60 * 24; // 1 day
+    uint256 private _twapPeriodMin = 60 * 60 * 2; // 2 hours
 
     address private swapRouter;
     address private swapToken;

@@ -30,28 +30,28 @@ import "../interfaces/IProtocolSettings.sol";
 contract DEXOracleV1 is IDEXOracleV1 {
     using Decimal for Decimal.D256;
 
-    address internal _pairAddr;
-    address internal _exchange;
-    address internal _settings;
-    address internal _underlying;
-    address internal _stablecoin;
+    address private _pairAddr;
+    address private _exchange;
+    address private _settings;
+    address private _underlying;
+    address private _stablecoin;
 
     uint256 private serial;
-    uint256 internal _index;
-    uint256 internal _reserve;
-    uint256 internal _cumulative;
-    uint256 internal _lastCapture;
-    uint256 internal _twapPeriodDefault = 60 * 60 * 24; // 1 day
+    uint256 private _index;
+    uint256 private _reserve;
+    uint256 private _cumulative;
+    uint256 private _lastCapture;
+    uint256 private _twapPeriodDefault = 60 * 60 * 24; // 1 day
 
 
     bool private _latestValid;
-    bool internal _initialized;
+    bool private _initialized;
 
-    uint32 internal _timestamp;
+    uint32 private _timestamp;
     int256 private _latestPrice;
 
 
-    IPangolinPair internal _pair;
+    IPangolinPair private _pair;
 
     mapping(address => uint) private proposingId;
     mapping(uint => address) private proposalsMap;
@@ -163,7 +163,7 @@ contract DEXOracleV1 is IDEXOracleV1 {
         return lastReserve;
     }
 
-    function stablecoin() internal view returns (address) {
+    function stablecoin() override external view returns (address) {
         return _stablecoin;
     }
 

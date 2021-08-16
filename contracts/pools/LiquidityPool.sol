@@ -23,7 +23,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     string internal _name;
     string internal _symbol;
-    string internal constant _symbol_prefix = "LLPTK-";
+    string internal constant _symbol_prefix = "DODv2-LLPTK-";
     string internal constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
 
     IYieldTracker private tracker;
@@ -38,9 +38,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     uint private serial;
     uint private _maturity;
-
     uint internal volumeBase;
-    uint internal withdrawFee;
+    uint private withdrawFee;
     uint internal reserveRatio;
     uint internal fractionBase;
     
