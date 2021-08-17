@@ -17,5 +17,4 @@ interface ICreditProvider {
     function borrowBuyLiquidity(address to, uint credit) external;
     function issueCredit(address to, uint value) external;
     function processEarlyLpWithdrawal(address to, uint credit) external;
-    function burnDebt(uint value) external returns (uint burnt);
 }

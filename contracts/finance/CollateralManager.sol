@@ -11,13 +11,14 @@ import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IOptionToken.sol";
 import "../interfaces/IUnderlyingVault.sol";
 import "../utils/SafeCast.sol";
-
+import "../utils/Decimal.sol";
 
 contract CollateralManager is ManagedContract {
 
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
+    using Decimal for Decimal.D256;
     
     IUnderlyingVault private vault;
     ProtocolSettings private settings;
@@ -66,7 +67,7 @@ contract CollateralManager is ManagedContract {
         collateralCallPeriod = 1 days;
     }
 
-    function collateralSkew() public view returns (int) {
+    function collateralSkew() private view returns (int) {
         /*
             This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account 
                 OR
@@ -77,12 +78,25 @@ contract CollateralManager is ManagedContract {
         int totalOwners = int(creditProvider.getTotalOwners()).add(1);
         int skew = totalCreditBalance.sub(totalStableCoinBalance);
 
-        // try to split between (total unique non zero balances on exchange / 2) if short stable coins
-        if (totalCreditBalance >= totalStableCoinBalance) {
-            return skew.div(totalOwners).mul(2);
+        // try to split between if short stable coins
+        return skew.div(totalOwners);  
+    }
+
+    function collateralSkewForPosition(int coll) private view returns (int) {
+        int modColl;
+        int skew = collateralSkew();
+        Decimal.D256 memory skewPct = Decimal.ratio(uint(coll), MoreMath.abs(skew));
+
+        if (skewPct.greaterThanOrEqualTo(Decimal.one())) {
+            modColl = coll.add(skew);
         } else {
-            return skew.div(totalOwners);
-        }   
+            // shortage/surplus per addr exceeds underlying collateral reqs, only add/sub percentage increase of underlying collateral reqs
+
+            int modSkew = int(Decimal.mul(skewPct, uint(coll)).asUint256());
+            modColl = (skew >= 0) ? coll.add(modSkew) : coll.sub(modSkew);
+        }
+
+        return modColl;
     }
 
     function calcExpectedPayout(address owner) external view returns (int payout) {
@@ -123,9 +137,8 @@ contract CollateralManager is ManagedContract {
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
         }
 
-        // add split excess (could raise or lower collateral requirements)
-        coll = coll.add(collateralSkew());
-
+        // add/sub shortage/excess relative to normal collateral requirements (could raise or lower collateral requirements)
+        coll = collateralSkewForPosition(coll);
         coll = coll.div(int(_volumeBase));
 
         if (is_regular == false) {

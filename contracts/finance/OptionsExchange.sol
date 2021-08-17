@@ -100,24 +100,8 @@ contract OptionsExchange is ManagedContract {
     function depositTokens(address to, address token, uint value) public {
 
         IERC20 t = IERC20(token);
-        int excessCollateral = collateralManager.collateralSkew();
-
         t.transferFrom(msg.sender, address(creditProvider), value);
-
-        /* 
-            if shortage:
-                deduct from creditited value;
-                burn debt any debt on credit provider balance
-            if excesss
-                add to credited value;
-        */        
-        
-        uint creditingValue = uint(int(value).sub(excessCollateral));
-        creditProvider.addBalance(to, token, creditingValue);
-
-        if (excessCollateral > 0){
-            creditProvider.burnDebt(uint(excessCollateral)); 
-        }
+        creditProvider.addBalance(to, token, value);
     }
 
     function balanceOf(address owner) external view returns (uint) {

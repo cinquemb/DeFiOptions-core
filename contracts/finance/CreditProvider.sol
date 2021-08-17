@@ -156,11 +156,8 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid withrawal request");
 
         if (credit > 0) {
-            // add debt to credit provier, and issue credit tokens to withdrawing lp addresss
-            applyDebtInterestRate(address(this));
-            setDebt(address(this), debts[address(this)].add(credit));
+            // issue credit tokens to withdrawing lp addresss
             issueCreditTokens(to, credit);
-            emit AccumulateDebt(to, credit);
         }
     }
 
@@ -170,11 +167,8 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid incentivization");
 
         if (credit > 0) {
-            // add debt to credit provier, and increment exchange balance for user
-            applyDebtInterestRate(address(this));
-            setDebt(address(this), debts[address(this)].add(credit));
+            // increment exchange balance for user
             addBalance(to, credit);
-            emit AccumulateDebt(to, credit);
         }
     }
 
@@ -188,11 +182,8 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid borrower");
         require(callers[to] == 1, "invalid pool");
         if (credit > 0) {
-            // add debt to credit provier, and increment exchange balance for liquidity pool
-            applyDebtInterestRate(address(this));
-            setDebt(address(this), debts[address(this)].add(credit));
+            // increment exchange balance for liquidity pool
             addBalance(to, credit);
-            emit AccumulateDebt(to, credit);
         }
     }
 
@@ -305,12 +296,7 @@ contract CreditProvider is ManagedContract {
 
         transferTokens(to, value);
     }
-
-    function burnDebt(uint value) external returns (uint burnt) {
-        ensurePrimeCaller();
-        burnt = burnDebt(address(this), value);
-    }
-
+    
     function burnDebt(address from, uint value) private returns (uint burnt) {
         
         uint d = applyDebtInterestRate(from);
