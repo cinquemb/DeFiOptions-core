@@ -1,6 +1,28 @@
 pragma solidity >=0.6.0;
 
-interface ILiquidityPool {
+import "../interfaces/IOptionsExchange.sol";
+
+
+interface IGovernableLiquidityPool {
+
+    enum Operation { NONE, BUY, SELL }
+
+    struct PricingParameters {
+        address udlFeed;
+        IOptionsExchange.OptionType optType;
+        uint120 strike;
+        uint32 maturity;
+        uint32 t0;
+        uint32 t1;
+        uint[3] bsStockSpread; //buyStock == bsStockSpread[0], sellStock == bsStockSpread[1], spread == bsStockSpread[2]
+        uint120[] x;
+        uint120[] y;
+    }
+
+    struct Range {
+        uint120 start;
+        uint120 end;
+    }
 
     event AddSymbol(string optSymbol);
     
@@ -12,17 +34,9 @@ interface ILiquidityPool {
 
     function maturity() external view returns (uint);
 
-    function yield(uint dt) external view returns (uint y);
+    function getOwner() external view returns (address);
 
-    function depositTokens(
-        address to,
-        address token,
-        uint value,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
+    function yield(uint dt) external view returns (uint);
 
     function depositTokens(address to, address token, uint value) external;
 
@@ -64,4 +78,9 @@ interface ILiquidityPool {
         external;
 
     function sell(string calldata optSymbol, uint price, uint volume) external;
+    function registerProposal(address addr) external returns (uint id);
+
+    function proposalCount() external view returns (uint);
+
+    function proposalAddr(uint id) external view returns (address);
 }

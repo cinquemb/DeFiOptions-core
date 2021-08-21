@@ -165,26 +165,17 @@ contract CreditProvider is ManagedContract {
         
         ensurePrimeCaller();
         require(to != address(this), "invalid incentivization");
-
-        if (credit > 0) {
-            // increment exchange balance for user
-            addBalance(to, credit);
-        }
+        // increment exchange balance for user
+        addBalance(to, credit);
     }
 
     function borrowBuyLiquidity(address to, uint credit) external {
         ensureCaller();
-        require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
-        borrowLiquidity(to, credit);
-    }
-
-    function borrowLiquidity(address to, uint credit) private {
         require(to != address(this), "invalid borrower");
         require(callers[to] == 1, "invalid pool");
-        if (credit > 0) {
-            // increment exchange balance for liquidity pool
-            addBalance(to, credit);
-        }
+        require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
+        // increment exchange balance for liquidity pool
+        addBalance(to, credit);
     }
 
     function processPayment(address from, address to, uint value) external {
@@ -296,7 +287,7 @@ contract CreditProvider is ManagedContract {
 
         transferTokens(to, value);
     }
-    
+
     function burnDebt(address from, uint value) private returns (uint burnt) {
         
         uint d = applyDebtInterestRate(from);

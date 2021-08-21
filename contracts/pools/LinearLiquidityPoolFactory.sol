@@ -3,7 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../pools/LinearLiquidityPool.sol";
+import "../pools/GovernableLinearLiquidityPool.sol";
 
 contract LinearLiquidityPoolFactory is ManagedContract {
 
@@ -14,7 +14,7 @@ contract LinearLiquidityPoolFactory is ManagedContract {
     }
 
     function create(string calldata name, string calldata symbolSuffix) external returns (address) {
-        LinearLiquidityPool llp = new LinearLiquidityPool(name, symbolSuffix, deployerAddress);
+        GovernableLinearLiquidityPool llp = new GovernableLinearLiquidityPool(name, symbolSuffix, deployerAddress);
         return address(llp);
     }
 }

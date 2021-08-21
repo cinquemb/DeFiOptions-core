@@ -1,18 +1,20 @@
-pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
+pragma solidity >=0.6.0;
 
 import "../deployment/ManagedContract.sol";
-import "../interfaces/IOptionToken.sol";
-import "../interfaces/IProposal.sol";
-import "../interfaces/ILiquidityPool.sol";
-import "../interfaces/IYieldTracker.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/ICreditProvider.sol";
-import "../interfaces/IProtocolSettings.sol";
-import "../interfaces/IInterpolator.sol";
 import "../finance/RedeemableToken.sol";
-import "../utils/SafeCast.sol";
+import "../finance/YieldTracker.sol";
+import "../governance/ProtocolSettings.sol";
+import "../interfaces/TimeProvider.sol";
+import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IOptionToken.sol";
+import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/UnderlyingFeed.sol";
+import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
+import "../utils/SafeCast.sol";
+import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityPool {
@@ -21,49 +23,69 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     using SafeMath for uint;
     using SignedSafeMath for int;
 
-    string internal _name;
-    string internal _symbol;
-    string internal constant _symbol_prefix = "DODv2-LLPTK-";
-    string internal constant _name_prefix = "Linear Liquidity Pool Redeemable Token: ";
+    enum Operation { NONE, BUY, SELL }
 
-    IYieldTracker private tracker;
-    IProtocolSettings private settings;
-    IInterpolator internal interpolator;
+    struct PricingParameters {
+        address udlFeed;
+        IOptionsExchange.OptionType optType;
+        uint120 strike;
+        uint32 maturity;
+        uint32 t0;
+        uint32 t1;
+        uint120 buyStock;
+        uint120 sellStock;
+        uint120[] x;
+        uint120[] y;
+    }
+
+    struct Range {
+        uint120 start;
+        uint120 end;
+    }
+
+    TimeProvider private time;
+    ProtocolSettings private settings;
     ICreditProvider private creditProvider;
+    YieldTracker private tracker;
 
-    mapping(address => uint) private proposingId;
-    mapping(uint => address) private proposalsMap;
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    uint private serial;
-    uint private _maturity;
-    uint internal volumeBase;
-    uint private withdrawFee;
+    address private owner;
+    uint internal spread;
     uint internal reserveRatio;
-    uint internal fractionBase;
-    
+    uint internal withdrawFee;
+    uint private _maturity;
     string[] private optSymbols;
 
-    constructor(string memory _nm, string memory _sb, address _deployAddr)
-        ERC20(string(abi.encodePacked(_name_prefix, _nm)))
-        public
-    {    
-        _symbol = _sb;
-        _name = _nm;
+    uint private timeBase;
+    uint private sqrtTimeBase;
+    uint internal volumeBase;
+    uint internal fractionBase;
 
-        Deployer deployer = Deployer(_deployAddr);
-        fractionBase = 1e9;
+    constructor(string memory _name) ERC20(_name) public {
+        
+    }
+
+    function initialize(Deployer deployer) virtual override internal {
+
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
+
+        owner = deployer.getOwner();
+        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
-        tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
-        interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
-        volumeBase = 1e18;//exchange.volumeBase();
-        serial = 1;
+        tracker = YieldTracker(deployer.getContractAddress("YieldTracker"));
+
+        timeBase = 1e18;
+        sqrtTimeBase = 1e9;
+        volumeBase = exchange.volumeBase();
+        fractionBase = 1e9;
     }
 
     function setParameters(
+        uint _spread,
         uint _reserveRatio,
         uint _withdrawFee,
         uint _mt
@@ -71,6 +93,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         external
     {
         ensureCaller();
+        spread = _spread;
         reserveRatio = _reserveRatio;
         withdrawFee = _withdrawFee;
         _maturity = _mt;
@@ -78,7 +101,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function redeemAllowed() override public view returns (bool) {
         
-        return block.timestamp >= _maturity;
+        return time.getNow() >= _maturity;
     }
 
     function maturity() override external view returns (uint) {
@@ -86,15 +109,18 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         return _maturity;
     }
 
-    function getOwner() override external view returns (address) {
-        // returns the proposal address of the caller, used in removing pool symbols from exchange
-        return proposalsMap[proposingId[msg.sender]];
+    function yield(uint dt) override external view returns (uint y) {
+        
+        y = tracker.yield(address(this), dt);
     }
 
-    function yield(uint dt) override external view returns (uint) {
-        return tracker.yield(address(this), dt);
+    function valueOf(address ownr) public view returns (uint) {
+
+        (uint bal, int pOut) = getBalanceAndPayout();
+        return uint(int(bal).add(pOut))
+            .mul(balanceOf(ownr)).div(totalSupply());
     }
-    
+
     function addSymbol(
         address udlFeed,
         uint strike,
@@ -104,16 +130,16 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint t1,
         uint120[] calldata x,
         uint120[] calldata y,
-        uint[3] calldata bsStockSpread
+        uint buyStock,
+        uint sellStock
     )
         external
     {
         ensureCaller();
         require(x.length > 0 && x.length.mul(2) == y.length && _mt < _maturity, "invalid pricing surface or maturity");
 
-        string memory optSymbol = exchange.getOptionSymbol(
-            IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())
-        );
+        IOptionsExchange.OptionData memory opt = IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32());
+        string memory optSymbol = exchange.getOptionSymbol(opt);
 
         if (parameters[optSymbol].x.length == 0) {
             optSymbols.push(optSymbol);
@@ -126,34 +152,48 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
             _mt.toUint32(),
             t0.toUint32(),
             t1.toUint32(),
-            bsStockSpread,
+            buyStock.toUint120(),
+            sellStock.toUint120(),
             x,
             y
         );
 
         emit AddSymbol(optSymbol);
     }
-
-    function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
-        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
-    }
-
+    
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
+
         ensureCaller();
         ranges[optSymbol][uint(op)] = Range(start.toUint120(), end.toUint120());
     }
-
+    
     function removeSymbol(string calldata optSymbol) external {
+
         ensureCaller();
-        require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");
-        
         PricingParameters memory empty;
         parameters[optSymbol] = empty;
         Arrays.removeItem(optSymbols, optSymbol);
         emit RemoveSymbol(optSymbol);
     }
 
+    function depositTokens(
+        address to,
+        address token,
+        uint value,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        override
+        external
+    {
+        IERC20Permit(token).permit(msg.sender, address(this), value, deadline, v, r, s);
+        depositTokens(to, token, value);
+    }
+
     function depositTokens(address to, address token, uint value) override public {
+
         (uint b0, int po) = getBalanceAndPayout();
         depositTokensInExchange(token, value);
         uint b1 = exchange.balanceOf(address(this));
@@ -182,66 +222,60 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         uint val = valueOf(msg.sender).mul(amount).div(bal);
         uint discountedValue = val.mul(fractionBase.sub(withdrawFee)).div(fractionBase);
-        uint freeBal = calcFreeBalance();
-        
-        if (discountedValue > freeBal) {
-            //issue them credit tokens in excess of free balance
-            creditProvider.processEarlyLpWithdrawal(
-                msg.sender,
-                discountedValue.sub(freeBal)
-            );
-        }
+        require(discountedValue <= calcFreeBalance(), "insufficient pool balance");
 
-        if (freeBal > 0) {
-            (uint b0, int po) = getBalanceAndPayout();
-            
-            exchange.transferBalance(
-                address(this), 
-                msg.sender, 
-                (discountedValue <= freeBal) ? discountedValue : freeBal
-            );
-            
-            tracker.push(
-                int(b0).add(po), 
-                -(((discountedValue <= freeBal) ? val : freeBal).toInt256())
-            );
-        }
+        (uint b0, int po) = getBalanceAndPayout();
+        exchange.transferBalance(address(this), msg.sender, discountedValue);
+        tracker.push(int(b0).add(po), -(val.toInt256()));
         
         removeBalance(msg.sender, amount);
         emitTransfer(msg.sender, address(0), amount);
     }
 
     function calcFreeBalance() public view returns (uint balance) {
+
         uint exBal = exchange.balanceOf(address(this));
         uint reserve = exBal.mul(reserveRatio).div(fractionBase);
         uint sp = exBal.sub(exchange.collateral(address(this)));
         balance = sp > reserve ? sp.sub(reserve) : 0;
     }
-    
+
     function listSymbols() override external view returns (string memory available) {
+
+        available = listSymbols(Operation.BUY);
+    }
+
+    function listSymbols(Operation op) public view returns (string memory available) {
+
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > block.timestamp) {
-                available = listSymbolHelper(available, optSymbols[i]);
+            if (isAvailable(optSymbols[i], op)) {
+                if (bytes(available).length == 0) {
+                    available = optSymbols[i];
+                } else {
+                    available = string(abi.encodePacked(available, "\n", optSymbols[i]));
+                }
             }
         }
     }
 
-    function listExpiredSymbols() external view returns (string memory available) {
-        for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity < block.timestamp) {
-                available = listSymbolHelper(available, optSymbols[i]);
+    function isAvailable(string memory optSymbol, Operation op) public view returns (bool b) {
+
+        b = true;
+
+        PricingParameters memory param = parameters[optSymbol];
+
+        if (param.maturity <= time.getNow()) {
+            
+            b = false;
+
+        } else if (op == Operation.BUY || op == Operation.SELL) {
+
+            if (!isInRange(optSymbol, op, param.udlFeed)) {
+                b = false;
+            } else {
+                b = getAvailableStock(optSymbol, param, op) > 0;
             }
         }
-    }
-
-    function listSymbolHelper(string memory buffer, string memory optSymbol) private pure returns (string memory) {
-        if (bytes(buffer).length == 0) {
-            buffer = optSymbol;
-        } else {
-            buffer = string(abi.encodePacked(buffer, "\n", optSymbol));
-        }
-
-        return buffer;
     }
 
     function queryBuy(string memory optSymbol)
@@ -250,7 +284,13 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         view
         returns (uint price, uint volume)
     {
-        (price, volume) = queryHelper(optSymbol, Operation.BUY);
+        ensureValidSymbol(optSymbol);
+        PricingParameters memory param = parameters[optSymbol];
+        price = calcOptPrice(param, Operation.BUY);
+        volume = MoreMath.min(
+            calcVolume(optSymbol, param, price, Operation.BUY),
+            getAvailableStock(optSymbol, param, Operation.BUY)
+        );
     }
 
     function querySell(string memory optSymbol)
@@ -258,21 +298,16 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         public
         view
         returns (uint price, uint volume)
-    {
-        (price, volume) = queryHelper(optSymbol, Operation.SELL);
-    }
-
-    function queryHelper(string memory optSymbol, Operation op) private view returns (uint price, uint volume) {
+    {    
+        ensureValidSymbol(optSymbol);
         PricingParameters memory param = parameters[optSymbol];
-        price = calcOptPrice(param, op);
-        address _tk = exchange.resolveToken(optSymbol);
-        uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+        price = calcOptPrice(param, Operation.SELL);
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, op),
-            (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
+            calcVolume(optSymbol, param, price, Operation.SELL),
+            getAvailableStock(optSymbol, param, Operation.SELL)
         );
     }
-
+    
     function buy(
         string calldata optSymbol,
         uint price,
@@ -288,7 +323,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         external
         returns (address _tk)
     {        
-        IOptionToken(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
+        IERC20Permit(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
         _tk = buy(optSymbol, price, volume, token);
     }
 
@@ -297,19 +332,23 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         public
         returns (address _tk)
     {
-        PricingParameters memory param = parameters[optSymbol];
-        require(volume > 0 && isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range or invalid volume");
+        require(volume > 0, "invalid volume");
+        ensureValidSymbol(optSymbol);
 
-        (uint price, uint value) = receivePayment(param, price, volume, token);
+        PricingParameters memory param = parameters[optSymbol];
+
+        require(isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range");
+
+        price = receivePayment(param, price, volume, token);
 
         _tk = exchange.resolveToken(optSymbol);
+        IOptionToken tk = IOptionToken(_tk);
+        uint _holding = tk.balanceOf(address(this));
 
-        if (volume > IOptionToken(_tk).balanceOf(address(this))) {
-            // only credit the amount excess what is already available
-            creditProvider.borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()));
-            writeOptions(_tk, param, volume, msg.sender);
+        if (volume > _holding) {
+            writeOptions(tk, param, volume, msg.sender);
         } else {
-            IOptionToken(_tk).transfer(msg.sender, volume);
+            tk.transfer(msg.sender, volume);
         }
 
         emit Buy(_tk, msg.sender, price, volume);
@@ -327,8 +366,12 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         override
         public
     {
-        PricingParameters memory param = parameters[optSymbol];        
-        require(volume > 0 && isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range or invalid volume");
+        require(volume > 0, "invalid volume");
+        ensureValidSymbol(optSymbol);
+
+        PricingParameters memory param = parameters[optSymbol];
+        
+        require(isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range");
 
         price = validatePrice(price, param, Operation.SELL);
 
@@ -341,93 +384,29 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         
         uint _written = tk.writtenVolume(address(this));
         if (_written > 0) {
-            tk.burn(
-                MoreMath.min(_written, volume)
-            );
+            uint toBurn = MoreMath.min(_written, volume);
+            tk.burn(toBurn);
         }
 
-        uint value = price.mul(volume).div(volumeBase);        
+        uint value = price.mul(volume).div(volumeBase);
         exchange.transferBalance(msg.sender, value);
-        // holding <= sellStock
-        require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
+        
+        require(calcFreeBalance() > 0, "pool balance too low");
+
+        uint _holding = tk.balanceOf(address(this));
+        require(_holding <= param.sellStock, "excessive volume");
+
         emit Sell(_tk, msg.sender, price, volume);
     }
 
     function sell(string calldata optSymbol, uint price, uint volume) override external {
         
-        sell(optSymbol, price, volume, 0, 0, "", "");
+        bytes32 x;
+        sell(optSymbol, price, volume, 0, 0, x, x);
     }
 
-    function getBalanceAndPayout() private view returns (uint bal, int pOut) {
-        
-        bal = exchange.balanceOf(address(this));
-        pOut = exchange.calcExpectedPayout(address(this));
-    }
-
-    function isInRange(
-        string memory optSymbol,
-        Operation op,
-        address udlFeed
-    )
-        private
-        view
-        returns(bool)
-    {
-        Range memory r = ranges[optSymbol][uint(op)];
-        if (r.start == 0 && r.end == 0) {
-            return true;
-        }
-        int udlPrice = getUdlPrice(udlFeed);
-        return uint(udlPrice) >= r.start && uint(udlPrice) <= r.end;
-    }
-
-    function receivePayment(
-        PricingParameters memory param,
-        uint price,
-        uint volume,
-        address token
-    )
-        private
-        returns (uint, uint)
-    {
-        price = validatePrice(price, param, Operation.BUY);
-        uint value = price.mul(volume).div(volumeBase);
-
-        if (token != address(exchange)) {
-            (uint tv, uint tb) = settings.getTokenRate(token);
-            value = value.mul(tv).div(tb);
-            depositTokensInExchange(token, value);
-        } else {
-            exchange.transferBalance(msg.sender, address(this), value);
-        }
-
-        return (price, value);
-    }
-
-    function validatePrice(
-        uint price, 
-        PricingParameters memory param, 
-        Operation op
-    ) 
-        private
-        view
-        returns (uint p) 
-    {
-        p = calcOptPrice(param, op);
-        require(
-            op == Operation.BUY ? price >= p : price <= p,
-            "insufficient price"
-        );
-    }
-
-    function valueOf(address ownr) public view returns (uint) {
-        (uint bal, int pOut) = getBalanceAndPayout();
-        return uint(int(bal).add(pOut))
-            .mul(balanceOf(ownr)).div(totalSupply());
-    }
-    
     function writeOptions(
-        address _tk,
+        IOptionToken tk,
         PricingParameters memory param,
         uint volume,
         address to
@@ -453,37 +432,111 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         returns (uint volume);
 
     function getUdlPrice(address udlFeed) internal view returns (int udlPrice) {
-        (, udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
+
+        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
+        (, udlPrice) = feed.getLatestPrice();
+    }
+
+    function getBalanceAndPayout() private view returns (uint bal, int pOut) {
+        
+        bal = exchange.balanceOf(address(this));
+        pOut = exchange.calcExpectedPayout(address(this));
+    }
+
+    function isInRange(
+        string memory optSymbol,
+        Operation op,
+        address udlFeed
+    )
+        private
+        view
+        returns(bool)
+    {
+        Range memory r = ranges[optSymbol][uint(op)];
+        if (r.start == 0 && r.end == 0) {
+            return true;
+        }
+        int udlPrice = getUdlPrice(udlFeed);
+        return uint(udlPrice) >= r.start && uint(udlPrice) <= r.end;
+    }
+
+    function getAvailableStock(
+        string memory optSymbol,
+        PricingParameters memory param,
+        Operation op
+    )
+        private
+        view
+        returns (uint)
+    {    
+        uint stock = 0;
+        uint bal = 0;
+        IOptionToken tk = IOptionToken(
+            exchange.resolveToken(optSymbol)
+        );
+        if (op == Operation.BUY) {
+            stock = uint(param.buyStock);
+            bal = tk.writtenVolume(address(this));
+        } else {
+            stock = uint(param.sellStock);
+            bal = tk.balanceOf(address(this));
+        }
+        return stock > bal ? stock - bal : 0;
+    }
+
+    function receivePayment(
+        PricingParameters memory param,
+        uint price,
+        uint volume,
+        address token
+    )
+        private
+        returns (uint)
+    {
+        price = validatePrice(price, param, Operation.BUY);
+        uint value = price.mul(volume).div(volumeBase);
+
+        if (token != address(exchange)) {
+            (uint tv, uint tb) = settings.getTokenRate(token);
+            value = value.mul(tv).div(tb);
+            depositTokensInExchange(token, value);
+        } else {
+            exchange.transferBalance(msg.sender, address(this), value);
+        }
+
+        return price;
+    }
+
+    function validatePrice(
+        uint price, 
+        PricingParameters memory param, 
+        Operation op
+    ) 
+        private
+        view
+        returns (uint p) 
+    {
+        p = calcOptPrice(param, op);
+        require(
+            op == Operation.BUY ? price >= p : price <= p,
+            "insufficient price"
+        );
     }
 
     function depositTokensInExchange(address token, uint value) private {
         
-        IERC20(token).transferFrom(msg.sender, address(creditProvider), value);
+        IERC20 t = IERC20(token);
+        t.transferFrom(msg.sender, address(creditProvider), value);
         creditProvider.addBalance(address(this), token, value);
     }
 
-    function proposalCount() override external view returns (uint) {
-        return serial;
-    }
+    function ensureValidSymbol(string memory optSymbol) private view {
 
-    function proposalAddr(uint id) override external view returns (address) {
-        return proposalsMap[id];
-    }
-
-    function registerProposal(address addr) override external returns (uint id) {
-        require(
-            proposingId[addr] == 0,
-            "already proposed"
-        );
-
-        id = serial++;
-        IProposal(addr).open(id);
-        proposalsMap[id] = addr;
-        proposingId[addr] = id;
+        require(parameters[optSymbol].udlFeed !=  address(0), "invalid optSymbol");
     }
 
     function ensureCaller() private view {
-        IProposal p = IProposal(msg.sender);
-        require((proposalsMap[p.getId()] == msg.sender) && p.isPoolSettingsAllowed(), "proposal not allowed/registered");
+
+        require(owner == address(0) || msg.sender == owner, "unauthorized caller");
     }
 }

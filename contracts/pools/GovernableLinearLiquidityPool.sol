@@ -1,36 +1,24 @@
-pragma experimental ABIEncoderV2;
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
-import "./LinearInterpolator.sol";
-import "./LiquidityPool.sol";
+import "./GovernableLiquidityPool.sol";
 
-contract LinearLiquidityPool is LiquidityPool {
+contract GovernableLinearLiquidityPool is GovernableLiquidityPool {
+
+    constructor(string memory _nm, string memory _sb, address _deployAddr)
+        GovernableLiquidityPool(_nm, _sb, _deployAddr) public {}
     
-    LinearInterpolator private interpolator;
-
-    string private constant _name = "Linear Liquidity Pool Redeemable Token";
-    string private constant _symbol = "LLPTK";
-
-    constructor() LiquidityPool(_name) public {
-        
-    }
-
-    function initialize(Deployer deployer) override internal {
-
-        super.initialize(deployer);
-        interpolator = LinearInterpolator(deployer.getContractAddress("LinearInterpolator"));
-    }
-
     function name() override external view returns (string memory) {
-        return _name;
+        return string(abi.encodePacked(_name_prefix, _name));
     }
 
     function symbol() override external view returns (string memory) {
-        return _symbol;
+
+        return string(abi.encodePacked(_symbol_prefix, _symbol));
     }
 
     function writeOptions(
-        IOptionToken tk,
+        address _tk,
         PricingParameters memory param,
         uint volume,
         address to
@@ -38,8 +26,8 @@ contract LinearLiquidityPool is LiquidityPool {
         internal
         override
     {
-        uint _written = tk.writtenVolume(address(this));
-        require(_written.add(volume) <= param.buyStock, "excessive volume");
+        require(IOptionToken(_tk).writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
+        require(calcFreeBalance() > 0, "pool balance too low");
 
         exchange.writeOptions(
             param.udlFeed,
@@ -50,7 +38,6 @@ contract LinearLiquidityPool is LiquidityPool {
             to
         );
         
-        require(calcFreeBalance() > 0, "pool balance too low");
     }
 
     function calcOptPrice(PricingParameters memory p, Operation op)
@@ -59,9 +46,14 @@ contract LinearLiquidityPool is LiquidityPool {
         view
         returns (uint price)
     {
-        uint f = op == Operation.BUY ? spread.add(fractionBase) : fractionBase.sub(spread);
-        int udlPrice = getUdlPrice(p.udlFeed);
-        price = interpolator.interpolate(udlPrice, p.t0, p.t1, p.x, p.y, f);
+        price = interpolator.interpolate(
+            getUdlPrice(p.udlFeed),
+            p.t0,
+            p.t1,
+            p.x,
+            p.y,
+            (op == Operation.BUY) ? p.bsStockSpread[2].add(fractionBase) : fractionBase.sub(p.bsStockSpread[2])
+        );
     }
 
     function calcVolume(
@@ -75,7 +67,6 @@ contract LinearLiquidityPool is LiquidityPool {
         view
         returns (uint volume)
     {
-        uint fb = calcFreeBalance();
         uint r = fractionBase.sub(reserveRatio);
 
         uint coll = exchange.calcCollateral(
@@ -89,7 +80,7 @@ contract LinearLiquidityPool is LiquidityPool {
         if (op == Operation.BUY) {
 
             volume = coll <= price ? uint(-1) :
-                fb.mul(volumeBase).div(
+                calcFreeBalance().mul(volumeBase).div(
                     coll.sub(price.mul(r).div(fractionBase))
                 );
 
