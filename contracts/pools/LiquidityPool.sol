@@ -524,6 +524,9 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function depositTokensInExchange(address token, uint value) private {
+        /* TODO: REPLACE WITH TO BYPASS ISSUES WITH WHITELISTING IN CREDIPROVIDER IN V1
+            exchange.depositTokens(address(this), token, value)
+        */
         
         IERC20 t = IERC20(token);
         t.transferFrom(msg.sender, address(creditProvider), value);
