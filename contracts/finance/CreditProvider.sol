@@ -23,7 +23,7 @@ contract CreditProvider is ManagedContract {
     mapping(address => uint) private balances;
     mapping(address => uint) private debts;
     mapping(address => uint) private debtsDate;
-    mapping(address => uint) private callers;
+    mapping(address => uint) private poolCallers;
     mapping(address => uint) private primeCallers;
 
     address private exchangeAddr;
@@ -53,12 +53,6 @@ contract CreditProvider is ManagedContract {
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         address vaultAddr = deployer.getContractAddress("UnderlyingVault");
         address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
-        
-        callers[exchangeAddr] = 1;
-        callers[address(settings)] = 1;
-        callers[address(creditToken)] = 1;
-        callers[vaultAddr] = 1;
-        callers[collateralManagerAddr] = 1;
 
         primeCallers[exchangeAddr] = 1;
         primeCallers[address(settings)] = 1;
@@ -93,10 +87,6 @@ contract CreditProvider is ManagedContract {
 
     function getTotalBalance() external view returns (uint) {
         return _totalBalance;
-    }
-
-    function ensureCaller(address addr) external view {
-        require(callers[addr] == 1, "unauthorized caller");
     }
 
     function issueCredit(address to, uint value) external {
@@ -152,7 +142,7 @@ contract CreditProvider is ManagedContract {
 
     function processEarlyLpWithdrawal(address to, uint credit) external {
         
-        ensureCaller();
+        ensurePoolCaller();
         require(to != address(this), "invalid withrawal request");
 
         if (credit > 0) {
@@ -170,9 +160,9 @@ contract CreditProvider is ManagedContract {
     }
 
     function borrowBuyLiquidity(address to, uint credit) external {
-        ensureCaller();
+        ensurePoolCaller();
         require(to != address(this), "invalid borrower");
-        require(callers[to] == 1, "invalid pool");
+        require(poolCallers[to] == 1, "invalid pool");
         require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
         // increment exchange balance for liquidity pool
         addBalance(to, credit);
@@ -223,7 +213,7 @@ contract CreditProvider is ManagedContract {
         if (value > 0) {
 
             if (!trusted) {
-                ensureCaller();
+                ensurePrimeCaller();
             }
             
             (uint r, uint b) = settings.getTokenRate(token);
@@ -358,11 +348,11 @@ contract CreditProvider is ManagedContract {
 
     function insertPoolCaller(address llp) external {
         ensurePrimeCaller();
-        callers[llp] = 1;
+        poolCallers[llp] = 1;
     }
 
-    function ensureCaller() private view {        
-        require(callers[msg.sender] == 1, "unauthorized caller");
+    function ensurePoolCaller() private view {        
+        require(poolCallers[msg.sender] == 1, "unauthorized caller");
     }
 
     function ensurePrimeCaller() private view {        

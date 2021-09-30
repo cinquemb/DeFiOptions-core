@@ -8,7 +8,6 @@ interface ICreditProvider {
     function grantTokens(address to, uint value) external;
     function getTotalOwners() external view returns (uint);
     function getTotalBalance() external view returns (uint);
-    function ensureCaller(address addr) external view;
     function processPayment(address from, address to, uint value) external;
     function transferBalance(address from, address to, uint value) external;
     function withdrawTokens(address owner, uint value) external;

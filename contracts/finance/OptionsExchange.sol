@@ -116,7 +116,6 @@ contract OptionsExchange is ManagedContract {
     )
         external
     {
-        creditProvider.ensureCaller(msg.sender);
         creditProvider.transferBalance(from, to, value);
         ensureFunds(from);
     }
@@ -170,6 +169,8 @@ contract OptionsExchange is ManagedContract {
         emit CreatePool(pool, msg.sender);
         return pool;
     }
+
+    /* TODO: Add existing pool addr to approved pools callers?*/
 
     function listPoolSymbols(uint offset, uint range) external view returns (string memory available) {
         for (uint i = offset; i < range; i++) {
