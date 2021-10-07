@@ -8,7 +8,7 @@ import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
-import "../interfaces/ICollateralManager.sol";
+import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/Arrays.sol";
@@ -32,7 +32,7 @@ contract OptionsExchange is ManagedContract {
     IProtocolSettings private settings;
     ICreditProvider private creditProvider;
     DEXFeedFactory private dexFeedFactory;
-    ICollateralManager private collateralManager;
+    IBaseCollateralManager private collateralManager;
 
     OptionTokenFactory private optionTokenFactory;
     LinearLiquidityPoolFactory private poolFactory;
@@ -72,7 +72,7 @@ contract OptionsExchange is ManagedContract {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
-        collateralManager = ICollateralManager(deployer.getContractAddress("CollateralManager"));
+        collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
 
         _volumeBase = 1e18;
@@ -338,7 +338,7 @@ contract OptionsExchange is ManagedContract {
         if (coll > 0) {
             uint c = collateral[owner];
             collateral[owner] = c.sub(
-                MoreMath.min(c, collateralManager.calcCollateral(opt, coll))
+                MoreMath.min(c, IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcCollateral(opt, coll))
             );
         }
     }
@@ -353,16 +353,16 @@ contract OptionsExchange is ManagedContract {
     }
 
     function liquidateExpired(address _tk, address[] calldata owners) external {
-        collateralManager.liquidateExpired(_tk, owners);
+        IBaseCollateralManager(settings.getUdlCollateralManager(options[_tk].udlFeed)).liquidateExpired(_tk, owners);
     }
 
     function liquidateOptions(address _tk, address owner) public returns (uint value) {
-        value = collateralManager.liquidateOptions(_tk, owner);
+        value = IBaseCollateralManager(settings.getUdlCollateralManager(options[_tk].udlFeed)).liquidateOptions(_tk, owner);
     }
 
     function calcSurplus(address owner) public view returns (uint) {
         
-        uint coll = collateralManager.calcCollateral(owner, true);
+        uint coll = collateralManager.calcCollateral(owner, true); // multi udl feed refs
         uint bal = creditProvider.balanceOf(owner);
         if (bal >= coll) {
             return bal.sub(coll);
@@ -373,11 +373,11 @@ contract OptionsExchange is ManagedContract {
     function setCollateral(address owner) external {
         /* UNUSED IN ANY CONTRACTS, DOES THIS NEED TO BE AN INCENTIVIZED FUNCTION */
 
-        collateral[owner] = collateralManager.calcCollateral(owner, true);
+        collateral[owner] = collateralManager.calcCollateral(owner, true); // multi udl feed refs
     }
 
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
-        return collateralManager.calcCollateral(owner, is_regular);
+        return collateralManager.calcCollateral(owner, is_regular); // multi udl feed refs
     }
 
     function calcCollateral(
@@ -392,11 +392,11 @@ contract OptionsExchange is ManagedContract {
         returns (uint)
     {
         (IOptionsExchange.OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
-        return collateralManager.calcCollateral(opt, volume);
+        return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcCollateral(opt, volume);
     }
 
     function calcExpectedPayout(address owner) external view returns (int payout) {
-        payout = collateralManager.calcExpectedPayout(owner);
+        payout = collateralManager.calcExpectedPayout(owner); // multi udl feed refs
     }
 
     function calcIntrinsicValue(
@@ -410,7 +410,7 @@ contract OptionsExchange is ManagedContract {
         returns (int)
     {
         (IOptionsExchange.OptionData memory opt,) = createOptionInMemory(udlFeed, optType, strike, maturity);
-        return collateralManager.calcIntrinsicValue(opt);
+        return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
     }
 
     function getUnderlyingPrice(string calldata symbol) external view returns (int) {
@@ -468,7 +468,7 @@ contract OptionsExchange is ManagedContract {
             holding[i] = tk.balanceOf(owner);
             written[i] = tk.writtenVolume(owner);
             uncovered[i] = tk.uncoveredVolume(owner);
-            iv[i] = collateralManager.calcIntrinsicValue(opt);
+            iv[i] = IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
         }
     }
 
@@ -513,7 +513,7 @@ contract OptionsExchange is ManagedContract {
         uint v = MoreMath.min(volume, tk.uncoveredVolume(msg.sender));
         if (v > 0) {
             collateral[msg.sender] = collateral[msg.sender].add(
-                collateralManager.calcCollateral(opt, v)
+                IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcCollateral(opt, v)
             );
         }
 

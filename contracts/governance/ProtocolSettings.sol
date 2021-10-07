@@ -28,6 +28,7 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => bool) private poolBuyCreditTradeable;
     mapping(address => bool) private udlIncentiveBlacklist;
     mapping(address => bool) private dexAggIncentiveBlacklist;
+    mapping(address => address) private udlCollateralManager;
 
     mapping(address => mapping(address => address[])) private paths;
 
@@ -50,6 +51,7 @@ contract ProtocolSettings is ManagedContract {
 
     address private swapRouter;
     address private swapToken;
+    address private baseCollateralManagerAddr;
     Rate private swapTolerance;
 
     uint private MAX_UINT;
@@ -59,6 +61,7 @@ contract ProtocolSettings is ManagedContract {
         owner = deployer.getOwner();
         time = TimeProvider(deployer.getPayableContractAddress("TimeProvider"));
         govToken = IGovToken(deployer.getPayableContractAddress("GovToken"));
+        baseCollateralManagerAddr = deployer.getContractAddress("CollateralManager");
 
         MAX_UINT = uint(-1);
 
@@ -365,6 +368,19 @@ contract ProtocolSettings is ManagedContract {
     function getDexOracleTwapPeriod(address dexOracleAddress) external view returns (uint256) {
         return dexOracleTwapPeriod[dexOracleAddress];
     }
+
+    /* COLLATERAL MANAGER SETTINGS */
+
+    function setUdlCollateralManager(address udlFeed, address ctlMngr) external {
+        ensureWritePrivilege();
+        require(underlyingFeeds[udlFeed] > 0, "feed not allowed");
+        udlCollateralManager[udlFeed] = ctlMngr;
+    }
+
+    function getUdlCollateralManager(address udlFeed) external view returns (address) {
+        return (udlCollateralManager[udlFeed] == address(0)) ? baseCollateralManagerAddr : udlCollateralManager[udlFeed];
+    }
+
 
     function ensureWritePrivilege() private view {
 
