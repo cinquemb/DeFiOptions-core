@@ -30,13 +30,11 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     IProtocolSettings private settings;
     IInterpolator internal interpolator;
     ICreditProvider private creditProvider;
+    IProposalManager private proposalManager;
 
-    mapping(address => uint) private proposingId;
-    mapping(uint => address) private proposalsMap;
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    uint private serial;
     uint private _maturity;
     uint internal volumeBase;
     uint private withdrawFee;
@@ -45,7 +43,7 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     
     string[] private optSymbols;
 
-    constructor(string memory _nm, string memory _sb, address _deployAddr)
+    constructor(string memory _nm, string memory _sb, address _deployAddr, address _manager)
         ERC20(string(abi.encodePacked(_name_prefix, _nm)))
         public
     {    
@@ -59,8 +57,8 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
+        proposalManager = IProposalManager(_manager);
         volumeBase = 1e18;//exchange.volumeBase();
-        serial = 1;
     }
 
     function setParameters(
@@ -84,11 +82,6 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     function maturity() override external view returns (uint) {
         
         return _maturity;
-    }
-
-    function getOwner() override external view returns (address) {
-        // returns the proposal address of the caller, used in removing pool symbols from exchange
-        return proposalsMap[proposingId[msg.sender]];
     }
 
     function yield(uint dt) override external view returns (uint) {
@@ -463,28 +456,7 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
         exchange.depositTokens(address(this), token, value);
     }
 
-    function proposalCount() override external view returns (uint) {
-        return serial;
-    }
-
-    function proposalAddr(uint id) override external view returns (address) {
-        return proposalsMap[id];
-    }
-
-    function registerProposal(address addr) override external returns (uint id) {
-        require(
-            proposingId[addr] == 0,
-            "already proposed"
-        );
-
-        id = serial++;
-        IProposal(addr).open(id);
-        proposalsMap[id] = addr;
-        proposingId[addr] = id;
-    }
-
     function ensureCaller() private view {
-        IProposal p = IProposal(msg.sender);
-        require((proposalsMap[p.getId()] == msg.sender) && p.isPoolSettingsAllowed(), "proposal not allowed/registered");
+        require(proposalManager.isRegisteredProposal(msg.sender) && ProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "proposal not registered/execution not allowed");
     }
 }
