@@ -5,6 +5,7 @@ import "./ProposalsManager.sol";
 import "./ProtocolSettings.sol";
 
 import "../interfaces/IERC20.sol";
+import "../interfaces/IGovToken.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../utils/MoreMath.sol";
 
@@ -95,8 +96,8 @@ contract ProposalWrapper {
     }
 
     function isPoolSettingsAllowed() external view returns (bool) {
-
-        return (voteType == VoteType.POOL_SETTINGS) && isExecutionAllowed();
+        //need to check that the propsal gov token address matches the pool token address as the sender
+        return (voteType == VoteType.POOL_SETTINGS) && (address(govToken) == msg.sender) && isExecutionAllowed();
     }
 
     function isProtocolSettingsAllowed() public view returns (bool) {
@@ -139,11 +140,11 @@ contract ProposalWrapper {
         uint balance;
 
         if (voteType == VoteType.PROTOCOL_SETTINGS) {
-            balance = govToken.delegateBalanceOf(msg.sender);
+            balance = IGovToken(address(govToken)).delegateBalanceOf(msg.sender);
         } else if (voteType == VoteType.POOL_SETTINGS) {
             balance = llpToken.balanceOf(msg.sender);
         } else {
-            balance = govToken.delegateBalanceOf(msg.sender);
+            balance = IGovToken(address(govToken)).delegateBalanceOf(msg.sender);
         }
         
         require(balance > 0);
@@ -167,7 +168,7 @@ contract ProposalWrapper {
 
         ensureIsActive();
 
-        if (quorum == Proposal.Quorum.QUADRATIC) {
+        if (quorum == Quorum.QUADRATIC) {
 
             uint256 total;
 
@@ -185,9 +186,9 @@ contract ProposalWrapper {
                 status = Status.APPROVED;
 
                 if (voteType == VoteType.POOL_SETTINGS) {
-                    executePool(llpToken);
+                    Proposal(implementation).executePool(llpToken);
                 } else {
-                    execute(settings);
+                    Proposal(implementation).execute(settings);
                 }
 
             } else {
@@ -195,15 +196,15 @@ contract ProposalWrapper {
             }
         } else {
 
-            govToken.enforceHotVotingSetting();
+            IGovToken(address(govToken)).enforceHotVotingSetting();
 
             uint total = settings.getCirculatingSupply();
             
             uint v;
             
-            if (quorum == Proposal.Quorum.SIMPLE_MAJORITY) {
+            if (quorum == Quorum.SIMPLE_MAJORITY) {
                 v = total.div(2);
-            } else if (quorum == Proposal.Quorum.TWO_THIRDS) {
+            } else if (quorum == Quorum.TWO_THIRDS) {
                 v = total.mul(2).div(3);
             } else {
                 revert();
@@ -211,7 +212,7 @@ contract ProposalWrapper {
 
             if (yea > v) {
                 status = Status.APPROVED;
-                execute(settings);
+                Proposal(implementation).execute(settings);
             } else if (nay >= v) {
                 status = Status.REJECTED;
             } else {

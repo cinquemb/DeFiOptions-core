@@ -1,7 +1,8 @@
 const Deployer4 = artifacts.require("Deployer");
 
 const TimeProviderMock = artifacts.require("TimeProviderMock");
-const ProtocolSettings = artifacts.require("ProtocolSettings");
+const ProtocolSettings = artifacts.require("ProtocolSettings")
+const ProposalsManager = artifacts.require("ProposalsManager");
 const GovToken = artifacts.require("GovToken");
 
 const CreditToken = artifacts.require("CreditToken");
@@ -32,6 +33,7 @@ module.exports = async function(deployer) {
   const settings = await deployer.deploy(ProtocolSettings);
   console.log("settings is at: "+ settings.address);
   const ct = await deployer.deploy(CreditToken);
+  const pm = await deployer.deploy(ProposalsManager);
   const gt = await deployer.deploy(GovToken);
   const yt = await deployer.deploy(YieldTracker);
   const uv = await deployer.deploy(UnderlyingVault);
@@ -85,6 +87,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
   await deployer4.addAlias("CreditIssuer", "CreditProvider");
   await deployer4.setContractAddress("CreditToken", ct.address);
+  await deployer4.setContractAddress("ProposalsManager", pm.address);
   await deployer4.setContractAddress("CollateralManager", collateralManager.address);
   await deployer4.setContractAddress("OptionsExchange", exchange.address);
   await deployer4.setContractAddress("OptionTokenFactory", otf.address);

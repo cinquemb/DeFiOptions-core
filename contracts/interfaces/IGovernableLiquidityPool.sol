@@ -34,8 +34,6 @@ interface IGovernableLiquidityPool {
 
     function maturity() external view returns (uint);
 
-    function getOwner() external view returns (address);
-
     function yield(uint dt) external view returns (uint);
 
     function depositTokens(address to, address token, uint value) external;
@@ -78,9 +76,4 @@ interface IGovernableLiquidityPool {
         external;
 
     function sell(string calldata optSymbol, uint price, uint volume) external;
-    function registerProposal(address addr) external returns (uint id);
-
-    function proposalCount() external view returns (uint);
-
-    function proposalAddr(uint id) external view returns (address);
 }

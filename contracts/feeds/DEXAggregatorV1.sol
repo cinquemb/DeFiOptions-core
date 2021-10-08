@@ -39,7 +39,7 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     /* SEEDING FOR INITIALIZATION BELOW */
 
     function setRoundIds(uint[] calldata rids) external {
-        require(lockedRound == false && rounds.length == 0, "already init round");
+        require(lockedRound == false && latestRound == 0, "already init round");
         for (uint i = 0; i < rids.length; i++) {
             rounds[rids[i]] = i;
         }

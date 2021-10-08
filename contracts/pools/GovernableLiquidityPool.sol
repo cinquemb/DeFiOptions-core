@@ -9,14 +9,18 @@ import "../interfaces/IYieldTracker.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IProtocolSettings.sol";
+import "../interfaces/IProposalWrapper.sol";
+import "../interfaces/IProposalManager.sol";
 import "../interfaces/IInterpolator.sol";
 import "../finance/RedeemableToken.sol";
+import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, IGovernableLiquidityPool {
 
+    using SafeERC20 for IERC20;
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;
@@ -43,7 +47,7 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     
     string[] private optSymbols;
 
-    constructor(string memory _nm, string memory _sb, address _deployAddr, address _manager)
+    constructor(string memory _nm, string memory _sb, address _deployAddr)
         ERC20(string(abi.encodePacked(_name_prefix, _nm)))
         public
     {    
@@ -57,7 +61,7 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
-        proposalManager = IProposalManager(_manager);
+        proposalManager = IProposalManager(deployer.getContractAddress("ProposalManager"));
         volumeBase = 1e18;//exchange.volumeBase();
     }
 
@@ -450,13 +454,12 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     }
 
     function depositTokensInExchange(address token, uint value) private {
-        IERC20 t = IERC20(token);
-        t.safeTransferFrom(msg.sender, address(this), value);
-        t.safeApprove(address(exchange), value);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), value);
+        IERC20(token).safeApprove(address(exchange), value);
         exchange.depositTokens(address(this), token, value);
     }
 
     function ensureCaller() private view {
-        require(proposalManager.isRegisteredProposal(msg.sender) && ProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "proposal not registered/execution not allowed");
+        require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "proposal not registered/execution not allowed");
     }
 }

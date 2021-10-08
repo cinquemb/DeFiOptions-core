@@ -356,6 +356,10 @@ contract CreditProvider is ManagedContract {
         poolCallers[llp] = 1;
     }
 
+    function ensureCaller(address addr) external view {
+        require(primeCallers[addr] == 1, "unauthorized caller");
+    }
+
     function ensurePoolCaller() private view {        
         require(poolCallers[msg.sender] == 1, "unauthorized caller");
     }

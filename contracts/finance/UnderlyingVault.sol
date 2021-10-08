@@ -9,6 +9,7 @@ import "../interfaces/TimeProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../utils/MoreMath.sol";
+import "../utils/SafeERC20.sol";
 
 contract UnderlyingVault is ManagedContract {
 

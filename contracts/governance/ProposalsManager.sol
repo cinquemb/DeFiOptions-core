@@ -2,23 +2,22 @@ pragma solidity >=0.6.0;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
-import "../interfaces/TimeProvider.sol";
+import "../interfaces/IProtocolSettings.sol";
 import "../utils/Arrays.sol";
 import "../utils/SafeMath.sol";
 import "./ProposalWrapper.sol";
-import "./ProtocolSettings.sol";
 import "./GovToken.sol";
 
 contract ProposalsManager is ManagedContract {
 
     using SafeMath for uint;
 
-    TimeProvider private time;
-    ProtocolSettings private settings;
+    IProtocolSettings private settings;
     GovToken private govToken;
 
     mapping(address => uint) private proposingDate;
     mapping(address => address) private wrapper;
+    mapping(uint => address) private idProposalMap;
     
     uint private serial;
     address[] private proposals;
@@ -32,44 +31,53 @@ contract ProposalsManager is ManagedContract {
     
     function initialize(Deployer deployer) override internal {
 
-        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
-        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         govToken = GovToken(deployer.getContractAddress("GovToken"));
         serial = 1;
     }
 
     function registerProposal(
         address addr,
+        address poolAddress,
         ProposalWrapper.Quorum quorum,
+        ProposalWrapper.VoteType voteType,
         uint expiresAt
     )
         public
         returns (uint id, address wp)
     {    
         require(
-            proposingDate[msg.sender] == 0 || time.getNow().sub(proposingDate[msg.sender]) > 1 days,
+            proposingDate[msg.sender] == 0 || settings.exchangeTime().sub(proposingDate[msg.sender]) > 1 days,
             "minimum interval between proposals not met"
         );
         
         (uint v, uint b) = settings.getMinShareForProposal();
-        require(govToken.calcShare(msg.sender, b) >= v, "insufficient share");
+        address governanceToken;
+        
+        if (voteType == ProposalWrapper.VoteType.PROTOCOL_SETTINGS) {
+            require(govToken.calcShare(msg.sender, b) >= v, "insufficient share");
+            governanceToken = address(govToken);
+        } else {
+            governanceToken = poolAddress;
+        }
 
         ProposalWrapper w = new ProposalWrapper(
             addr,
-            address(time), 
-            address(govToken),
+            governanceToken,
             address(this),
             address(settings),
             quorum,
+            voteType,
             expiresAt
         );
 
-        proposingDate[msg.sender] = time.getNow();
+        proposingDate[msg.sender] = settings.exchangeTime();
         id = serial++;
         w.open(id);
         wp = address(w);
         proposals.push(wp);
         wrapper[addr] = wp;
+        idProposalMap[id] = addr;
 
         emit RegisterProposal(wp, addr, quorum, expiresAt);
     }
@@ -83,6 +91,15 @@ contract ProposalsManager is ManagedContract {
         
         ProposalWrapper w = ProposalWrapper(wp);
         return w.implementation() == addr;
+    }
+
+    function proposalCount() public view returns (uint) {
+        return serial;
+    }
+
+    function resolveProposal(uint id) public view returns (address) {
+
+        return idProposalMap[id];
     }
 
     function resolve(address addr) public view returns (address) {

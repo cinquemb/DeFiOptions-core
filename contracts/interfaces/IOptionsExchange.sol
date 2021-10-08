@@ -37,5 +37,6 @@ interface IOptionsExchange {
     function getOptionSymbol(OptionData calldata opt) external view returns (string memory symbol);
     function cleanUp(address owner, address _tk) external;
     function release(address owner, uint udl, uint coll) external;
+    function depositTokens(address to, address token, uint value) external;
     function transferOwnership(string calldata symbol, address from, address to, uint value) external;
 }
