@@ -12,6 +12,10 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
+    bool private lockedRound;
+    bool private lockedAnswers;
+    bool private lockedUpdatedAts;
+
     address _dexOracle;
 
 
@@ -31,6 +35,32 @@ contract DEXAggregatorV1 is AggregatorV3Interface {
     function version() override external view returns (uint256) {
 
     }
+
+    /* SEEDING FOR INITIALIZATION BELOW */
+
+    function setRoundIds(uint[] calldata rids) external {
+        require(lockedRound == false && rounds.length == 0, "already init round");
+        for (uint i = 0; i < rids.length; i++) {
+            rounds[rids[i]] = i;
+        }
+
+        latestRound = rids[ rids.length - 1];
+        lockedRound = true;
+    }
+
+    function setAnswers(int[] calldata ans) external {
+        require(lockedAnswers == false && answers.length == 0, "already init answers");
+        answers = ans;
+        lockedAnswers = true;
+    }
+
+    function setUpdatedAts(uint[] calldata uts) external {
+        require(lockedUpdatedAts == false && updatedAts.length == 0, "already init answers");
+        updatedAts = uts;
+        lockedUpdatedAts = true;
+    }
+
+    /* SEEDING FOR INITIALIZATION ABOVE */
 
     function oracle() external view returns (address) {
         return _dexOracle;
