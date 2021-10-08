@@ -138,7 +138,7 @@ contract ChainlinkFeed is UnderlyingFeed {
 
         uint period = timespan.div(1 days);
         timespan = period.mul(1 days);
-        int[] memory array = new int[](period - 1);
+        int[] memory array = new int[](period.sub(1));
 
         if (dailyVolatilities[timespan][today()] == 0) {
 
@@ -237,9 +237,15 @@ contract ChainlinkFeed is UnderlyingFeed {
 
     function initializeSamples(uint[] memory _timestamps, int[] memory _prices) private {
 
+        require(_timestamps.length == _prices.length, "length mismatch");
+
+        uint lastTimestamp = 0;
         for (uint i = 0; i < _timestamps.length; i++) {
 
             uint ts = _timestamps[i];
+            require(ts > lastTimestamp, "ascending order required");
+            lastTimestamp = ts;
+
             int pc = _prices[i];
             Sample memory s = Sample(ts.toUint32(), pc.toInt128());
 

@@ -26,7 +26,6 @@ abstract contract RedeemableToken is ERC20 {
         require(redeemAllowed(), "redeemd not allowed");
 
         uint valTotal = exchange.balanceOf(address(this));
-        uint valRemaining = valTotal;
         uint supplyTotal = _totalSupply;
         uint supplyRemaining = _totalSupply;
         
@@ -34,7 +33,6 @@ abstract contract RedeemableToken is ERC20 {
             if (owners[i] != address(0)) {
                 (uint bal, uint val) = redeem(valTotal, supplyTotal, owners[i]);
                 value = value.add(val);
-                valRemaining = valRemaining.sub(val);
                 supplyRemaining = supplyRemaining.sub(bal);
             }
         }
@@ -51,8 +49,8 @@ abstract contract RedeemableToken is ERC20 {
         if (bal > 0) {
             uint b = 1e3;
             val = MoreMath.round(valTotal.mul(bal.mul(b)).div(supplyTotal), b);
-            exchange.transferBalance(owner, val);
             removeBalance(owner, bal);
+            exchange.transferBalance(owner, val);
         }
 
         afterRedeem(owner, bal, val);

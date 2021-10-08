@@ -56,7 +56,7 @@ contract Base {
 
         Deployer deployer = Deployer(DeployedAddresses.Deployer());
         deployer.reset();
-        deployer.deploy();
+        deployer.deploy(address(this));
         time = TimeProviderMock(deployer.getContractAddress("TimeProvider"));
         feed = EthFeedMock(deployer.getContractAddress("UnderlyingFeed"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
@@ -66,7 +66,6 @@ contract Base {
 
         erc20.reset();
 
-        settings.setOwner(address(this));
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
 
@@ -75,17 +74,21 @@ contract Base {
             spread,
             reserveRatio,
             withdrawFee,
+            uint(-1), // unlimited capacity
             90 days
         );
-
-        bob = createPoolTrader(address(erc20));
-        alice = createPoolTrader(address(erc20));
 
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
     }
 
-    function depositInPool(address to, uint value) internal {
+    function createTraders() public {
+        
+        bob = createPoolTrader(address(erc20));
+        alice = createPoolTrader(address(erc20));
+    }
+
+    function depositInPool(address to, uint value) public {
         
         erc20.issue(address(this), value);
         erc20.approve(address(pool), value);

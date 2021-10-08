@@ -14,6 +14,7 @@ import "../interfaces/IUnderlyingVault.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
+import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 import "./OptionToken.sol";
@@ -25,6 +26,7 @@ import "../pools/LinearLiquidityPoolFactory.sol";
 contract OptionsExchange is ManagedContract {
 
     using SafeCast for uint;
+    using SafeERC20 for IERC20;
     using SafeMath for uint;
     using SignedSafeMath for int;
     
@@ -47,7 +49,7 @@ contract OptionsExchange is ManagedContract {
     mapping(string => address) private tokenAddress;
     mapping(address => address) private dexFeedAddress;
 
-    
+    mapping(address => mapping(address => uint)) private allowed;    
 
     uint private _volumeBase;
 
@@ -59,6 +61,8 @@ contract OptionsExchange is ManagedContract {
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
     event CreateDexFeed(address indexed feed, address indexed sender);
+
+    event Approval(address indexed owner, address indexed spender, uint value);
 
     event WriteOptions(
         address indexed token,
@@ -100,13 +104,26 @@ contract OptionsExchange is ManagedContract {
     function depositTokens(address to, address token, uint value) public {
 
         IERC20 t = IERC20(token);
-        t.transferFrom(msg.sender, address(creditProvider), value);
+        t.safeTransferFrom(msg.sender, address(creditProvider), value);
         creditProvider.addBalance(to, token, value);
     }
 
     function balanceOf(address owner) external view returns (uint) {
 
         return creditProvider.balanceOf(owner);
+    }
+
+    function allowance(address owner, address spender) external view returns (uint) {
+
+        return allowed[owner][spender];
+    }
+
+    function approve(address spender, uint value) external returns (bool) {
+
+        require(spender != address(0));
+        allowed[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
     }
 
     function transferBalance(
@@ -116,6 +133,13 @@ contract OptionsExchange is ManagedContract {
     )
         external
     {
+
+        uint allw = allowed[from][msg.sender];
+        if (allw >= value) {
+            allowed[from][msg.sender] = allw.sub(value);
+        } else {
+            creditProvider.ensureCaller(msg.sender);
+        }
         creditProvider.transferBalance(from, to, value);
         ensureFunds(from);
     }
@@ -146,8 +170,8 @@ contract OptionsExchange is ManagedContract {
         public
         returns (address tk)
     {
-        (IOptionsExchange.OptionData memory opt, string memory symbol) =
-            createOptionInMemory(udlFeed, optType, strike, maturity);
+        ensureFeedIsAlowed(udlFeed);
+        (IOptionsExchange.OptionData memory opt, string memory symbol) = createOptionInMemory(udlFeed, optType, strike, maturity);
 
         require(tokenAddress[symbol] == address(0), "already created");
         tk = optionTokenFactory.create(symbol, udlFeed);
@@ -295,7 +319,7 @@ contract OptionsExchange is ManagedContract {
         
         address underlying = getUnderlyingAddr(opt);
         require(underlying != address(0), "underlying token not set");
-        IERC20(underlying).transferFrom(msg.sender, address(vault), volume);
+        IERC20(underlying).safeTransferFrom(msg.sender, address(vault), volume);
         vault.lock(msg.sender, _tk, volume);
 
         writeOptionsInternal(opt, symbol, volume, to);
@@ -488,7 +512,7 @@ contract OptionsExchange is ManagedContract {
         private 
         returns (address _tk)
     {
-        require(settings.getUdlFeed(opt.udlFeed) > 0, "feed not allowed");
+        ensureFeedIsAlowed(opt.udlFeed);
         require(volume > 0, "invalid volume");
         require(opt.maturity > settings.exchangeTime(), "invalid maturity");
 
@@ -601,5 +625,10 @@ contract OptionsExchange is ManagedContract {
         uint256 creditingValue = 10e18;        
         creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
         emit IncentiveReward(msg.sender, creditingValue);    
+    }
+
+    function ensureFeedIsAlowed(address udlFeed) private view {
+        
+        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
     }
 }

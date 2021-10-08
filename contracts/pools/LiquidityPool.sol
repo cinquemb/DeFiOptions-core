@@ -14,12 +14,14 @@ import "../interfaces/UnderlyingFeed.sol";
 import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
+import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityPool {
 
     using SafeCast for uint;
+    using SafeERC20 for IERC20;
     using SafeMath for uint;
     using SignedSafeMath for int;
 
@@ -45,16 +47,15 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     TimeProvider private time;
     ProtocolSettings private settings;
-    ICreditProvider private creditProvider;
     YieldTracker private tracker;
 
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    address private owner;
     uint internal spread;
     uint internal reserveRatio;
-    uint internal withdrawFee;
+    uint public withdrawFee;
+    uint public capacity;
     uint private _maturity;
     string[] private optSymbols;
 
@@ -71,11 +72,9 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
 
-        owner = deployer.getOwner();
         time = TimeProvider(deployer.getContractAddress("TimeProvider"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         tracker = YieldTracker(deployer.getContractAddress("YieldTracker"));
 
         timeBase = 1e18;
@@ -88,6 +87,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint _spread,
         uint _reserveRatio,
         uint _withdrawFee,
+        uint _capacity,
         uint _mt
     )
         external
@@ -96,6 +96,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         spread = _spread;
         reserveRatio = _reserveRatio;
         withdrawFee = _withdrawFee;
+        capacity = _capacity;
         _maturity = _mt;
     }
 
@@ -197,6 +198,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         (uint b0, int po) = getBalanceAndPayout();
         depositTokensInExchange(token, value);
         uint b1 = exchange.balanceOf(address(this));
+        require(b1 <= capacity, "capacity exceeded");
         
         tracker.push(int(b0).add(po), b1.sub(b0).toInt256());
 
@@ -524,13 +526,10 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function depositTokensInExchange(address token, uint value) private {
-        /* TODO: REPLACE WITH TO BYPASS ISSUES WITH WHITELISTING IN CREDIPROVIDER IN V1
-            exchange.depositTokens(address(this), token, value)
-        */
-        
         IERC20 t = IERC20(token);
-        t.transferFrom(msg.sender, address(creditProvider), value);
-        creditProvider.addBalance(address(this), token, value);
+        t.safeTransferFrom(msg.sender, address(this), value);
+        t.safeApprove(address(exchange), value);
+        exchange.depositTokens(address(this), token, value);
     }
 
     function ensureValidSymbol(string memory optSymbol) private view {
@@ -540,6 +539,6 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
 
     function ensureCaller() private view {
 
-        require(owner == address(0) || msg.sender == owner, "unauthorized caller");
+        require(msg.sender == getOwner(), "unauthorized caller");
     }
 }

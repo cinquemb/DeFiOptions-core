@@ -12,6 +12,7 @@ import "../utils/MoreMath.sol";
 
 contract UnderlyingVault is ManagedContract {
 
+    using SafeERC20 for IERC20;
     using SafeMath for uint;
     using SignedSafeMath for int;
 
@@ -114,7 +115,7 @@ contract UnderlyingVault is ManagedContract {
         if (bal > 0) {
             address underlying = UnderlyingFeed(feed).getUnderlyingAddr();
             allocation[owner][token] = bal.sub(value);
-            IERC20(underlying).transfer(owner, value);
+            IERC20(underlying).safeTransfer(owner, value);
             emit Release(owner, token, value);
         }
     }
@@ -130,6 +131,8 @@ contract UnderlyingVault is ManagedContract {
         private
         returns (uint _in, uint _out)
     {
+        require(path.length >= 2, "invalid swap path");
+        
         uint amountInMax = getAmountInMax(
             price,
             amountOut,
@@ -141,8 +144,8 @@ contract UnderlyingVault is ManagedContract {
             amountInMax = balance;
         }
 
-        (uint r, uint b) = settings.getTokenRate(path[1]);
-        IERC20(path[0]).approve(address(router), amountInMax);
+        (uint r, uint b) = settings.getTokenRate(path[path.length - 1]);
+        IERC20(path[0]).safeApprove(address(router), amountInMax);
 
         _out = amountOut;
         _in = router.swapTokensForExactTokens(
@@ -154,7 +157,7 @@ contract UnderlyingVault is ManagedContract {
         )[0];
 
         if (amountOut > 0) {
-            creditProvider.addBalance(owner, path[1], amountOut.mul(r).div(b));
+            creditProvider.addBalance(owner, path[path.length - 1], amountOut.mul(r).div(b));
         }
     }
 

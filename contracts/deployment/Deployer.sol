@@ -24,11 +24,6 @@ contract Deployer {
         owner = _owner;
     }
 
-    function getOwner() public view returns (address) {
-
-        return owner;
-    }
-
     function hasKey(string memory key) public view returns (bool) {
         
         return contractMap[key] != address(0) || contractMap[aliases[key]] != address(0);
@@ -40,6 +35,8 @@ contract Deployer {
     }
 
     function setContractAddress(string memory key, address addr, bool upgradeable) public {
+        
+        require(!hasKey(key), buildKeyAlreadySetMessage(key));
 
         ensureNotDeployed();
         ensureCaller();
@@ -79,6 +76,11 @@ contract Deployer {
 
     function deploy() public {
 
+        deploy(owner);
+    }
+
+    function deploy(address _owner) public {
+
         ensureNotDeployed();
         ensureCaller();
         deployed = true;
@@ -86,7 +88,7 @@ contract Deployer {
         for (uint i = contracts.length - 1; i != uint(-1); i--) {
             if (contractMap[contracts[i].key] == address(1)) {
                 if (contracts[i].upgradeable) {
-                    Proxy p = new Proxy(getOwner(), contracts[i].origAddr);
+                    Proxy p = new Proxy(_owner, contracts[i].origAddr);
                     contractMap[contracts[i].key] = address(p);
                 } else {
                     contractMap[contracts[i].key] = contracts[i].origAddr;
@@ -123,6 +125,11 @@ contract Deployer {
     function ensureCaller() private view {
 
         require(owner == address(0) || msg.sender == owner, "unallowed caller");
+    }
+
+    function buildKeyAlreadySetMessage(string memory key) private pure returns(string memory) {
+
+        return string(abi.encodePacked("key already set: ", key));
     }
 
     function buildAddressNotSetMessage(string memory key) private pure returns(string memory) {

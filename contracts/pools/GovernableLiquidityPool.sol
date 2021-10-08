@@ -457,9 +457,10 @@ abstract contract GovernableLiquidityPool is ManagedContract, RedeemableToken, I
     }
 
     function depositTokensInExchange(address token, uint value) private {
-        
-        IERC20(token).transferFrom(msg.sender, address(creditProvider), value);
-        creditProvider.addBalance(address(this), token, value);
+        IERC20 t = IERC20(token);
+        t.safeTransferFrom(msg.sender, address(this), value);
+        t.safeApprove(address(exchange), value);
+        exchange.depositTokens(address(this), token, value);
     }
 
     function proposalCount() override external view returns (uint) {

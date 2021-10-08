@@ -29,6 +29,11 @@ contract OptionsTrader {
         return exchange.balanceOf(addr);
     }
     
+    function approve(address spender, uint value) public {
+        
+        exchange.approve(spender, value);
+    }
+    
     function withdrawTokens() public {
         
         exchange.withdrawTokens(calcSurplus());

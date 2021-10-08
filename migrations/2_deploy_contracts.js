@@ -4,15 +4,13 @@ const Deployer = artifacts.require("Deployer");
 const BlockTimeProvider = artifacts.require("BlockTimeProvider");
 const TimeProviderMock = artifacts.require("TimeProviderMock");
 const ProtocolSettings = artifacts.require("ProtocolSettings");
+const ProposalsManager = artifacts.require("ProposalsManager");
 const GovToken = artifacts.require("GovToken");
 const CreditToken = artifacts.require("CreditToken");
 const UnderlyingVault = artifacts.require("UnderlyingVault");
 const CreditProvider = artifacts.require("CreditProvider");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
-const LinearInterpolator = artifacts.require("LinearInterpolator");
-const YieldTracker = artifacts.require("YieldTracker");
-const LinearLiquidityPool = artifacts.require("LinearLiquidityPool");
 
 const Stablecoin = artifacts.require("ERC20Mock");
 const UnderlyingToken = artifacts.require("ERC20Mock");
@@ -28,21 +26,20 @@ module.exports = async function(deployer) {
     await deployer.deploy(UnderlyingToken, 18);
     await deployer.deploy(UnderlyingFeed);
     await deployer.deploy(SwapRouter);
+    await deployer.deploy(ProtocolSettings, true);
   } else {
     await deployer.deploy(Deployer, "0x16ceF4db1a82ce9D46A0B294d6290D47f5f3A669");
     await deployer.deploy(BlockTimeProvider);
     await deployer.deploy(GovToken, "0xA6FA4fB5f76172d178d61B04b0ecd319C5d1C0aa");
+    await deployer.deploy(ProtocolSettings, false);
   }
 
-  await deployer.deploy(ProtocolSettings);
+  await deployer.deploy(ProposalsManager);
   await deployer.deploy(CreditToken);
   await deployer.deploy(UnderlyingVault);
   await deployer.deploy(CreditProvider);
   await deployer.deploy(OptionTokenFactory);
   await deployer.deploy(OptionsExchange);
-  await deployer.deploy(LinearInterpolator);
-  await deployer.deploy(YieldTracker);
-  await deployer.deploy(LinearLiquidityPool);
 
   var d = await Deployer.deployed();
   
@@ -62,6 +59,7 @@ module.exports = async function(deployer) {
   }
   
   d.setContractAddress("ProtocolSettings", ProtocolSettings.address);
+  d.setContractAddress("ProposalsManager", ProposalsManager.address);
   d.setContractAddress("GovToken", GovToken.address);
   d.setContractAddress("CreditToken", CreditToken.address);
   d.setContractAddress("UnderlyingVault", UnderlyingVault.address);
@@ -69,7 +67,4 @@ module.exports = async function(deployer) {
   d.addAlias("CreditIssuer", "CreditProvider");
   d.setContractAddress("OptionsExchange", OptionsExchange.address);
   d.setContractAddress("OptionTokenFactory", OptionTokenFactory.address);
-  d.setContractAddress("LinearInterpolator", LinearInterpolator.address);
-  d.setContractAddress("YieldTracker", YieldTracker.address);
-  d.setContractAddress("LinearLiquidityPool", LinearLiquidityPool.address);
 };

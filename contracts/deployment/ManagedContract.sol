@@ -2,6 +2,9 @@ pragma solidity ^0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "./Deployer.sol";
+// *** IMPORTANT ***
+// "onwer" storage variable must be set to a GnosisSafe multisig wallet address:
+// - https://github.com/gnosis/safe-contracts/blob/main/contracts/GnosisSafe.sol
 
 contract ManagedContract {
 
@@ -9,13 +12,13 @@ contract ManagedContract {
     address private owner;
     address private pendingOwner;
     address private implementation;
-    bool private locked;
-    // -------------------------------------
+    uint private locked; // 1 = Initialized; 2 = Non upgradable
+    // --------------------------------------------------------
 
     function initializeAndLock(Deployer deployer) public {
 
-        require(!locked, "initialization locked");
-        locked = true;
+        require(locked == 0, "initialization locked");
+        locked = 1;
         initialize(deployer);
     }
 
@@ -23,7 +26,12 @@ contract ManagedContract {
 
     }
 
-    function getImplementation() internal view returns (address) {
+    function getOwner() public view returns (address) {
+
+        return owner;
+    }
+
+    function getImplementation() public view returns (address) {
 
         return implementation;
     }

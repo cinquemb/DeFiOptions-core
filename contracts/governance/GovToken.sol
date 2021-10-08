@@ -3,10 +3,12 @@ pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
+
+import "../interfaces/TimeProvider.sol";
 import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
 import "../utils/SafeMath.sol";
-import "./Proposal.sol";
+import "./ProposalsManager.sol";
 import "./ProtocolSettings.sol";
 
 contract GovToken is ManagedContract, ERC20 {
@@ -14,15 +16,21 @@ contract GovToken is ManagedContract, ERC20 {
     using SafeMath for uint;
 
     ProtocolSettings private settings;
-
-    mapping(uint => Proposal) private proposalsMap;
-    mapping(address => uint) private proposingDate;
+    ProposalsManager private manager;
+    
+    mapping(address => uint) private transferBlock;
+    mapping(address => address) private delegation;
+    mapping(address => uint) private delegated;
 
     string private constant _name = "Governance Token";
     string private constant _symbol = "DODv2";
 
-    uint private serial;
-    uint[] private proposals;
+    event DelegateTo(
+        address indexed owner,
+        address indexed oldDelegate,
+        address indexed newDelegate,
+        uint bal
+    );
 
     constructor() ERC20(_name) public {
 
@@ -31,7 +39,7 @@ contract GovToken is ManagedContract, ERC20 {
     function initialize(Deployer deployer) override internal {
         DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        serial = 1;
+        manager = ProposalsManager(deployer.getContractAddress("ProposalsManager"));
     }
 
     function name() override external view returns (string memory) {
@@ -50,54 +58,61 @@ contract GovToken is ManagedContract, ERC20 {
         emitTransfer(address(0), owner, supply);
     }
 
-    function registerProposal(address addr) public returns (uint id) {
-        
+
+    function delegateBalanceOf(address delegate) external view returns (uint) {
+
+        return delegated[delegate];
+    }
+
+    function delegateTo(address newDelegate) public {
+
+        address oldDelegate = delegation[msg.sender];
+
+        require(newDelegate != address(0), "invalid delegate address");
+
+        enforceHotVotingSetting();
+
+        uint bal = balanceOf(msg.sender);
+
+
+        if (oldDelegate != address(0)) {
+            delegated[oldDelegate] = delegated[oldDelegate].sub(bal);
+        }
+
+        delegated[newDelegate] = delegated[newDelegate].add(bal);
+        delegation[msg.sender] = newDelegate;
+
+        emit DelegateTo(msg.sender, oldDelegate, newDelegate, bal);
+    }
+
+    function enforceHotVotingSetting() public view {
+
         require(
-            proposingDate[addr] == 0 || settings.exchangeTime().sub(proposingDate[addr]) > 1 days,
-            "minimum interval between proposals not met"
+            settings.isHotVotingAllowed() ||
+            transferBlock[tx.origin] != block.number,
+            "delegation not allowed"
         );
-
-        Proposal p = Proposal(addr);
-        (uint v, uint b) = settings.getMinShareForProposal();
-        require(calcShare(msg.sender, b) >= v);
-
-        id = serial++;
-        p.open(id);
-        proposalsMap[id] = p;
-        proposingDate[addr] = settings.exchangeTime();
-        proposals.push(id);
     }
 
-    function proposalCount() external view returns (uint) {
-        return serial;
-    }
-
-    function proposalAddr(uint id) external view returns (address) {
-        return address(proposalsMap[id]);
-    }
-
-    function isRegisteredProposal(address addr) public view returns (bool) {
-        
-        Proposal p = Proposal(addr);
-        return address(proposalsMap[p.getId()]) == addr;
-    }
-
-    function calcShare(address owner, uint base) private view returns (uint) {
-
-        return balanceOf(owner).mul(base).div(_totalSupply);
+    function calcShare(address owner, uint base) public view returns (uint) {
+        return delegated[owner].mul(base).div(settings.getCirculatingSupply());
     }
 
     function emitTransfer(address from, address to, uint value) override internal {
 
-        for (uint i = 0; i < proposals.length; i++) {
-            uint id = proposals[i];
-            Proposal p = proposalsMap[id];
-            if (p.isClosed()) {
-                Arrays.removeAtIndex(proposals, i);
-                i--;
-            } else {
-                p.update(from, to, value);
-            }
+        transferBlock[tx.origin] = block.number;
+
+        address fromDelegate = delegation[from];
+        address toDelegate = delegation[to];
+
+        manager.update(fromDelegate, toDelegate, value);
+
+        if (fromDelegate != address(0)) {
+            delegated[fromDelegate] = delegated[fromDelegate].sub(value);
+        }
+
+        if (toDelegate != address(0)) {
+            delegated[toDelegate] = delegated[toDelegate].add(value);
         }
 
         emit Transfer(from, to, value);

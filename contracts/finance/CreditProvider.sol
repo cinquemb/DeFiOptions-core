@@ -8,12 +8,14 @@ import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/ICreditToken.sol";
 import "../utils/MoreMath.sol";
+import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 
 contract CreditProvider is ManagedContract {
 
+    using SafeERC20 for IERC20;
     using SafeMath for uint;
     using SignedSafeMath for int;
     
@@ -114,7 +116,7 @@ contract CreditProvider is ManagedContract {
     
     function depositTokens(address to, address token, uint value) external {
 
-        IERC20(token).transferFrom(msg.sender, address(this), value);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
     }
@@ -179,7 +181,8 @@ contract CreditProvider is ManagedContract {
             if (v > 0) {
                 uint fee = MoreMath.min(value.mul(v).div(b), balances[from]);
                 value = value.sub(fee);
-                emit AccrueFees(from, value);
+                addBalance(address(settings), fee);
+                emit AccrueFees(from, fee);
             }
 
             uint credit;
@@ -284,7 +287,7 @@ contract CreditProvider is ManagedContract {
         if (d > 0) {
             burnt = MoreMath.min(value, d);
             setDebt(from, d.sub(burnt));
-            emit BurnDebt(from, value);
+            emit BurnDebt(from, burnt);
         }
     }
 
@@ -297,6 +300,8 @@ contract CreditProvider is ManagedContract {
 
             if (debt > 0 && debt != d) {
                 setDebt(owner, debt);
+                uint diff = debt.sub(d);
+                emit AccumulateDebt(owner, diff);
             }
         }
     }
@@ -325,7 +330,7 @@ contract CreditProvider is ManagedContract {
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
             if (b != 0) {
                 uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));
-                t.transfer(to, v.mul(r).div(b));
+                t.safeTransfer(to, v.mul(r).div(b));
                 emit WithdrawTokens(to, tokens[i], v.mul(r).div(b));
                 value = value.sub(v);
             }

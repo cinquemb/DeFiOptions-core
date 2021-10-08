@@ -7,15 +7,17 @@ contract ChangeInterestRateProposal is Proposal {
     uint interestRate;
     uint interestRateBase;
 
+
     constructor(
+        address _implementation,
         address _govToken,
+        address _manager,
         address _settings,
         Proposal.Quorum _quorum,
         Proposal.VoteType  _voteType,
         uint expiresAt
-    ) public Proposal(_govToken, _settings, _quorum, _voteType, expiresAt) {
-        settings = ProtocolSettings(_settings);
-
+    ) public Proposal(_implementation, _govToken, _manager, _settings, _quorum, _voteType, expiresAt)
+    
     function setInterestRate(uint ir, uint b) public {
 
         require(ir > 0);
@@ -25,7 +27,12 @@ contract ChangeInterestRateProposal is Proposal {
         interestRateBase = b;
     }
 
-    function execute(ProtocolSettings settings) public override {
+    function getName() public override returns (string memory) {
+
+        return "Change Debt Interest Rate";
+    }
+
+    function execute(IProtocolSettings settings) public override {
         
         require(interestRate > 0, "interest rate value not set");
         settings.setDebtInterestRate(interestRate, interestRateBase);
