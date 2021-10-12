@@ -255,6 +255,11 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             value = iv.div(_volumeBase);
             vault.liquidate(owner, address(tk), feed, value);
             creditProvider.processPayment(owner, address(tk), value);
+        } else {
+            // if borrowed liquidty was used to write options need to debit it from pool
+            uint creditingValue = 10e18;// todo make governable
+            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+            creditProvider.nullOptionBorrowBalance(address(tk), owner);
         }
 
         vault.release(owner, address(tk), feed, uint(-1));

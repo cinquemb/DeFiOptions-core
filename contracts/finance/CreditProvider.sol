@@ -22,11 +22,13 @@ contract CreditProvider is ManagedContract {
     ProtocolSettings private settings;
     ICreditToken private creditToken;
 
-    mapping(address => uint) private balances;
     mapping(address => uint) private debts;
+    mapping(address => uint) private balances;
     mapping(address => uint) private debtsDate;
     mapping(address => uint) private poolCallers;
     mapping(address => uint) private primeCallers;
+    mapping(address => mapping(address => uint)) private optionBorrowedBalance;
+
 
     address private exchangeAddr;
 
@@ -34,6 +36,8 @@ contract CreditProvider is ManagedContract {
     uint private _totalOwners;
     uint private _totalBalance;
     uint private _totalAccruedFees;
+    uint private _totalOptionsBorrowed;
+    uint private _totalOptionBorrowBalance;
 
 
     event DepositTokens(address indexed to, address indexed token, uint value);
@@ -161,13 +165,15 @@ contract CreditProvider is ManagedContract {
         addBalance(to, credit);
     }
 
-    function borrowBuyLiquidity(address to, uint credit) external {
+    function borrowBuyLiquidity(address to, uint credit, address option) external {
         ensurePoolCaller();
         require(to != address(this), "invalid borrower");
         require(poolCallers[to] == 1, "invalid pool");
         require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
         // increment exchange balance for liquidity pool
         addBalance(to, credit);
+        //increment value used to write options
+        addOptionBorrowBalance(option, to, credit);
     }
 
     function processPayment(address from, address to, uint value) external {
@@ -239,7 +245,40 @@ contract CreditProvider is ManagedContract {
             }
 
             balances[owner] = balances[owner].add(v);
-            _totalBalance =_totalBalance.add(v);
+            _totalBalance = _totalBalance.add(v);
+        }
+    }
+
+    function addOptionBorrowBalance(address option, address pool, uint value) private {
+        if (value > 0) {
+            if (optionBorrowedBalance[option][pool] == 0) {
+                _totalOptionsBorrowed = _totalOptionsBorrowed.add(1);
+            }
+            optionBorrowedBalance[option][pool] = optionBorrowedBalance[option][pool].add(value);
+            _totalOptionBorrowBalance = _totalOptionBorrowBalance.add(value);
+        }
+    }
+
+    function nullOptionBorrowBalance(address option, address pool) external {
+        // is called when options are liquidated and expired otm and have been sold with borrowed liquidity
+        // should not revert, should be called by collateral manager
+        if ((primeCallers[msg.sender] == 1) && (poolCallers[pool] == 1)) {
+            if (optionBorrowedBalance[option][pool] >= 0) {
+                if (optionBorrowedBalance[option][pool] > 0) {
+                    _totalOptionBorrowBalance = _totalOptionBorrowBalance.sub(optionBorrowedBalance[option][pool]);
+
+                    // remove borrowed balance for pool related to that option
+                    if (balances[pool] >= optionBorrowedBalance[option][pool]){
+                        removeBalance(pool, optionBorrowedBalance[option][pool]);
+                    }
+
+                    optionBorrowedBalance[option][pool] = 0;
+                } 
+
+                if (_totalOptionsBorrowed > 0 && optionBorrowedBalance[option][pool] == 0) {
+                    _totalOptionsBorrowed = _totalOptionsBorrowed.sub(1);
+                }
+            }
         }
     }
 
