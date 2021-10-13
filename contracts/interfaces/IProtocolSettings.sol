@@ -20,6 +20,8 @@ interface IProtocolSettings {
     function getAllowedTokens() external view returns (address[] memory);
     function setDexOracleTwapPeriod(address dexOracleAddress, uint256 _twapPeriod) external;
     function getDexOracleTwapPeriod(address dexOracleAddress) external view returns (uint256);
+    function setBaseIncentivisation(uint amount) external;
+    function getBaseIncentivisation() external view returns (uint);
     function getMinShareForProposal() external view returns (uint v, uint b);
     function exchangeTime() external view returns (uint256);
 }

@@ -622,7 +622,7 @@ contract OptionsExchange is ManagedContract {
         uint256 gasUsed = startGas - gasleft();
         address[] memory tokens = settings.getAllowedTokens();
 
-        uint256 creditingValue = 10e18;        
+        uint256 creditingValue = settings.getBaseIncentivisation();        
         creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
         emit IncentiveReward(msg.sender, creditingValue);    
     }

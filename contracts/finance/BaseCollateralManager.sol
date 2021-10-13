@@ -257,8 +257,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             creditProvider.processPayment(owner, address(tk), value);
         } else {
             // if borrowed liquidty was used to write options need to debit it from pool
-            uint creditingValue = 10e18;// todo make governable
-            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+            creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
             creditProvider.nullOptionBorrowBalance(address(tk), owner);
         }
 
@@ -284,15 +283,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint volume = calcLiquidationVolume(owner, opt, tkAddr, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
-        uint256 creditingValue;
-
 
         if (writerCollateralCall[owner][tkAddr] == 0){
             // the first time triggers a margin call event for the owner (how to incentivize? 10$ in exchange credit)
             if (msg.sender != owner) {
                 writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
-                creditingValue = 10e18;// todo make governable
-                creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+                creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
                 emit CollateralCall(tkAddr, msg.sender, owner, volume);
             }
         } else {
@@ -301,7 +297,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
         if (msg.sender != owner){
             // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
-            creditingValue = value.mul(5).div(100);
+            uint256 creditingValue = value.mul(5).div(100);
             creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
             creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
         }

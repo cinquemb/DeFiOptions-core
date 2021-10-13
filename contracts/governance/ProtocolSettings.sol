@@ -48,6 +48,9 @@ contract ProtocolSettings is ManagedContract {
     Rate private minShareForProposal;
     uint private circulatingSupply;
 
+    uint private baseIncentivisation = 10e18;
+    uint private maxIncentivisation = 100e18;
+
     uint private creditTimeLock = 60 * 60 * 24; // 24h withdrawl time lock for 
     uint private minCreditTimeLock = 60 * 60 * 2; // 2h min withdrawl time lock
     uint private maxCreditTimeLock = 60 * 60 * 48; // 48h min withdrawl time lock
@@ -464,6 +467,18 @@ contract ProtocolSettings is ManagedContract {
 
     function getUdlCollateralManager(address udlFeed) external view returns (address) {
         return (udlCollateralManager[udlFeed] == address(0)) ? baseCollateralManagerAddr : udlCollateralManager[udlFeed];
+    }
+
+    /* INCENTIVIZATION STUFF */
+
+    function setBaseIncentivisation(uint amount) external {
+        ensureWritePrivilege();
+        require(amount <= maxIncentivisation, "too high");
+        baseIncentivisation = amount;
+    }
+
+    function getBaseIncentivisation() external view returns (uint) {
+        return baseIncentivisation;
     }
 
 
