@@ -144,8 +144,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         ensureCaller();
         require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");
         
-        PricingParameters memory empty;
-        parameters[optSymbol] = empty;
+        delete parameters[optSymbol];
         Arrays.removeItem(optSymbols, optSymbol);
         emit RemoveSymbol(optSymbol);
     }
@@ -157,18 +156,17 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         
         tracker.push(int(b0).add(po), b1.sub(b0).toInt256());
 
-        uint ts = _totalSupply;
         int expBal = po.add(int(b1));
         uint p = b1.sub(b0).mul(fractionBase).div(uint(expBal));
 
         uint b = 1e3;
-        uint v = ts > 0 ?
-            ts.mul(p).mul(b).div(fractionBase.sub(p)) : 
+        uint v = _totalSupply > 0 ?
+            _totalSupply.mul(p).mul(b).div(fractionBase.sub(p)) : 
             uint(expBal).mul(b);
         v = MoreMath.round(v, b);
 
         addBalance(to, v);
-        _totalSupply = ts.add(v);
+        _totalSupply = _totalSupply.add(v);
         emitTransfer(address(0), to, v);
     }
 
@@ -193,7 +191,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
             (uint b0, int po) = getBalanceAndPayout();
             
             exchange.transferBalance(
-                address(this), 
                 msg.sender, 
                 (discountedValue <= freeBal) ? discountedValue : freeBal
             );
@@ -205,6 +202,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         }
         
         removeBalance(msg.sender, amount);
+        _totalSupply = _totalSupply.sub(amount);
         emitTransfer(msg.sender, address(0), amount);
     }
 
