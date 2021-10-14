@@ -63,6 +63,7 @@ contract ProtocolSettings is ManagedContract {
     address private baseCollateralManagerAddr;
     Rate private swapTolerance;
 
+    uint private MAX_SUPPLY;
     uint private MAX_UINT;
 
     event SetCirculatingSupply(address sender, uint supply);
@@ -78,6 +79,7 @@ contract ProtocolSettings is ManagedContract {
     event SetSwapRouterTolerance(address sender, uint r, uint b);
     event SetSwapPath(address sender, address from, address to);
     event TransferBalance(address sender, address to, uint amount);
+    event TransferGovToken(address sender, address to, uint amount);
     
     constructor(bool _hotVoting) public {
         
@@ -93,6 +95,8 @@ contract ProtocolSettings is ManagedContract {
         baseCollateralManagerAddr = deployer.getContractAddress("CollateralManager");
 
         MAX_UINT = uint(-1);
+
+        MAX_SUPPLY = 100e6 * 1e18;
 
         hotVoting = ProtocolSettings(getImplementation()).isHotVotingAllowed();
 
@@ -131,6 +135,8 @@ contract ProtocolSettings is ManagedContract {
     function setCirculatingSupply(uint supply) external {
 
         require(supply > circulatingSupply, "cannot decrease supply");
+        require(supply <= MAX_SUPPLY, "max supply surpassed");
+
         ensureWritePrivilege();
         circulatingSupply = supply;
 
@@ -360,17 +366,24 @@ contract ProtocolSettings is ManagedContract {
     }
 
     function transferBalance(address to, uint amount) external {
-
-        require(manager.isRegisteredProposal(msg.sender), "sender must be registered proposal");
         
         uint total = creditProvider.totalTokenStock();
         require(total >= amount, "excessive amount");
         
-        ensureWritePrivilege();
+        ensureWritePrivilege(true);
 
         creditProvider.transferBalance(address(this), to, amount);
 
         emit TransferBalance(msg.sender, to, amount);
+    }
+
+    function transferGovTokens(address to, uint amount) external {
+        
+        ensureWritePrivilege(true);
+
+        govToken.transfer(to, amount);
+
+        emit TransferGovToken(msg.sender, to, amount);
     }
 
     function applyRates(Rate[] storage rates, uint value, uint date) private view returns (uint) {
@@ -483,7 +496,12 @@ contract ProtocolSettings is ManagedContract {
 
 
     function ensureWritePrivilege() private view {
-        if (msg.sender != getOwner()) {
+        ensureWritePrivilege(false);
+    }
+
+    function ensureWritePrivilege(bool enforceProposal) private view {
+
+        if (msg.sender != getOwner() || enforceProposal) {
 
             ProposalWrapper w = ProposalWrapper(manager.resolve(msg.sender));
             require(manager.isRegisteredProposal(msg.sender), "proposal not registered");

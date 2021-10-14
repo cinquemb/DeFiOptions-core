@@ -34,17 +34,6 @@ module.exports = {
       gasPrice: 225000000000 // 225 nAVAX for now
     },
   
-    mumbai: {
-      provider: function() {
-        return new HDWalletProvider(
-          process.env.MNENOMIC,
-          "https://polygon-mumbai.infura.io/v3/" + process.env.MATIC_RPC_KEY
-        )
-      },
-      network_id: 80001,
-      timeoutBlocks: 200
-    },
-  
     matic: {
       provider: function() {
         return new HDWalletProvider(
@@ -55,7 +44,7 @@ module.exports = {
       network_id: 137,
       networkCheckTimeout: 1000000,
       timeoutBlocks: 200,
-      gasPrice: 5000000000 // 5 gewi
+      gasPrice: 50e9 // 50 gewi
     }
   },
 
@@ -65,14 +54,15 @@ module.exports = {
       settings: {
         optimizer: {
           enabled: true,
-          runs: 200
+          runs: 100
         }
       }
     }
   },
   /*
   plugins: [
-    'truffle-plugin-verify'
+    'truffle-plugin-verify',
+    'truffle-contract-size'
   ],
 
   api_keys: {
