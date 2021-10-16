@@ -26,7 +26,7 @@ interface IGovernableLiquidityPool {
 
     event AddSymbol(string optSymbol);
     
-    event RemoveSymbol(string optSymbol);
+    //event RemoveSymbol(string optSymbol);
 
     event Buy(address indexed token, address indexed buyer, uint price, uint volume);
     

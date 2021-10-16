@@ -11,10 +11,9 @@ import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionToken.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../utils/ERC20.sol";
-import "../utils/MoreMath.sol";
+import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
-import "../utils/SafeMath.sol";
+import "../utils/MoreMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityPool {

@@ -1122,10 +1122,16 @@ class LinearLiquidityPool(TokenProxy):
         )
         return tx
 
+    '''
+        EXTRACT TIMESTAMP FROM SYMBOL AND FILTER ON IF BEFORE OR AFTER CURRENT BLOCK TIMESTAMP
+    '''
     def list_symbols(self, agent):
         symbols = self.contract.caller({'from' : agent.address, 'gas': 8000000}).listSymbols().split('\n')
         return [x for x in list(filter(None,symbols)) if x != '']
 
+    '''
+        EXTRACT TIMESTAMP FROM SYMBOL AND FILTER ON IF BEFORE OR AFTER CURRENT BLOCK TIMESTAMP
+    '''
     def list_expired_symbols(self, agent):
         symbols = self.contract.caller({'from' : agent.address, 'gas': 8000000}).listExpiredSymbols().split('\n')
         return [x for x in list(filter(None,symbols)) if x != '']

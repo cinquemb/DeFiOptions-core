@@ -141,12 +141,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function removeSymbol(string calldata optSymbol) external {
-        ensureCaller();
-        require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");
-        
-        delete parameters[optSymbol];
+        require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");        
         Arrays.removeItem(optSymbols, optSymbol);
-        emit RemoveSymbol(optSymbol);
     }
 
     function depositTokens(address to, address token, uint value) override public {
@@ -212,31 +208,15 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         uint sp = exBal.sub(exchange.collateral(address(this)));
         balance = sp > reserve ? sp.sub(reserve) : 0;
     }
-    
+
     function listSymbols() override external view returns (string memory available) {
         for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity > block.timestamp) {
-                available = listSymbolHelper(available, optSymbols[i]);
+            if (bytes(available).length == 0) {
+                available = optSymbols[i];
+            } else {
+                available = string(abi.encodePacked(available, "\n", optSymbols[i]));
             }
         }
-    }
-
-    function listExpiredSymbols() external view returns (string memory available) {
-        for (uint i = 0; i < optSymbols.length; i++) {
-            if (parameters[optSymbols[i]].maturity < block.timestamp) {
-                available = listSymbolHelper(available, optSymbols[i]);
-            }
-        }
-    }
-
-    function listSymbolHelper(string memory buffer, string memory optSymbol) private pure returns (string memory) {
-        if (bytes(buffer).length == 0) {
-            buffer = optSymbol;
-        } else {
-            buffer = string(abi.encodePacked(buffer, "\n", optSymbol));
-        }
-
-        return buffer;
     }
 
     function queryBuy(string memory optSymbol)
