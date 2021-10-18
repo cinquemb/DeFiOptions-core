@@ -15,8 +15,9 @@ contract CollateralManager is BaseCollateralManager {
     }
 
 
-    function calcCollateral(address owner, bool is_regular) override public view returns (uint) {
+    function calcCollateralInternal(address owner, bool is_regular) override internal view returns (int) {
         // multi udl feed refs, need to make core accross all collateral models
+        // do not normalize by volumeBase in internal calls for calcCollateralInternal
         
         int coll;
         (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
@@ -39,18 +40,7 @@ contract CollateralManager is BaseCollateralManager {
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
         }
 
-        // add/sub shortage/excess relative to normal collateral requirements (could raise or lower collateral requirements)
-        //TODO: figure out how to enforce this for every collateral manager?
-        coll = collateralSkewForPosition(coll);
-        coll = coll.div(int(_volumeBase));
-
-        if (is_regular == false) {
-            return uint(coll);
-        }
-
-        if (coll < 0)
-            return 0;
-        return uint(coll);
+        return coll;
     }
 
     function calcCollateral(

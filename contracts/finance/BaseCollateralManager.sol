@@ -117,7 +117,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         payout = payout.div(int(_volumeBase));
     }
 
-    function calcCollateral(address owner, bool is_regular) override virtual public view returns (uint);
+    function calcCollateralInternal(address owner, bool is_regular) virtual internal view returns (int);
 
     function calcLiquidationVolume(
         address owner,
@@ -307,6 +307,22 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         }
 
         emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
+    }
+
+    function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     
+        // takes custom collateral requirements and applies exchange level normalizations   
+        int coll = calcCollateralInternal(owner, is_regular);
+        
+        coll = collateralSkewForPosition(coll);
+        coll = coll.div(int(_volumeBase));
+
+        if (is_regular == false) {
+            return uint(coll);
+        }
+
+        if (coll < 0)
+            return 0;
+        return uint(coll);
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {
