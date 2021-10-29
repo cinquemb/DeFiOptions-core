@@ -163,6 +163,9 @@ uint surplus = exchange.calcSurplus(owner);
 
 The surplus effectively represents the amount of funds available for writing new options and for covering required collateral variations due to underlying price jumps. If it returns zero it means that the specified address is lacking enough collateral and at risk of having its positions liquidated.
 
+
+The above defines the built in collateral model (and ignores that there is a global collateral requirements that are based on the skew of the stablecoins and credited balances in the exchange and applies dynamically based on poisitions sizes in order to spread the excess/deficit onto all new options writers and reduce risk for the exchange), however, external collateral models can be used based on any particular underyling.
+
 ### Liquidating positions
 
 Options can be liquidated either individually due to a writer not meeting collateral requirements for covering his open positions, or collectively at the option token contract level upon maturity.
@@ -282,6 +285,12 @@ This project provides a liquidity pool implementation that uses linear interpola
 The pool holds a pricing parameters data structure for each tradable option which contains a discretized pricing curve calculated off-chain based on a traditional option pricing model (ex: Monte Carlo) that’s “uploaded” to the pool storage. The pool pricing function receives the underlying price (fetched from the underlying price feed) and the current timestamp as inputs, then it interpolates the discrete curve to obtain the desired option’s target price.
 
 A fixed spread is applied on top of the option’s target price for deriving its buy price above the target price, and sell price below the target price. This spread can be freely defined by the pool operator and should be high enough for ensuring the pool is profitable, but not too high as to demotivate traders.
+
+Governable liquidity pools can created through the options exchnage that will have access to the exchange credit line if aproved by governance.
+
+```solidity
+  address pool = exchange.createPool("MY CUSTOM POOL", "MCP");
+```
 
 #### Pool interface
 

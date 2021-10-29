@@ -406,7 +406,7 @@ contract ProtocolSettings is ManagedContract {
         
         uint len = rates.length;
         r = rates[len - 1];
-        for (uint i = 0; i < len; i++) { // TODO: optimize with binary search and offset index
+        for (uint i = 0; i < len; i++) {
             if (date < rates[i].date) {
                 r = rates[i];
                 break;

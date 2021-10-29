@@ -194,8 +194,6 @@ contract OptionsExchange is ManagedContract {
         return pool;
     }
 
-    /* TODO: Add existing pool addr to approved pools callers?*/
-
     function listPoolSymbols(uint offset, uint range) external view returns (string memory available) {
         for (uint i = offset; i < range; i++) {
             ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
