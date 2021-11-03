@@ -7,7 +7,7 @@ import "../interfaces/IERC20.sol";
 
 abstract contract Proposal {
 
-    function getName() public virtual returns (string memory);
+    function getName() public virtual view returns (string memory);
 
     function execute(IProtocolSettings _settings) public virtual;
 
