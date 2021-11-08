@@ -104,9 +104,14 @@ contract CreditToken is ManagedContract, ERC20 {
     function updateBalance(address owner) private {
 
         uint nb = balanceOf(owner);
-        _totalSupply = _totalSupply.add(nb).sub(balances[owner]);
+        uint accrued = nb.sub(balances[owner]);
+        _totalSupply = _totalSupply.add(accrued);
         balances[owner] = nb;
         creditDates[owner] = settings.exchangeTime();
+
+        if (accrued > 0) {
+            emitTransfer(address(0), owner, accrued);
+        }
     }
 
     function withdrawTokens(address owner, uint value) private returns(uint sent, bool dequeue) {
@@ -126,6 +131,7 @@ contract CreditToken is ManagedContract, ERC20 {
             if (sent > 0) {
                 removeBalance(owner, sent);
                 creditProvider.grantTokens(owner, sent);
+                emitTransfer(owner, address(0), value);
             }
         }
     }
