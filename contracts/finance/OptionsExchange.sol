@@ -12,6 +12,7 @@ import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/Arrays.sol";
+import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SafeERC20.sol";
@@ -23,7 +24,7 @@ import "../feeds/DEXFeedFactory.sol";
 import "../feeds/DEXAggregatorV1.sol";
 import "../pools/LinearLiquidityPoolFactory.sol";
 
-contract OptionsExchange is ManagedContract {
+contract OptionsExchange is ERC20, ManagedContract {
 
     using SafeCast for uint;
     using SafeERC20 for IERC20;
@@ -49,9 +50,10 @@ contract OptionsExchange is ManagedContract {
     mapping(string => address) private tokenAddress;
     mapping(address => address) private dexFeedAddress;
 
-    mapping(address => mapping(address => uint)) private allowed;    
-
     uint private _volumeBase;
+
+    string private constant _name = "DeFi Options DAO Dollar";
+    string private constant _symbol = "DODv2-DODD";
 
     string[] private poolSymbols;
     address[] private dexFeedAddresses;
@@ -71,6 +73,10 @@ contract OptionsExchange is ManagedContract {
         uint volume
     );
 
+    constructor() ERC20(_name) public {
+        
+    }
+
     function initialize(Deployer deployer) override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
@@ -84,6 +90,18 @@ contract OptionsExchange is ManagedContract {
 
     function volumeBase() external view returns (uint) {
         return _volumeBase;
+    }
+
+    function name() override external view returns (string memory) {
+        return _name;
+    }
+
+    function symbol() override external view returns (string memory) {
+        return _symbol;
+    }
+
+    function totalSupply() override public view returns (uint) {
+        return creditProvider.getTotalBalance();
     }
 
     function depositTokens(
@@ -108,21 +126,31 @@ contract OptionsExchange is ManagedContract {
         creditProvider.addBalance(to, token, value);
     }
 
-    function balanceOf(address owner) external view returns (uint) {
+    function balanceOf(address owner) override public view returns (uint) {
 
         return creditProvider.balanceOf(owner);
     }
 
-    function allowance(address owner, address spender) external view returns (uint) {
-
-        return allowed[owner][spender];
+    function transfer(address to, uint value) override external returns (bool) {
+        creditProvider.transferBalance(msg.sender, to, value);
+        ensureFunds(msg.sender);
+        emitTransfer(msg.sender, to, value);
+        return true;
     }
 
-    function approve(address spender, uint value) external returns (bool) {
 
-        require(spender != address(0));
-        allowed[msg.sender][spender] = value;
-        emit Approval(msg.sender, spender, value);
+    function transferFrom(address from, address to, uint value) override public returns (bool) {
+
+        uint allw = allowed[from][msg.sender];
+        if (allw >= value) {
+            allowed[from][msg.sender] = allw.sub(value);
+        } else {
+            creditProvider.ensureCaller(msg.sender);
+        }
+        creditProvider.transferBalance(from, to, value);
+        ensureFunds(from);
+
+        emitTransfer(from, to, value);
         return true;
     }
 

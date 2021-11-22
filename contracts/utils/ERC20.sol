@@ -40,7 +40,7 @@ abstract contract ERC20 is IERC20, IERC20Details, IERC20Permit {
         return 18;
     }
 
-    function totalSupply() override public view returns (uint) {
+    function totalSupply() override virtual public view returns (uint) {
         return _totalSupply;
     }
 
@@ -53,7 +53,7 @@ abstract contract ERC20 is IERC20, IERC20Details, IERC20Permit {
         return allowed[owner][spender];
     }
 
-    function transfer(address to, uint value) override external returns (bool) {
+    function transfer(address to, uint value) override virtual external returns (bool) {
 
         require(value <= balanceOf(msg.sender));
         require(to != address(0));
@@ -69,7 +69,7 @@ abstract contract ERC20 is IERC20, IERC20Details, IERC20Permit {
         return approve(msg.sender, spender, value);
     }
 
-    function transferFrom(address from, address to, uint value) override public returns (bool) {
+    function transferFrom(address from, address to, uint value) override virtual public returns (bool) {
 
         require(value <= balanceOf(from));
         require(value <= allowed[from][msg.sender]);

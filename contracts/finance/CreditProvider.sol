@@ -22,6 +22,9 @@ contract CreditProvider is ManagedContract {
     ProtocolSettings private settings;
     ICreditToken private creditToken;
 
+    string private constant _name = "DeFi Options DAO Credit Token";
+    string private constant _symbol = "DODv2-CDTK";
+
     mapping(address => uint) private debts;
     mapping(address => uint) private balances;
     mapping(address => uint) private debtsDate;
