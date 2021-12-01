@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 interface ICreditProvider {
     function addBalance(address to, address token, uint value) external;
@@ -10,6 +11,7 @@ interface ICreditProvider {
     function processPayment(address from, address to, uint value) external;
     function transferBalance(address from, address to, uint value) external;
     function withdrawTokens(address owner, uint value) external;
+    function withdrawTokens(address owner, uint value , address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external;
     function insertPoolCaller(address llp) external;
     function processIncentivizationPayment(address to, uint credit) external;
     function borrowBuyLiquidity(address to, uint credit, address option) external;

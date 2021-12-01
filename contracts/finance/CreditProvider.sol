@@ -132,6 +132,14 @@ contract CreditProvider is ManagedContract {
         burnDebtAndTransferTokens(owner, value);
     }
 
+    function withdrawTokens(address owner, uint value , address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        ensurePrimeCaller();
+        require(tokensInOrder.length == amountsOutInOrder.length, "token != amounts lists size");
+        require(value > 0, "no withdrawl amounts set");
+        removeBalance(owner, value);
+        burnDebtAndTransferTokensByPreference(owner, value, tokensInOrder, amountsOutInOrder);
+    }
+
     function grantTokens(address to, uint value) external {
         
         ensurePrimeCaller();
@@ -320,6 +328,16 @@ contract CreditProvider is ManagedContract {
         transferTokens(to, value);
     }
 
+    function burnDebtAndTransferTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) private {
+
+        if (debts[to] > 0) {
+            uint burnt = burnDebt(to, value);
+            value = value.sub(burnt);
+        }
+
+        transferTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
+    }
+
     function burnDebt(address from, uint value) private returns (uint burnt) {
         
         uint d = applyDebtInterestRate(from);
@@ -380,6 +398,46 @@ contract CreditProvider is ManagedContract {
         }
     }
 
+    function transferTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) private {
+        
+        require(to != address(this) && to != address(creditToken), "invalid token transfer address");
+
+        address[] memory tokens = settings.getAllowedTokens();
+       
+        // preferred order
+        for (uint i = 0; i < tokensInOrder.length && value > 0; i++) {
+            if (findAllowedToken(tokensInOrder[i]) && (amountsOutInOrder[i] > 0)) {
+                IERC20 t = IERC20(tokensInOrder[i]);
+                (uint r, uint b) = settings.getTokenRate(tokensInOrder[i]);
+                if (b != 0) {
+                    uint v = MoreMath.min(amountsOutInOrder[i], t.balanceOf(address(this)).mul(b).div(r));
+                    t.safeTransfer(to, v.mul(r).div(b));
+                    emit WithdrawTokens(to, tokensInOrder[i], v.mul(r).div(b));
+                    value = value.sub(v);
+                }
+            }
+
+        }
+
+        // default order if lefter over after defined prefs or not enough in defined preferences
+        if (value > 0) {
+            for (uint i = 0; i < tokens.length && value > 0; i++) {
+                IERC20 t = IERC20(tokens[i]);
+                (uint r, uint b) = settings.getTokenRate(tokens[i]);
+                if (b != 0) {
+                    uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));
+                    t.safeTransfer(to, v.mul(r).div(b));
+                    emit WithdrawTokens(to, tokens[i], v.mul(r).div(b));
+                    value = value.sub(v);
+                }
+            }
+        }
+        
+        if (value > 0) {
+            issueCreditTokens(to, value);
+        }
+    }
+
     function issueCreditTokens(address to, uint value) private {
         
         (uint r, uint b) = settings.getTokenRate(address(creditToken));
@@ -397,6 +455,18 @@ contract CreditProvider is ManagedContract {
 
     function ensureCaller(address addr) external view {
         require(primeCallers[addr] == 1, "unauthorized caller");
+    }
+
+    function findAllowedToken(address addr) private view returns (bool){
+        address[] memory tokens = settings.getAllowedTokens();
+
+        for (uint i = 0; i < tokens.length; i++) {
+            if(addr == tokens[i]) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     function ensurePoolCaller() private view {        

@@ -189,6 +189,18 @@ contract OptionsExchange is ERC20, ManagedContract {
         emit WithdrawTokens(msg.sender, value);
     }
 
+    function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+
+        uint value;
+        for (uint i = 0; i < tokensInOrder.length; i++) {
+            value = value.add(amountsOutInOrder[i]);
+        }
+        
+        require(value <= calcSurplus(msg.sender), "insufficient surplus");
+        creditProvider.withdrawTokens(msg.sender, value, tokensInOrder, amountsOutInOrder);
+        emit WithdrawTokens(msg.sender, value);
+    }
+
     function createSymbol(
         address udlFeed,
         IOptionsExchange.OptionType optType,
