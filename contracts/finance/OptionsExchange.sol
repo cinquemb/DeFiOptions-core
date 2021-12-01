@@ -59,6 +59,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     address[] private dexFeedAddresses;
     
     event WithdrawTokens(address indexed from, uint value);
+    event SwapTokens(address indexed from, uint value);
     event IncentiveReward(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
@@ -199,6 +200,18 @@ contract OptionsExchange is ERC20, ManagedContract {
         require(value <= calcSurplus(msg.sender), "insufficient surplus");
         creditProvider.withdrawTokens(msg.sender, value, tokensInOrder, amountsOutInOrder);
         emit WithdrawTokens(msg.sender, value);
+    }
+
+    function swapTokens(address to, address token, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        depositTokens(to, token, value);
+        (uint v, uint b) = settings.getProcessingFee();
+        if (v > 0) {
+            uint fee = MoreMath.min(value.mul(v).div(b), value);
+            value = value.sub(fee);
+        }
+        require(value <= calcSurplus(msg.sender), "insufficient surplus");
+        creditProvider.withdrawTokens(msg.sender, value, tokensInOrder, amountsOutInOrder);
+        emit SwapTokens(msg.sender, value);
     }
 
     function createSymbol(
