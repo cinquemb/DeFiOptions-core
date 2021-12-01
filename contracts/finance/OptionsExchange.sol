@@ -209,7 +209,6 @@ contract OptionsExchange is ERC20, ManagedContract {
             uint fee = MoreMath.min(value.mul(v).div(b), value);
             value = value.sub(fee);
         }
-        require(value <= calcSurplus(msg.sender), "insufficient surplus");
         creditProvider.withdrawTokens(msg.sender, value, tokensInOrder, amountsOutInOrder);
         emit SwapTokens(msg.sender, value);
     }
