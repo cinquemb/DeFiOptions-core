@@ -608,6 +608,36 @@ contract OptionsExchange is ERC20, ManagedContract {
         symbol = getOptionSymbol(opt);
     }
 
+    function tryQueryPoolPrice(
+        address poolAddr,
+        string memory symbol
+    )
+        public
+        view
+        returns (int)
+    {
+        uint price = 0;
+        ILiquidityPool pool = ILiquidityPool(poolAddr);
+        
+        try pool.queryBuy(symbol)
+            returns (uint _price, uint)
+        {
+            price += _price;
+        } catch (bytes memory /*lowLevelData*/) {
+            return 0;
+        }
+        
+        try pool.querySell(symbol)
+            returns (uint _price, uint)
+        {
+            price += _price;
+        } catch (bytes memory /*lowLevelData*/) {
+            return 0;
+        }
+
+        return int(price).div(2);
+    }
+
     function getFeedData(address udlFeed) public view returns (IOptionsExchange.FeedData memory fd) {
         
         UnderlyingFeed feed = UnderlyingFeed(udlFeed);
