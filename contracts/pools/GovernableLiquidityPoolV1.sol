@@ -17,7 +17,7 @@ import "../utils/SafeCast.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SignedSafeMath.sol";
 
-abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken, IGovernableLiquidityPool {
+abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken, IGovernableLiquidityPool {
 
     using SafeERC20 for IERC20;
     using SafeCast for uint;

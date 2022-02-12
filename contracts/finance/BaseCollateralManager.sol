@@ -107,8 +107,9 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         (,address[] memory _tokens, uint[] memory _holding, uint[] memory _written,, int[] memory _iv) = exchange.getBook(owner);
 
         for (uint i = 0; i < _tokens.length; i++) {
+            int price = exchange.tryQueryPoolPrice(owner, IOptionToken(_tokens[i]).name());
             payout = payout.add(
-                _iv[i].mul(
+                (price != 0 ? price : _iv[i]).mul(
                     int(_holding[i]).sub(int(_written[i]))
                 )
             );

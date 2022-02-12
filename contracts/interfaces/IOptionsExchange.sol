@@ -39,4 +39,5 @@ interface IOptionsExchange {
     function release(address owner, uint udl, uint coll) external;
     function depositTokens(address to, address token, uint value) external;
     function transferOwnership(string calldata symbol, address from, address to, uint value) external;
+    function tryQueryPoolPrice(address poolAddr, string calldata symbol) external view returns (int);
 }
