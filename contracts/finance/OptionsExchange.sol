@@ -9,6 +9,7 @@ import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IBaseCollateralManager.sol";
+import "../interfaces/IBaseRehypothecationManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/Arrays.sol";
@@ -354,7 +355,10 @@ contract OptionsExchange is ERC20, ManagedContract {
         uint volume,
         uint strike, 
         uint maturity,
-        address to
+        address to,
+        address rehypothecationManager,
+        bool allowRehypothecation,
+        bool is_borrow
     )
         external 
         returns (address _tk)
@@ -370,7 +374,19 @@ contract OptionsExchange is ERC20, ManagedContract {
         address underlying = getUnderlyingAddr(opt);
         require(underlying != address(0), "underlying token not set");
         IERC20(underlying).safeTransferFrom(msg.sender, address(vault), volume);
-        vault.lock(msg.sender, _tk, volume);
+
+        if (allowRehypothecation) {
+            //TODO: need to check if rehypothecationManager is authorized by dao, if not revert
+            //TODO: need to keep track of what volume is rehypothicated and what is not?
+            //TODO: may need to do this inside of the vault contract instead?
+
+            if (is_borrow == false) {
+                // lend leg
+                IBaseRehypothecationManager(rehypothecationManager).deposit(underlying, volume);
+            }
+            
+        }
+        vault.lock(msg.sender, _tk, volume, rehypothecationManager, allowRehypothecation, is_borrow);
 
         writeOptionsInternal(opt, symbol, volume, to);
         ensureFunds(msg.sender);

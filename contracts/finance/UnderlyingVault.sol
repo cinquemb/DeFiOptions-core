@@ -44,7 +44,7 @@ contract UnderlyingVault is ManagedContract {
         return allocation[owner][token];
     }
 
-    function lock(address owner, address token, uint value) external {
+    function lock(address owner, address token, uint value, address rehypothecationManager, bool allowRehypothecation, bool is_borrow) external {
 
         ensureCaller();
         
@@ -52,6 +52,11 @@ contract UnderlyingVault is ManagedContract {
         require(token != address(0), "invalid token");
 
         allocation[owner][token] = allocation[owner][token].add(value);
+        if (allowRehypothecation) {
+            if (is_borrow == true) {
+                allocationRehypothecatedLend[owner][token][rehypothecationManager].add(value);
+            }
+        }
         emit Lock(owner, token, value);
     }
 
@@ -69,6 +74,9 @@ contract UnderlyingVault is ManagedContract {
         require(owner != address(0), "invalid owner");
         require(token != address(0), "invalid token");
         require(feed != address(0), "invalid feed");
+
+
+        //TODO: NEED TO CHECK REHYPOTHICATED BALANCE AND WITHRAW FROM COUNTERPARTY
 
         uint balance = balanceOf(owner, token);
 
@@ -109,6 +117,8 @@ contract UnderlyingVault is ManagedContract {
         require(owner != address(0), "invalid owner");
         require(token != address(0), "invalid token");
         require(feed != address(0), "invalid feed");
+
+        //TODO: NEED TO CHECK REHYPOTHICATED BALANCE AND WITHRAW FROM COUNTERPARTY
 
         uint bal = allocation[owner][token];
         value = MoreMath.min(bal, value);
