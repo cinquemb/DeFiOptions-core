@@ -377,6 +377,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
         if (allowRehypothecation) {
             //TODO: need to keep track of what volume is rehypothicated and what is not, may need to do this inside of the vault contract instead?
+            //TODO: get inital rehypothication shares of underlying before and after, update from here
             require(rehypothecationManager != address(0), "rehypothecation manager not set");
             require(settings.isAllowedRehypothecationManager(rehypothecationManager) == true, "rehypothecation manager not allowed");
 

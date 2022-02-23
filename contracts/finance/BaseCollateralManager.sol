@@ -262,6 +262,22 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             creditProvider.nullOptionBorrowBalance(address(tk), owner);
         }
 
+        /*
+
+            TODO: redeem from rehypothication manager and handle charging fee on rehypothicated vault funds
+            
+            address[] rehypothicationManagers = vault.getRehypothecationManagers(owner, address(tk));
+            
+            TODO: check balance on managers, withdraw all, then deposit rest again after individual users pro-rata portion has been subtracted, destroy rehypothecation shares here like liquidty pool withdrawal
+
+            IBaseRehypothecationManager(rehypothecationManager).withdraw(underlying, volume);
+
+            (uint v, uint b) = settings.getRehypothecationFee();
+            if (v > 0) {
+                uint fee = MoreMath.min(value.mul(v).div(b), balances[from]);
+                value = value.sub(fee);
+        */
+
         vault.release(owner, address(tk), feed, uint(-1));
 
         if (written > 0) {

@@ -23,6 +23,8 @@ contract UnderlyingVault is ManagedContract {
     
     mapping(address => uint) private callers;
     mapping(address => mapping(address => uint)) private allocation;
+    mapping(address => mapping(address => address[])) private allocationRehypothecationManagers;
+    mapping(address => mapping(address => mapping(address => uint))) private allocationRehypothecatedLent;
 
     event Lock(address indexed owner, address indexed token, uint value);
 
@@ -44,6 +46,10 @@ contract UnderlyingVault is ManagedContract {
         return allocation[owner][token];
     }
 
+    function getRehypothecationManagers(address owner, address token)  public view returns (address[]) {
+        return allocationRehypothecationManagers[owner][token];
+    }
+
     function lock(address owner, address token, uint value, address rehypothecationManager, bool allowRehypothecation, bool is_borrow) external {
 
         ensureCaller();
@@ -54,7 +60,8 @@ contract UnderlyingVault is ManagedContract {
         allocation[owner][token] = allocation[owner][token].add(value);
         if (allowRehypothecation) {
             if (is_borrow == true) {
-                allocationRehypothecatedLend[owner][token][rehypothecationManager].add(value);
+                allocationRehypothecationManagers[owner][token].push(rehypothecationManager);
+                allocationRehypothecatedLent[owner][token][rehypothecationManager].add(value);
             }
         }
         emit Lock(owner, token, value);
@@ -75,8 +82,6 @@ contract UnderlyingVault is ManagedContract {
         require(token != address(0), "invalid token");
         require(feed != address(0), "invalid feed");
 
-
-        //TODO: NEED TO CHECK REHYPOTHICATED BALANCE AND WITHRAW FROM COUNTERPARTY
 
         uint balance = balanceOf(owner, token);
 
@@ -117,8 +122,6 @@ contract UnderlyingVault is ManagedContract {
         require(owner != address(0), "invalid owner");
         require(token != address(0), "invalid token");
         require(feed != address(0), "invalid feed");
-
-        //TODO: NEED TO CHECK REHYPOTHICATED BALANCE AND WITHRAW FROM COUNTERPARTY
 
         uint bal = allocation[owner][token];
         value = MoreMath.min(bal, value);

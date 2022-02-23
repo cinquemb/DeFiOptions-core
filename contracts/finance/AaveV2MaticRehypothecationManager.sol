@@ -31,7 +31,7 @@ contract AaveV2MaticRehypothecationManager is BaseRehypothecationManager {
     	ILendingPool(counterpartyAddress).deposit(underlying, uint256 amount, address(vault), 0);
     }
 
-    function withdraw(address underlying, uint256 amount) virtual internal view returns (uint) {
-    	ILendingPool(counterpartyAddress).withdraw(underlying, amount, address(vault)) external returns (uint256);
+    function withdraw(address underlying) virtual internal view returns (uint) {
+    	ILendingPool(counterpartyAddress).withdraw(underlying, UINT_MAX, address(vault)) external returns (uint256);
     }
 }
