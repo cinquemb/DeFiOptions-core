@@ -376,13 +376,16 @@ contract OptionsExchange is ERC20, ManagedContract {
         IERC20(underlying).safeTransferFrom(msg.sender, address(vault), volume);
 
         if (allowRehypothecation) {
-            //TODO: need to check if rehypothecationManager is authorized by dao, if not revert
-            //TODO: need to keep track of what volume is rehypothicated and what is not?
-            //TODO: may need to do this inside of the vault contract instead?
+            //TODO: need to keep track of what volume is rehypothicated and what is not, may need to do this inside of the vault contract instead?
+            require(rehypothecationManager != address(0), "rehypothecation manager not set");
+            require(settings.isAllowedRehypothecationManager(rehypothecationManager) == true, "rehypothecation manager not allowed");
 
             if (is_borrow == false) {
                 // lend leg
                 IBaseRehypothecationManager(rehypothecationManager).deposit(underlying, volume);
+            } else {
+                allowRehypothecation = false;
+                rehypothecationManager = address(0);
             }
             
         }

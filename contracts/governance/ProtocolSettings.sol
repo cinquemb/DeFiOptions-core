@@ -32,6 +32,7 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => Rate) private tokenRates;
     mapping(address => bool) private poolBuyCreditTradeable;
     mapping(address => bool) private udlIncentiveBlacklist;
+    mapping(address => bool) private rehypothecationManager;
     mapping(address => bool) private dexAggIncentiveBlacklist;
     mapping(address => address) private udlCollateralManager;
 
@@ -42,6 +43,7 @@ contract ProtocolSettings is ManagedContract {
     Rate[] private debtInterestRates;
     Rate[] private creditInterestRates;
     Rate private processingFee;
+    Rate private rehypothecationFee;
     uint private volatilityPeriod;
 
     bool private hotVoting;
@@ -282,6 +284,22 @@ contract ProtocolSettings is ManagedContract {
         emit SetProcessingFee(msg.sender, f, b);
     }
 
+    function getRehypothecationFee() external view returns (uint v, uint b) {
+        // charged at settlement
+        
+        v = rehypothecationFee.value;
+        b = rehypothecationFee.base;
+    }
+
+    function setRehypothecationFee(uint f, uint b) external {
+        
+        validateFractionLTEOne(f, b);
+        ensureWritePrivilege();
+        rehypothecationFee = Rate(f, b, MAX_UINT);
+
+        emit SetRehypothecationFee(msg.sender, f, b);
+    }
+
     function getUdlFeed(address addr) external view returns (int) {
 
         return underlyingFeeds[addr];
@@ -480,6 +498,17 @@ contract ProtocolSettings is ManagedContract {
 
     function getUdlCollateralManager(address udlFeed) external view returns (address) {
         return (udlCollateralManager[udlFeed] == address(0)) ? baseCollateralManagerAddr : udlCollateralManager[udlFeed];
+    }
+
+    /* REHYPOTHECICATION MANAGER SETTINGS */
+
+    function setAllowedRehypothecationManager(address rehypoMngr, bool val) external {
+        ensureWritePrivilege();
+        rehypothecationManager[rehypoMngr] = val;
+    }
+
+    function isAllowedRehypothecationManager(address rehypoMngr) external view returns (bool) {
+        return rehypothecationManager[rehypoMngr];
     }
 
     /* INCENTIVIZATION STUFF */

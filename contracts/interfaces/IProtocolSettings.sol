@@ -23,6 +23,8 @@ interface IProtocolSettings {
     function setBaseIncentivisation(uint amount) external;
     function getBaseIncentivisation() external view returns (uint);
     function getProcessingFee() external view returns (uint v, uint b);
+    function getRehypothecationFee() external view returns (uint v, uint b);
+    function isAllowedRehypothecationManager(address rehypoMngr) external view returns (bool);
     function getMinShareForProposal() external view returns (uint v, uint b);
     function exchangeTime() external view returns (uint256);
 }
