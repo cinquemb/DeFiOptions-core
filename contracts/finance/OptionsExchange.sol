@@ -13,6 +13,7 @@ import "../interfaces/IBaseRehypothecationManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/Arrays.sol";
+import "../utils/Convert.sol";
 import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
@@ -373,7 +374,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         
         address underlying = getUnderlyingAddr(opt);
         require(underlying != address(0), "underlying token not set");
-        IERC20(underlying).safeTransferFrom(msg.sender, address(vault), volume);
+        uint v = Convert.from18DecimalsBase(underlying, volume);
+        IERC20(underlying).safeTransferFrom(msg.sender, address(vault), v);
 
         if (allowRehypothecation) {
             //TODO: need to keep track of what volume is rehypothicated and what is not, may need to do this inside of the vault contract instead?
@@ -383,16 +385,17 @@ contract OptionsExchange is ERC20, ManagedContract {
 
             if (is_borrow == false) {
                 // lend leg
-                IBaseRehypothecationManager(rehypothecationManager).deposit(underlying, volume);
+                IBaseRehypothecationManager(rehypothecationManager).deposit(underlying, v);
             } else {
                 allowRehypothecation = false;
                 rehypothecationManager = address(0);
             }
             
         }
-        vault.lock(msg.sender, _tk, volume, rehypothecationManager, allowRehypothecation, is_borrow);
 
+        vault.lock(msg.sender, _tk, volume, rehypothecationManager, allowRehypothecation, is_borrow);
         writeOptionsInternal(opt, symbol, volume, to);
+
         ensureFunds(msg.sender);
     }
     
@@ -491,6 +494,10 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function calcExpectedPayout(address owner) external view returns (int payout) {
         payout = collateralManager.calcExpectedPayout(owner); // multi udl feed refs
+    }
+    
+    function calcIntrinsicValue(address _tk) external view returns (int) {
+        return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(options[_tk]);
     }
 
     function calcIntrinsicValue(
@@ -628,7 +635,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         symbol = getOptionSymbol(opt);
     }
 
-    function tryQueryPoolPrice(
+    function queryPoolPrice(
         address poolAddr,
         string memory symbol
     )
@@ -639,21 +646,11 @@ contract OptionsExchange is ERC20, ManagedContract {
         uint price = 0;
         ILiquidityPool pool = ILiquidityPool(poolAddr);
         
-        try pool.queryBuy(symbol)
-            returns (uint _price, uint)
-        {
-            price += _price;
-        } catch (bytes memory /*lowLevelData*/) {
-            return 0;
-        }
+        (uint _buyPrice,) = pool.queryBuy(symbol);
+        price = price.add(_buyPrice);
         
-        try pool.querySell(symbol)
-            returns (uint _price, uint)
-        {
-            price += _price;
-        } catch (bytes memory /*lowLevelData*/) {
-            return 0;
-        }
+        (uint _sellPrice,) = pool.querySell(symbol);
+        price = price.add(_sellPrice);
 
         return int(price).div(2);
     }
