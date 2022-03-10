@@ -2,11 +2,25 @@
 
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/TCGV/DeFiOptions/CI)
 
-Experimental DeFi options trading smart contracts enabling long and short positions for call and put tokenized, collateralized, cash settable european style options.
+V2 of Experimental DeFi options trading smart contracts enabling long and short positions for call and put tokenized, collateralized, cash settable european style options.
 
 <p align="center">
 <img src="https://github.com/cinquemb/DeFiOptions-core/blob/master/diagramV2.PNG?raw=true" width="500" />
 </p>
+
+## What's New In V2
+
+* able to have collateral manager per underlying
+* create governance governable liquidity pools/operations
+* multi stablecoin withrawl
+* swap for multi stablecoins out
+* exchange balance is a proper erc20 (can tranfer to others in metamask)
+* spread collateral requiremnts thru all writers (rebates and increases)
+* pools can write options against borrowed liquidity
+* new credit token redemption process (mod)
+* able to allow for rehypothication of underlying collateral
+* incentivization for all exchange operations (liquidations, feeds updates)
+* able to have dex twap oracle
 
 A dynamic approach was implemented for ensuring collateral for writing options, making use of favorable writer's open option positions for decreasing total required balance provided as collateral.
 
