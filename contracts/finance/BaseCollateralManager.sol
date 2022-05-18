@@ -252,14 +252,15 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         private
         returns (uint value)
     {
+
+        // if borrowed liquidty was used to write options need to debit it from pool addr
+        creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
+        creditProvider.nullOptionBorrowBalance(address(tk), owner);
+
         if (iv > 0) {
             value = iv.div(_volumeBase);
             vault.liquidate(owner, address(tk), feed, value);
             creditProvider.processPayment(owner, address(tk), value);
-        } else {
-            // if borrowed liquidty was used to write options need to debit it from pool
-            creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
-            creditProvider.nullOptionBorrowBalance(address(tk), owner);
         }
 
         /*
