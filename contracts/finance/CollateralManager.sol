@@ -38,6 +38,8 @@ contract CollateralManager is BaseCollateralManager {
                     int(_uncovered[i]).sub(int(_holding[i]))
                 )
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
+
+            //TODO: need to subtract off notional value of positon ("size" for metafault) + diff ("delta" for metavault) if owner is liquidty pool approved by dao and hedgeing addr is approved by dap
         }
 
         return coll;
