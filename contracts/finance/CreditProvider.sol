@@ -24,6 +24,7 @@ contract CreditProvider is ManagedContract {
 
     mapping(address => uint) private debts;
     mapping(address => uint) private balances;
+    mapping(address => uint) private poolExcessCreditBalance;
     mapping(address => uint) private debtsDate;
     mapping(address => uint) private poolCallers;
     mapping(address => uint) private primeCallers;
@@ -278,6 +279,22 @@ contract CreditProvider is ManagedContract {
                     // remove borrowed balance for pool related to that option
                     if (balances[pool] >= optionBorrowedBalance[option][pool]){
                         removeBalance(pool, optionBorrowedBalance[option][pool]);
+
+                        // try to remove all excess credit
+                        if (balances[pool] >= poolExcessCreditBalance[pool]) {
+                            removeBalance(pool, poolExcessCreditBalance[pool]);
+                            poolExcessCreditBalance[pool] = 0;
+                        } else if (poolExcessCreditBalance[pool] > 0) {
+                            // remove some excess credit;
+                            removeBalance(pool, balances[pool]);
+                            poolExcessCreditBalance[pool] = poolExcessCreditBalance[pool].sub(balances[pool]);
+                        }
+
+                    } else {
+                        // null balance of pool if optionBorrowedBalance[option][pool] > balances[pool]
+                        removeBalance(pool, balances[pool]);
+                        // keep track of excess borrowed that hasn't been credited back
+                        poolExcessCreditBalance[pool] = poolExcessCreditBalance[pool].add(optionBorrowedBalance[option][pool].sub(balances[pool]));
                     }
 
                     optionBorrowedBalance[option][pool] = 0;
