@@ -21,6 +21,7 @@ V2 of Experimental DeFi options trading smart contracts enabling long and short 
 * able to allow for rehypothication of underlying collateral
 * incentivization for all exchange operations (liquidations, feeds updates)
 * able to have dex twap oracle
+* pools are able to hedge option writing on dao approved external protocols
 
 A dynamic approach was implemented for ensuring collateral for writing options, making use of favorable writer's open option positions for decreasing total required balance provided as collateral.
 
