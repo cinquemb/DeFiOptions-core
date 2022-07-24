@@ -1,8 +1,9 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-
 import "./BaseCollateralManager.sol";
+import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/IBaseHedgingManager";
 
 contract CollateralManager is BaseCollateralManager {
 
@@ -39,7 +40,33 @@ contract CollateralManager is BaseCollateralManager {
                 )
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
 
-            //TODO: need to subtract off notional value of positon ("size" for metafault) + diff ("delta" for metavault) if owner is liquidty pool approved by dao and hedgeing addr is approved by dap
+            /*
+                TODO: need to figure out how to facture in components of exposure uniquely or keep track of what underlying has been used for collateral calculations already
+            */
+
+            address hmngr = ILiquidityPool(owner).getHedgingManager();
+            if (settings.isAllowedHedgingManager(hmngr)) {
+                int delta = calcDelta(opt, _uncovered[i]);
+
+                if (delta < 0) {
+                    coll = coll.add(
+                        IBaseHedgingManager(hmngr).getHedgeExposure(
+                            exchange.getUnderlyingAddr(opt)
+                        ).mul(
+                            delta;
+                        );
+                    )
+                } else {
+                    coll = coll.sub(
+                        IBaseHedgingManager(hmngr).getHedgeExposure(
+                            exchange.getUnderlyingAddr(opt)
+                        ).mul(
+                            delta;
+                        );
+                    )
+                }
+                
+            }
         }
 
         return coll;
@@ -65,5 +92,12 @@ contract CollateralManager is BaseCollateralManager {
         }
 
         return coll > 0 ? uint(coll) : 0;
+    }
+
+    function calcDelta(
+        IOptionsExchange.OptionData calldata opt,
+        uint volume
+    ) public view returns (int){
+
     }
 }

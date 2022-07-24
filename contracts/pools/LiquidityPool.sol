@@ -62,6 +62,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     uint internal volumeBase;
     uint internal fractionBase;
 
+    address private _hedgingManagerAddress;
+
     constructor(string memory _name) ERC20(_name) public {
         
     }
@@ -86,7 +88,8 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         uint _reserveRatio,
         uint _withdrawFee,
         uint _capacity,
-        uint _mt
+        uint _mt,
+        address _hmngr
     )
         external
     {
@@ -96,6 +99,11 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         withdrawFee = _withdrawFee;
         capacity = _capacity;
         _maturity = _mt;
+        _hedgingManagerAddress = _hmngr;
+    }
+
+    function getHedgingManager() override public view returns (address) {
+        return _hedgingManagerAddress;
     }
 
     function redeemAllowed() override public view returns (bool) {

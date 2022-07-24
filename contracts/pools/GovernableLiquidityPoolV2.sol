@@ -44,6 +44,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     uint private withdrawFee;
     uint internal reserveRatio;
     uint internal fractionBase;
+
+    address private _hedgingManagerAddress;
     
     string[] private optSymbols;
 
@@ -68,7 +70,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     function setParameters(
         uint _reserveRatio,
         uint _withdrawFee,
-        uint _mt
+        uint _mt,
+        address _hmngr
     )
         external
     {
@@ -76,6 +79,11 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         reserveRatio = _reserveRatio;
         withdrawFee = _withdrawFee;
         _maturity = _mt;
+        _hedgingManagerAddress = _hmngr;
+    }
+
+    function getHedgingManager() override public view returns (address) {
+        return _hedgingManagerAddress;
     }
 
     function redeemAllowed() override public view returns (bool) {

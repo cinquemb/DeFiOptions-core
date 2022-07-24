@@ -121,6 +121,8 @@ library MoreMath {
     }
 
     function cumulativeDistributionFunction(int256 x) internal pure returns (int256) {
+        /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */
+
         // where p = 0.3275911,
         // a1 = 0.254829592, a2 = −0.284496736, a3 = 1.421413741, a4 = −1.453152027, a5 = 1.061405429
         // using 18 decimals
@@ -143,6 +145,8 @@ library MoreMath {
     }
 
     function getErrorFunction(int256 z, int256 t) internal pure returns (int256) {
+        /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */
+        
         // where a1 = 0.254829592, a2 = −0.284496736, a3 = 1.421413741, a4 = −1.453152027, a5 = 1.061405429
         // using 18 decimals
         int256 step1;
