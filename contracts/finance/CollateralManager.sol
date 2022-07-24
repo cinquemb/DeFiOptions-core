@@ -23,6 +23,8 @@ contract CollateralManager is BaseCollateralManager {
         int coll;
         (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
 
+        address[] underlyings = new address[](tokens.length);
+
         for (uint i = 0; i < _tokens.length; i++) {
 
             address _tk = _tokens[i];
@@ -41,46 +43,42 @@ contract CollateralManager is BaseCollateralManager {
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
 
             /*
-                subtract off current delta of exposure of position in dollars
+                subtract off current exposure of position's underlying in dollars
             */
 
             address hmngr = ILiquidityPool(owner).getHedgingManager();
             if (settings.isAllowedHedgingManager(hmngr)) {
-                int delta = calcDelta(opt, _uncovered[i]);
+                address udlAddr = exchange.getUnderlyingAddr(opt);
+                bool udlFound = foundUnderlying(udlAddr, underlyings);
 
-                if (delta < 0) {
+                if (udlFound == false) {
+                    int256 hedgeExposure = int256(
+                        IBaseHedgingManager(hmngr).getHedgeExposure(
+                            exchange.getUnderlyingAddr(opt)
+                        )
+                    );
+
                     coll = coll.add(
-                        delta.mul(
-                            100
-                        ).mul(
-                            _uncovered[i]
-                        ).mul(
-                            exchnage.getUdlPrice(opt)
-                        ).div(
-                            IBaseHedgingManager(hmngr).getHedgeExposure(
-                                exchange.getUnderlyingAddr(opt)
-                            )
-                        )
-                    )
-                } else {
-                    coll = coll.sub(
-                        delta.mul(
-                            100
-                        ).mul(
-                            _uncovered[i]
-                        ).mul(
-                            exchnage.getUdlPrice(opt)
-                        ).div(
-                            IBaseHedgingManager(hmngr).getHedgeExposure(
-                                exchange.getUnderlyingAddr(opt)
-                            )
-                        )
-                    )
-                }   
+                        hedgeExposure
+                    );
+
+                    underlyings.push(udlAddr);
+                }
+                
             }
         }
 
         return coll;
+    }
+
+    function foundUnderlying(address udl, address[] udlArray) private view returns (bool){
+        for (uint i; i < udlArray.length; i++) {
+            if (udlArray[i] == udl) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     function calcCollateral(
