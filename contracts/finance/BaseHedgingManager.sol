@@ -22,8 +22,8 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function getHedgeExposure(address underlying) virtual internal view returns (uint);
-    function idealHedgeExposure(address underlying) virtual internal view returns (uint);
-    function realHedgeExposure(address underlying) virtual internal view returns (uint);
-    function balanceExposure(address underlying) virtual internal returns (bool); //TODO: CAN ONLY DO THIS EVERY 15 MIN WITH METAVAULT
+    function getHedgeExposure(address underlying, address account) virtual internal view returns (uint);
+    function idealHedgeExposure(address underlying, address account) virtual internal view returns (uint);
+    function realHedgeExposure(address underlying, address account) virtual internal view returns (uint);
+    function balanceExposure(address underlying, address account) virtual internal returns (bool);
 }
