@@ -41,7 +41,7 @@ contract CollateralManager is BaseCollateralManager {
             ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
 
             /*
-                TODO: need to figure out how to facture in components of exposure uniquely or keep track of what underlying has been used for collateral calculations already
+                subtract off current delta of exposure of position in dollars
             */
 
             address hmngr = ILiquidityPool(owner).getHedgingManager();
@@ -50,22 +50,33 @@ contract CollateralManager is BaseCollateralManager {
 
                 if (delta < 0) {
                     coll = coll.add(
-                        IBaseHedgingManager(hmngr).getHedgeExposure(
-                            exchange.getUnderlyingAddr(opt)
+                        delta.mul(
+                            100
                         ).mul(
-                            delta;
-                        );
+                            _uncovered[i]
+                        ).mul(
+                            exchnage.getUdlPrice(opt)
+                        ).div(
+                            IBaseHedgingManager(hmngr).getHedgeExposure(
+                                exchange.getUnderlyingAddr(opt)
+                            )
+                        )
                     )
                 } else {
                     coll = coll.sub(
-                        IBaseHedgingManager(hmngr).getHedgeExposure(
-                            exchange.getUnderlyingAddr(opt)
+                        delta.mul(
+                            100
                         ).mul(
-                            delta;
-                        );
+                            _uncovered[i]
+                        ).mul(
+                            exchnage.getUdlPrice(opt)
+                        ).div(
+                            IBaseHedgingManager(hmngr).getHedgeExposure(
+                                exchange.getUnderlyingAddr(opt)
+                            )
+                        )
                     )
-                }
-                
+                }   
             }
         }
 
