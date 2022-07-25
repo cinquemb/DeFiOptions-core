@@ -34,4 +34,17 @@ library Convert {
 
         return value;
     }
+
+    function formatValue(int value, int b1, int b2) internal pure returns(int) {
+        
+        if (b2 < b1) {
+            value = value.mul(MoreMath.pow(10, (b1.sub(b2))));
+        }
+        
+        if (b2 > b1) {
+            value = value.div(MoreMath.pow(10, (b2.sub(b1))));
+        }
+
+        return value;
+    }
 }

@@ -129,11 +129,7 @@ library MoreMath {
         int256 p = 3275911e11;//0x53dd02a4f5ee2e46;
         int256 one = 1e18;//ABDKMath64x64.fromUInt(1);
         int256 two = 2e18;//ABDKMath64x64.fromUInt(2);
-        int256 a1 = 254829592e9;//0x413c831bb169f874;
-        int256 a2 = -284496736e9;//-0x48d4c730f051a5fe;
         int256 a3 = 1421413741e9;//0x16a09e667f3bcc908;
-        int256 a4 = -1453152027e9;//-0x17401c57014c38f14;
-        int256 a5 = 1061405429e9;//0x10fb844255a12d72e;
         int256 z = x.div(a3);
         int256 t = one.div(one.add(p.mul(z.abs())));
         int256 erf = getErrorFunction(z, t);
@@ -146,7 +142,7 @@ library MoreMath {
 
     function getErrorFunction(int256 z, int256 t) internal pure returns (int256) {
         /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */
-        
+
         // where a1 = 0.254829592, a2 = −0.284496736, a3 = 1.421413741, a4 = −1.453152027, a5 = 1.061405429
         // using 18 decimals
         int256 step1;
