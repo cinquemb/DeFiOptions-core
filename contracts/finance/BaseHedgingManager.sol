@@ -24,6 +24,6 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
 
     function getHedgeExposure(address underlying, address account) virtual internal view returns (uint);
     function idealHedgeExposure(address underlying, address account) virtual internal view returns (uint);
-    function realHedgeExposure(address underlying, address account) virtual internal view returns (uint);
+    function realHedgeExposure(address udlFeedAddr, address account) virtual internal view returns (uint);
     function balanceExposure(address underlying, address account) virtual internal returns (bool);
 }
