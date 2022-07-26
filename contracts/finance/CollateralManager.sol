@@ -59,10 +59,14 @@ contract CollateralManager is BaseCollateralManager {
                         )
                     );
 
-                    coll = coll.add(
-                        hedgeExposure
+                    // amount of underlying * exchange vol param
+                    coll = coll.sub(
+                        exchange.getExchangeFeeds(opt.udlFeed).calcUpperVolatility(
+                            MoreMath.abs(hedgeExposure).div(
+                                exchange.getUdlPrice(opt)
+                            )
+                        )
                     );
-
                     underlyings.push(udlAddr);
                 }
                 
