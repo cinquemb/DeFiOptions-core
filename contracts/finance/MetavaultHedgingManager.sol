@@ -72,21 +72,35 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     
 
     function idealHedgeExposure(address underlying, address account) override public view returns (int256) {
-    	// look at order book for account and compute the delta for the given underlying (which should be opposite of the return value)
-    	(,address[] memory _tokens,,, uint[] memory _uncovered,) = exchange.getBook(account);
+    	// look at order book for account and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the account is on)
+    	(,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,) = exchange.getBook(account);
 
     	int totalDelta = 0;
     	for (uint i = 0; i < _tokens.length; i++) {
             address _tk = _tokens[i];
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
             if (exchange.getUnderlyingAddr(opt) == underlying){
-            	int256 delta = ICollateralManager(
-            		settings.getUdlCollateralManager(opt.udlFeed)
-            	).calcDelta(
-            		opt,
-            		_uncovered[i],
-            	);
-            	totalDelta = totalDelta.add(delta);
+            	int256 delta;
+
+            	if (_uncovered[i] > 0) {
+            		// net short this option, thus mult by -1
+	            	delta = ICollateralManager(
+	            		settings.getUdlCollateralManager(opt.udlFeed)
+	            	).calcDelta(
+	            		opt,
+	            		_uncovered[i],
+	            	).mul(-1);
+	            } else {
+	            	// net long thus does not need to be modified
+	            	delta = ICollateralManager(
+	            		settings.getUdlCollateralManager(opt.udlFeed)
+	            	).calcDelta(
+	            		opt,
+	            		_holding[i],
+	            	);
+	            }
+
+	            totalDelta = totalDelta.add(delta);
             }
         }
         return totalDelta;
