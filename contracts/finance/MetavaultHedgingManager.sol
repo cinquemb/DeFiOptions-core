@@ -82,13 +82,13 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             if (exchange.getUnderlyingAddr(opt) == underlying){
             	int256 delta;
 
-            	if (_uncovered[i] > 0) {
+            	if (_uncovered[i].sub(_holding[i]) > 0) {
             		// net short this option, thus mult by -1
 	            	delta = ICollateralManager(
 	            		settings.getUdlCollateralManager(opt.udlFeed)
 	            	).calcDelta(
 	            		opt,
-	            		_uncovered[i],
+	            		_uncovered[i].sub(_holding[i]),
 	            	).mul(-1);
 	            } else {
 	            	// net long thus does not need to be modified
@@ -114,7 +114,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
     
     function balanceExposure(address underlying, address account) override external returns (bool) {
-    	//TODO: CAN ONLY DO THIS EVERY 15 MIN WITH METAVAULT? But up to them to enforce it?
     	//options trades should trigger this
 
     		/*

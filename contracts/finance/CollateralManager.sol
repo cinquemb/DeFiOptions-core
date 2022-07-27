@@ -41,7 +41,15 @@ contract CollateralManager is BaseCollateralManager {
                 _iv[i].mul(
                     int(_uncovered[i]).sub(int(_holding[i]))
                 )
-            ).add(int(calcCollateral(exchange.getExchangeFeeds(opt.udlFeed).upperVol, _uncovered[i], opt)));
+            ).add(
+                int(
+                    calcCollateral(
+                        exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                        _uncovered[i].sub(_holding[i]),
+                        opt
+                    )
+                )
+            );
 
             /*
                 subtract off current exposure of position's underlying in dollars
