@@ -45,7 +45,7 @@ contract CollateralManager is BaseCollateralManager {
                 int(
                     calcCollateral(
                         exchange.getExchangeFeeds(opt.udlFeed).upperVol,
-                        _uncovered[i].sub(_holding[i]),
+                        _uncovered[i],
                         opt
                     )
                 )
