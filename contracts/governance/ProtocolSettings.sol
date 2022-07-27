@@ -31,6 +31,7 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => uint256) private dexOracleTwapPeriod;
     mapping(address => Rate) private tokenRates;
     mapping(address => bool) private poolBuyCreditTradeable;
+    mapping(address => bool) private poolSellCreditTradeable;
     mapping(address => bool) private udlIncentiveBlacklist;
     mapping(address => bool) private rehypothecationManager;
     mapping(address => bool) private hedgingManager;
@@ -454,6 +455,15 @@ contract ProtocolSettings is ManagedContract {
 
     function checkPoolBuyCreditTradable(address poolAddress) external view returns (bool) {
         return poolBuyCreditTradeable[poolAddress];
+    }
+
+    function setPoolSellCreditTradable(address poolAddress, bool isTradable) external {
+        ensureWritePrivilege();
+        poolSellCreditTradeable[poolAddress] = isTradable;
+    }
+
+    function checkPoolBuyCreditTradable(address poolAddress) external view returns (bool) {
+        return poolSellCreditTradeable[poolAddress];
     }
 
     /* FEED INCENTIVES SETTINGS*/

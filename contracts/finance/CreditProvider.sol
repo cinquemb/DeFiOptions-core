@@ -7,6 +7,7 @@ import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/ICreditToken.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
@@ -179,6 +180,22 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid borrower");
         require(poolCallers[to] == 1, "invalid pool");
         require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
+        // increment exchange balance for liquidity pool
+        addBalance(to, credit);
+        //increment value used to write options
+        addOptionBorrowBalance(option, to, credit);
+    }
+
+    function borrowSellLiquidity(address to, uint credit, address option) external {
+        ensurePoolCaller();
+        require(to != address(this), "invalid borrower");
+        require(poolCallers[to] == 1, "invalid pool");
+        require(settings.checkPoolSellCreditTradable(to) == true, "pool cant buy on credit");
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
         // increment exchange balance for liquidity pool
         addBalance(to, credit);
         //increment value used to write options

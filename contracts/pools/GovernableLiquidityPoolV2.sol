@@ -329,7 +329,13 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
             );
         }
 
-        uint value = price.mul(volume).div(volumeBase);        
+
+        uint value = price.mul(volume).div(volumeBase);
+        if (calcFreeBalance() < value) {
+            // only credit the amount excess what is already available, will fail if hedging manager not approved
+            creditProvider.borrowSellLiquidity(address(this), value.sub(calcFreeBalance()), _tk); 
+        }
+             
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
         require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
