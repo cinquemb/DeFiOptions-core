@@ -60,7 +60,8 @@ contract ProposalWrapper {
         } else if (voteType == VoteType.POOL_SETTINGS) {
             llpToken = IERC20(_govToken);
             require(_quorum == Quorum.QUADRATIC, "must be quadratic");
-            require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
+            //require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
+            require(_expiresAt > settings.exchangeTime());
         }  else if (voteType == VoteType.ORACLE_SETTINGS) {
             govToken = IERC20(_govToken);
             require(_expiresAt > settings.exchangeTime() && _expiresAt.sub(settings.exchangeTime()) > 1 days, "too short expiry");
