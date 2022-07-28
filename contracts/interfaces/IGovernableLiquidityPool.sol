@@ -78,4 +78,5 @@ interface IGovernableLiquidityPool {
     function sell(string calldata optSymbol, uint price, uint volume) external;
 
     function getHedgingManager() external view returns (address manager);
+    function getLeverage() external view returns (uint leverage);
 }

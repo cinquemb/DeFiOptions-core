@@ -35,6 +35,7 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => bool) private udlIncentiveBlacklist;
     mapping(address => bool) private rehypothecationManager;
     mapping(address => bool) private hedgingManager;
+    mapping(address => bool) private poolCustomLeverage;
     mapping(address => bool) private dexAggIncentiveBlacklist;
     mapping(address => address) private udlCollateralManager;
 
@@ -543,6 +544,15 @@ contract ProtocolSettings is ManagedContract {
 
     function isAllowedHedgingManager(address hedgeMngr) external view returns (bool) {
         return hedgingManager[hedgeMngr];
+    }
+
+    function setAllowedCustomPoolLeverage(address poolAddr, bool val) external {
+        ensureWritePrivilege();
+        poolCustomLeverage[poolAddr] = val;
+    }
+
+    function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool) {
+        return poolCustomLeverage[poolAddr];
     }
 
 

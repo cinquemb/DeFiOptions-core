@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "./BaseHedgingManager.sol";
 import "../interfaces/ICollateralManager.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
 import "../interfaces/UnderlyingFeed.sol";
@@ -11,6 +12,9 @@ import "../interfaces/UnderlyingFeed.sol";
 contract MetavaultHedgingManager is BaseHedgingManager {
 	address public positionManagerAddr;
 	address public readerAddr;
+	uint private maxLeverage = 30;
+	uint private minLeverage = 1;
+	uint private defaultLeverage = 15;
 
 	function initialize(Deployer deployer, address _positionManager, address _reader) override internal {
         super.initialize(deployer);
@@ -120,11 +124,20 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 				USD values for _sizeDelta and _price are multiplied by (10 ** 30), so for example to open a long position of size 1000 USD, the value 1000 * (10 ** 30) should be used 
 
 				need to convert from 10 ** 18 and back when appropriate
+
+				//how to deal with buying againt someone who is providing covered call collateral in the exchange?
+					- first check for avaialble stable coins, if none
+						- then use avaiable underlying asset? or only allow stablecoin covered volume for pools?
 			*/
 
     	int256 ideal = idealHedgeExposure(underlying, account);
     	int256 real = realHedgeExposure(underlying, account);
     	int256 diff = ideal - real;
+
+    	uint poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
+
+
+    	requre(poolLeverage <= maxLeverage && poolLeverage >= minLeverage, "leverage out of range");
 
     	/*
 	    	- FOR increasePosition

@@ -2,7 +2,7 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "./BaseCollateralManager.sol";
-import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/IBaseHedgingManager.sol";
 import "../utils/Convert.sol";
 
@@ -55,7 +55,7 @@ contract CollateralManager is BaseCollateralManager {
                 subtract off current exposure of position's underlying in dollars
             */
 
-            address hmngr = ILiquidityPool(owner).getHedgingManager();
+            address hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
             if (settings.isAllowedHedgingManager(hmngr)) {
                 address udlAddr = exchange.getUnderlyingAddr(opt);
                 bool udlFound = foundUnderlying(udlAddr, underlyings);
