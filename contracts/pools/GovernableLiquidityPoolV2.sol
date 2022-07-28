@@ -12,6 +12,7 @@ import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IProposalWrapper.sol";
 import "../interfaces/IProposalManager.sol";
 import "../interfaces/IInterpolator.sol";
+import "../interfaces/IBaseHedgingManager.sol";
 import "../finance/RedeemableToken.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
@@ -295,6 +296,12 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
             IOptionToken(_tk).transfer(msg.sender, volume);
         }
 
+        //trigger hedge, may need to factor in costs and charge it to msg.sender
+        IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
+            UnderlyingFeed(param.udlFeed).getUnderlyingAddr(),
+            address(this)
+        );
+
         emit Buy(_tk, msg.sender, price, volume);
     }
 
@@ -340,6 +347,13 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
         require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
+        
+        //trigger hedge, may need to factor in costs and charge it to msg.sender
+        IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
+            UnderlyingFeed(param.udlFeed).getUnderlyingAddr(),
+            address(this)
+        );
+
         emit Sell(_tk, msg.sender, price, volume);
     }
 
