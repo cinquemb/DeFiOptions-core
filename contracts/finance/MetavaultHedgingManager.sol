@@ -125,9 +125,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
 				need to convert from 10 ** 18 and back when appropriate
 
-				//how to deal with buying againt someone who is providing covered call collateral in the exchange?
-					- first check for avaialble stable coins, if none
-						- then use avaiable underlying asset? or only allow stablecoin covered volume for pools?
+				//how to deal with buying againt someone who is providing covered call collateral in the exchange (pool will be long calls and needs to short)?
+					- first check for avaialble stable coins (this needs to be done by default for both long/short)
+						- located at the credit provider addr
+						- credit provider addr needs to approve proper metvault addr
+
+					-if no stablecoins, then use avaiable underlying asset? or only allow stablecoin covered volume for pools?
+						- located at the vault addr
+						- vault addr needs to approve the prover metavault addr
+							- no swap required for longs
+
+				- _path allows swapping to the collateralToken if needed 
+				- For longs, the collateralToken must be the same as the indexToken 
+				- For shorts, the collateralToken can be any stablecoin token 
+
+				//GET FEEDBACK ON LEVERAGE
 			*/
 
     	int256 ideal = idealHedgeExposure(underlying, account);

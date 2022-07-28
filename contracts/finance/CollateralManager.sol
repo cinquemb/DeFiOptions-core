@@ -53,6 +53,7 @@ contract CollateralManager is BaseCollateralManager {
 
             /*
                 subtract off current exposure of position's underlying in dollars
+                //GET FEEDBACK ON HOW TO FACTOR IN HEDGE VALUE FOR COLLATERAL
             */
 
             address hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
