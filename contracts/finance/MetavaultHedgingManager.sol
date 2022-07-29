@@ -138,6 +138,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 				- _path allows swapping to the collateralToken if needed 
 				- For longs, the collateralToken must be the same as the indexToken 
 				- For shorts, the collateralToken can be any stablecoin token 
+				- _minOut can be zero if no swap is required 
 
 				//GET FEEDBACK ON LEVERAGE
 			*/
