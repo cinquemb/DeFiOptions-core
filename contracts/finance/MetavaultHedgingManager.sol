@@ -22,6 +22,35 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         readerAddr = _reader;
     }
 
+    function getPosSize(address underlying, address account, bool isLong) override public view returns (uint[] memory) {
+    	address[] memory allowedTokens = settings.getAllowedTokens();
+		address[] memory _collateralTokens = new address[](allowedTokens.length);
+		address[] memory _indexTokens = new address[](allowedTokens.length);
+		bool[] memory _isLong = new bool[](allowedTokens.length);
+
+		for (uint i=0; i<allowedTokens.length; i++) {
+			_collateralTokens.push(allowedTokens[i]);
+			_indexTokens.push(underlying);
+			_isLong.push(isLong);
+		}
+
+    	uint256[] memory posData = IReader(reader).getPositions(
+			IPositionManager(positionManagerAddr).vault(),
+			account,
+			_collateralTokens, //need to be the approved stablecoins on dod * [long, short]
+			_indexTokens,
+			isLong
+		);
+
+		uint[] memory posSize = new address[](allowedTokens.length);
+
+		for (uint i=0; i<(allowedTokens.length); i++) {
+			posSize.push(posData[i*9]);
+		}
+
+		return posSize;
+    }
+
 	function getHedgeExposure(address underlying, address account) override public view returns (int) {
 		address[] memory allowedTokens = settings.getAllowedTokens();
 		address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
@@ -117,7 +146,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     	return exposure.div(udlPrice);
     }
     
-    function balanceExposure(address underlying, address account) override external returns (bool) {
+    function balanceExposure(address udlFeedAddr, address account) override external returns (bool) {
     	//options trades should trigger this
 
     		/*
@@ -143,9 +172,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 				//GET FEEDBACK ON LEVERAGE
 			*/
 
+		address underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
     	int256 ideal = idealHedgeExposure(underlying, account);
     	int256 real = realHedgeExposure(underlying, account);
     	int256 diff = ideal - real;
+    	address[] memory allowedTokens = settings.getAllowedTokens();
 
     	uint poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
 
@@ -165,6 +196,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 		    	- liquidty pool needs to be credited with the amount recieved
 		*/
 
+		(, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
+
     	if (ideal >= 0) {
     		uint256 pos_size = uint256(abs(diff));
     		if (real > 0) {
@@ -178,16 +211,22 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 			        tk.safeApprove(address(router), amountInMax);
         
 				*/
-    			IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-			        address[] memory _path,
-			        underlying,//address _indexToken,
-			        uint256 _collateralDelta,
-			        uint256 _sizeDelta,
-			        true,//bool _isLong,
-			        address _receiver,
-			        uint256 _price,
-			        uint256 _minOut
-			    );
+				uint[] memory openPos = getPosSize(underlying, account, true);
+
+				//need to loop over all availabe exchnage stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+				for(uint i=0; i< openPos.length; i++){
+					IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+				        [underlying, allowedTokens[i]], //address[] memory _path
+				        underlying,//address _indexToken,
+				        openPos[i],//uint256 _collateralDelta,
+				        openPos[i],//uint256 _sizeDelta,
+				        true,//bool _isLong,
+				        address(creditProvider,//address _receiver,
+				        uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), //use current price of underlying, 5/1000 slippage? is this needed?
+				        openPos[i]//uint256 _minOut
+				    );
+				}
+    			
 
 			    pos_size = uint256(ideal);
     		}
@@ -203,6 +242,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 			        tk.safeApprove(address(router), amountInMax);
         
 				*/
+				//need to loop over avail stablecoins until target pos size is reached
+				//need to add function to exchange to transfer stablecoinds to hedging contract, then from hedging contract to metavault
     			IPositionManager(positionManagerAddr).increasePosition(
 			        address[] memory _path,
 			        underlying,//address _indexToken,
