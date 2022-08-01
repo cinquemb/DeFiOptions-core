@@ -258,6 +258,55 @@ contract CreditProvider is ManagedContract {
             emit TransferBalance(address(0), to, value);
         }
     }
+
+    function creditPoolBalance(address to, address token, uint value) external {
+
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
+        if (value > 0) {
+
+            if (balances[owner] == 0) {
+                _totalOwners = _totalOwners.add(1);
+            }
+
+            (uint r, uint b) = settings.getTokenRate(token);
+            require(r != 0 && token != address(creditToken), "token not allowed");
+            value = value.mul(b).div(r);
+
+            balances[owner] = balances[owner].add(value);
+            _totalBalance = _totalBalance.add(value);
+        }
+    }
+
+    funtion debitPoolBalance(address from, address token, uint value) external {
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(from).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
+        if (balances[from] >= value){
+            removeBalance(from, value);
+
+            // try to remove all excess credit
+            if (balances[from] >= poolExcessCreditBalance[from]) {
+                removeBalance(from, poolExcessCreditBalance[from]);
+                poolExcessCreditBalance[from] = 0;
+            } else if (poolExcessCreditBalance[from] > 0) {
+                // remove some excess credit;
+                removeBalance(from, balances[from]);
+                poolExcessCreditBalance[from] = poolExcessCreditBalance[from].sub(balances[from]);
+            }
+
+        } else {
+            // null balance of pool if value > balances[from]
+            removeBalance(from, balances[from]);
+            // keep track of excess borrowed that hasn't been credited back
+            poolExcessCreditBalance[from] = poolExcessCreditBalance[from].add(value.sub(balances[from]));
+        }
+    }
     
     function addBalance(address owner, uint value) private {
 
@@ -429,6 +478,28 @@ contract CreditProvider is ManagedContract {
         
         if (value > 0) {
             issueCreditTokens(to, value);
+        }
+    }
+
+    function lendTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) private {
+        
+        require(to != address(this) && to != address(creditToken), "invalid token transfer address");
+
+        address[] memory tokens = settings.getAllowedTokens();
+       
+        // preferred order
+        for (uint i = 0; i < tokensInOrder.length && value > 0; i++) {
+            if (findAllowedToken(tokensInOrder[i]) && (amountsOutInOrder[i] > 0)) {
+                IERC20 t = IERC20(tokensInOrder[i]);
+                (uint r, uint b) = settings.getTokenRate(tokensInOrder[i]);
+                if (b != 0) {
+                    uint v = MoreMath.min(amountsOutInOrder[i], t.balanceOf(address(this)).mul(b).div(r));
+                    t.safeTransfer(to, v.mul(r).div(b));
+                    emit WithdrawTokens(to, tokensInOrder[i], v.mul(r).div(b));
+                    value = value.sub(v);
+                }
+            }
+
         }
     }
 

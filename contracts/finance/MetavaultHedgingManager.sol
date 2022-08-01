@@ -212,20 +212,25 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
 				//need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
 				for(uint i=0; i< openPos.length; i++){
+					(uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+					IERC20 t = IERC20(allowedTokens[i]);
+					uint balBefore = t.balanceOf(address(creditProvider)).mul(b).div(r);
 					IPositionManager(positionManagerAddr).decreasePositionAndSwap(
 				        [underlying, allowedTokens[i]], //address[] memory _path
 				        underlying,//address _indexToken,
 				        openPos[i],//uint256 _collateralDelta,
 				        openPos[i],//uint256 _sizeDelta,
 				        true,//bool _isLong,
-				        address(creditProvider,//address _receiver,
+				        address(creditProvider),//address _receiver,
 				        uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), //use current price of underlying, 5/1000 slippage? is this needed?
 				        openPos[i],//uint256 _minOut
 				        _referralCode//bytes32 _referralCode
 				    );
+				    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
+				    uint diffBal = balafter.sub(balBefore);
+				    creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);    
 				}
     			
-
 			    pos_size = uint256(ideal);
     		}
     		
@@ -241,21 +246,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
 						/*
 							TODO: transfer login needs to be changed to factor in contract perms for transfering from credit provider
+							need to debit/credit the liqidity pool
 						*/
 
 						if (totalPosValueToTransfer > 0) {
 							IERC20 t = IERC20(allowedTokens[i]);
 							address routerAddr = IPositionManager(positionManagerAddr).router();
-					    
-							uint bal = t.balanceOf(address(this)).mul(b).div(r);
-			                (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+					    	
+					    	(uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+							uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r);
 			                if (b != 0) {
 			                    uint v = MoreMath.min(totalPosValueToTransfer, bal);
 			                    if (t.allowance(address(this), address(routerAddr)) > 0) {
 						            t.safeApprove(address(routerAddr), 0);
 						        }
 						        t.safeApprove(address(routerAddr), v);
-			                    t.safeTransfer(to, v.mul(r).div(b));
 			                }
 
 							IPositionManager(positionManagerAddr).increasePosition(
@@ -269,6 +274,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 						        referralCode//bytes32 _referralCode
 						    );
 
+						    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
+						    uint diffBal = bal.sub(balafter);
+						    creditProvider.debitPoolBalance(account, allowedTokens[i], diffBal);
+
 						    totalPosValueToTransfer = totalPosValueToTransfer.sub(v);
 						}
 					}
@@ -280,6 +289,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 				// need to close short position first
 				//need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
 				for(uint i=0; i< openPos.length; i++){
+
+					(uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+					IERC20 t = IERC20(allowedTokens[i]);
+					uint balBefore = t.balanceOf(address(creditProvider)).mul(b).div(r);
 					IPositionManager(positionManagerAddr).decreasePositionAndSwap(
 				        [underlying, allowedTokens[i]], //address[] memory _path
 				        underlying,//address _indexToken,
@@ -291,6 +304,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 				        openPos[i],//uint256 _minOut
 				        referralCode//bytes32 _referralCode
 				    );
+				    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
+				    uint diffBal = balafter.sub(balBefore);
+				    creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);
 				}
 
 			    pos_size = uint256(abs(ideal));
@@ -315,15 +331,14 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 							IERC20 t = IERC20(allowedTokens[i]);
 							address routerAddr = IPositionManager(positionManagerAddr).router();
 					        
-							uint bal = t.balanceOf(address(this)).mul(b).div(r);
-			                (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+					        (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+							uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r);
 			                if (b != 0) {
 			                    uint v = MoreMath.min(totalPosValueToTransfer, bal);
 			                    if (t.allowance(address(this), address(routerAddr)) > 0) {
 						            t.safeApprove(address(routerAddr), 0);
 						        }
 						        t.safeApprove(address(routerAddr), v);
-			                    t.safeTransfer(to, v.mul(r).div(b));
 			                }
 
 							IPositionManager(positionManagerAddr).increasePosition(
@@ -336,6 +351,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 						        uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)),//uint256 _price,
 						        referralCode//bytes32 _referralCode
 						    );
+						    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
+						    uint diffBal = bal.sub(balafter);
+						    creditProvider.debitPoolBalance(account, allowedTokens[i], diffBal);
 
 						    totalPosValueToTransfer = totalPosValueToTransfer.sub(v);
 						}
