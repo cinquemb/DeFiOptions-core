@@ -281,7 +281,9 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    funtion debitPoolBalance(address from, address token, uint value) external {
+    funtion debitPoolBalance(address from, address token, uint value) internal {
+        ensurePrimeCaller();
+        
         require(
             settings.isAllowedHedgingManager(IGovernableLiquidityPool(from).getHedgingManager()) == true, 
             "pool hedge manager not allowed"
@@ -481,8 +483,8 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function lendTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) private {
-        
+    function borrowTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) external {
+        ensurePrimeCaller();
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
 
         address[] memory tokens = settings.getAllowedTokens();
@@ -497,6 +499,7 @@ contract CreditProvider is ManagedContract {
                     t.safeTransfer(to, v.mul(r).div(b));
                     emit WithdrawTokens(to, tokensInOrder[i], v.mul(r).div(b));
                     value = value.sub(v);
+                    debitPoolBalance(to, tokensInOrder[i], v);
                 }
             }
 

@@ -19,6 +19,6 @@ interface ICreditProvider {
     function processEarlyLpWithdrawal(address to, uint credit) external;
     function nullOptionBorrowBalance(address option, address pool) external;
     function creditPoolBalance(address to, address token, uint value) external;
-    funtion debitPoolBalance(address from, address token, uint value) external;
+    function borrowTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) external;
     function ensureCaller(address addr) external view;
 }
