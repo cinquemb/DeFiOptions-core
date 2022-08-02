@@ -105,7 +105,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             }
         }
 
-        return totalExposure;
+        return Convert.formatValue(totalExposure, 18, 30));
     }
     
 
@@ -329,7 +329,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 // hedging should fail if not enough stables in exchange
                 if (totalStables.mul(poolLeverage) > totalPosValue) {
                     for (uint i=0; i< allowedTokens.length; i++) {
-                    
+
                         if (totalPosValueToTransfer > 0) {
                             IERC20 t = IERC20(allowedTokens[i]);
                             address routerAddr = IPositionManager(positionManagerAddr).router();
