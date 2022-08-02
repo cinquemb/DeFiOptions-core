@@ -214,20 +214,22 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 for(uint i=0; i< openPos.length; i++){
                     (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
                     IERC20 t = IERC20(allowedTokens[i]);
-                    uint balBefore = t.balanceOf(address(creditProvider)).mul(b).div(r);
+                    uint balBefore = t.balanceOf(address(creditProvider));
+
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
                         [underlying, allowedTokens[i]], //address[] memory _path
                         underlying,//address _indexToken,
-                        openPos[i],//uint256 _collateralDelta,
-                        openPos[i],//uint256 _sizeDelta,
+                        openPos[i],//uint256 _collateralDelta, USD 1e30 mult
+                        openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         true,//bool _isLong,
                         address(creditProvider),//address _receiver,
-                        uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), //use current price of underlying, 5/1000 slippage? is this needed?
-                        openPos[i],//uint256 _minOut
+                        uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18), _price//use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                        uint256(Convert.formatValue(openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
                         _referralCode//bytes32 _referralCode
                     );
-                    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
+                    uint balafter = t.balanceOf(address(creditProvider));
                     uint diffBal = balafter.sub(balBefore);
+                    //back to exchange decimals
                     creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);    
                 }
                 
@@ -244,22 +246,19 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 if (totalStables.mul(poolLeverage) > totalPosValue) {
                     for (uint i=0; i< allowedTokens.length; i++) {
 
-                        /*
-                            TODO: transfer login needs to be changed to factor in contract perms for transfering from credit provider
-                        */
-
                         if (totalPosValueToTransfer > 0) {
                             IERC20 t = IERC20(allowedTokens[i]);
                             address routerAddr = IPositionManager(positionManagerAddr).router();
                             
                             (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
-                            uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r);
+
+                            uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r); //convert to exchange decimals
                             if (b != 0) {
                                 uint v = MoreMath.min(totalPosValueToTransfer, bal);
                                 if (t.allowance(address(this), address(routerAddr)) > 0) {
                                     t.safeApprove(address(routerAddr), 0);
                                 }
-                                t.safeApprove(address(routerAddr), v);
+                                t.safeApprove(address(routerAddr), v.mul(r).div(b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 ICollateralManager(
@@ -271,18 +270,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 )
                             }
 
+                            v = v.mul(r).div(b);//converts to token decimals
+
                             IPositionManager(positionManagerAddr).increasePosition(
                                 [allowedTokens[i]],//address[] memory _path,
                                 underlying,//address _indexToken,
-                                v,//uint256 _amountIn,
-                                0,//uint256 _minOut, //_minOut can be zero if no swap is required 
-                                v.mul(poolLeverage),//uint256 _sizeDelta,
+                                v,//uint256 _amountIn, TOKEN DECIMALS
+                                0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
                                 false,// bool _isLong
-                                uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)),//uint256 _price,
+                                uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
                                 referralCode//bytes32 _referralCode
                             );
 
-                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v);
+                            //back to exchange decimals
+                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
                         }
                     }
                 }
@@ -296,20 +298,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                     (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
                     IERC20 t = IERC20(allowedTokens[i]);
-                    uint balBefore = t.balanceOf(address(creditProvider)).mul(b).div(r);
+                    uint balBefore = t.balanceOf(address(creditProvider));
+
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
                         [underlying, allowedTokens[i]], //address[] memory _path
                         underlying,//address _indexToken,
-                        openPos[i],//uint256 _collateralDelta,
-                        openPos[i],//uint256 _sizeDelta,
+                        openPos[i],//uint256 _collateralDelta, USD 1e30 mult
+                        openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         false,//bool _isLong,
                         address(creditProvider,//address _receiver,
-                        uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), //use current price of underlying, 5/1000 slippage? is this needed?
-                        openPos[i],//uint256 _minOut
+                        Convert.formatValue(uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), 30, 18), //use current price of underlying, 5/1000 slippage? is this needed? equals %0.5 sliipage, USD 1e30 mult
+                        openPos[i],//uint256 _minOut, TOKEN DECIMALS
                         referralCode//bytes32 _referralCode
                     );
-                    uint balafter = t.balanceOf(address(creditProvider)).mul(b).div(r);
-                    uint diffBal = balafter.sub(balBefore);
+                    uint balAfter = t.balanceOf(address(creditProvider));
+                    uint diffBal = balAfter.sub(balBefore);
                     creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);
                 }
 
@@ -326,11 +329,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 // hedging should fail if not enough stables in exchange
                 if (totalStables.mul(poolLeverage) > totalPosValue) {
                     for (uint i=0; i< allowedTokens.length; i++) {
-
-                        /*
-                            TODO: transfer login needs to be changed to factor in contract perms for transfering from credit provider
-                        */
-
+                    
                         if (totalPosValueToTransfer > 0) {
                             IERC20 t = IERC20(allowedTokens[i]);
                             address routerAddr = IPositionManager(positionManagerAddr).router();
@@ -342,7 +341,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 if (t.allowance(address(this), address(routerAddr)) > 0) {
                                     t.safeApprove(address(routerAddr), 0);
                                 }
-                                t.safeApprove(address(routerAddr), v);
+                                t.safeApprove(address(routerAddr), v.mul(r).div(b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 ICollateralManager(
@@ -354,18 +353,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 )
                             }
 
+                             v = v.mul(r).div(b);//converts to token decimals
+
                             IPositionManager(positionManagerAddr).increasePosition(
                                 [allowedTokens[i], underlying],//address[] memory _path,
                                 underlying,//address _indexToken,
-                                v,//uint256 _amountIn,
-                                v.div(uint256(udlPrice)),//uint256 _minOut, //_minOut can be zero if no swap is required 
-                                v.mul(poolLeverage),//uint256 _sizeDelta,
+                                v,//uint256 _amountIn, TOKEN DECIMALS
+                                uint256(Convert.formatValue(v.div(uint256(udlPrice.mul(r).div(b))), 30, 18)),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
                                 true,// bool _isLong
-                                uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)),//uint256 _price,
+                                uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
                                 referralCode//bytes32 _referralCode
                             );
 
-                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v);
+                            //back to exchange decimals
+                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
                         }
                     }
                 }
