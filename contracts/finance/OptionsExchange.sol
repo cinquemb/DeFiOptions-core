@@ -9,7 +9,6 @@ import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IBaseCollateralManager.sol";
-import "../interfaces/IBaseRehypothecationManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 
 import "../utils/Arrays.sol";
@@ -356,10 +355,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         uint volume,
         uint strike, 
         uint maturity,
-        address to,
-        address rehypothecationManager,
-        bool allowRehypothecation,
-        bool is_borrow
+        address to
     )
         external 
         returns (address _tk)
@@ -377,23 +373,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         uint v = Convert.from18DecimalsBase(underlying, volume);
         IERC20(underlying).safeTransferFrom(msg.sender, address(vault), v);
 
-        if (allowRehypothecation) {
-            //TODO: need to keep track of what volume is rehypothicated and what is not, may need to do this inside of the vault contract instead?
-            //TODO: get inital rehypothication shares of underlying before and after, update from here
-            require(rehypothecationManager != address(0), "rehypothecation manager not set");
-            require(settings.isAllowedRehypothecationManager(rehypothecationManager) == true, "rehypothecation manager not allowed");
-
-            if (is_borrow == false) {
-                // lend leg
-                IBaseRehypothecationManager(rehypothecationManager).deposit(underlying, v);
-            } else {
-                allowRehypothecation = false;
-                rehypothecationManager = address(0);
-            }
-            
-        }
-
-        vault.lock(msg.sender, _tk, volume, rehypothecationManager, allowRehypothecation, is_borrow);
+        vault.lock(msg.sender, _tk, volume);
         writeOptionsInternal(opt, symbol, volume, to);
 
         ensureFunds(msg.sender);

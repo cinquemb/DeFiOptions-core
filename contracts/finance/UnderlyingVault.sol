@@ -24,8 +24,6 @@ contract UnderlyingVault is ManagedContract {
     
     mapping(address => uint) private callers;
     mapping(address => mapping(address => uint)) private allocation;
-    mapping(address => mapping(address => address[])) private allocationRehypothecationManagers;
-    mapping(address => mapping(address => mapping(address => uint))) private allocationRehypothecatedLent;
 
     event Lock(address indexed owner, address indexed token, uint value);
 
@@ -47,11 +45,7 @@ contract UnderlyingVault is ManagedContract {
         return allocation[owner][token];
     }
 
-    function getRehypothecationManagers(address owner, address token)  public view returns (address[]) {
-        return allocationRehypothecationManagers[owner][token];
-    }
-
-    function lock(address owner, address token, uint value, address rehypothecationManager, bool allowRehypothecation, bool is_borrow) external {
+    function lock(address owner, address token, uint value) external {
 
         ensureCaller();
         
@@ -59,12 +53,6 @@ contract UnderlyingVault is ManagedContract {
         require(token != address(0), "invalid token");
 
         allocation[owner][token] = allocation[owner][token].add(value);
-        if (allowRehypothecation) {
-            if (is_borrow == true) {
-                allocationRehypothecationManagers[owner][token].push(rehypothecationManager);
-                allocationRehypothecatedLent[owner][token][rehypothecationManager].add(value);
-            }
-        }
         emit Lock(owner, token, value);
     }
 
