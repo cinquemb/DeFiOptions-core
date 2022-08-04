@@ -12,6 +12,13 @@ contract CollateralManager is BaseCollateralManager {
     using SafeMath for uint;
     using SignedSafeMath for int;
 
+    struct CollateralData {
+        address udlAddr;
+        address hmngr;
+        bool udlFound;
+        int coll;
+    }
+
     function initialize(Deployer deployer) override internal {
         super.initialize(deployer);
     }
@@ -21,15 +28,14 @@ contract CollateralManager is BaseCollateralManager {
         // multi udl feed refs, need to make core accross all collateral models
         // do not normalize by volumeBase in internal calls for calcCollateralInternal
         
-        int coll;
+
+        CollateralData memory cData;
         (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
 
         address[] memory underlyings = new address[](_tokens.length);
 
         for (uint i = 0; i < _tokens.length; i++) {
-
-            address _tk = _tokens[i];
-            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
+            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
 
             if (is_regular == false) {
                 if (_uncovered[i] > _holding[i]) {
@@ -37,7 +43,7 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            coll = coll.add(
+            cData.coll = cData.coll.add(
                 _iv[i].mul(
                     int(_uncovered[i]).sub(int(_holding[i]))
                 )
@@ -56,30 +62,34 @@ contract CollateralManager is BaseCollateralManager {
                 //GET FEEDBACK ON HOW TO FACTOR IN HEDGE VALUE FOR COLLATERAL
             */
 
-            address hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
-            if (settings.isAllowedHedgingManager(hmngr)) {
-                address udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
-                bool udlFound = foundUnderlying(udlAddr, underlyings);
+            cData.hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
+            if (settings.isAllowedHedgingManager(cData.hmngr)) {
+                cData.udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
+                cData.udlFound = foundUnderlying(cData.udlAddr, underlyings);
 
-                if (udlFound == false) {
-                    int256 hedgeExposure = int256(
-                        IBaseHedgingManager(hmngr).getHedgeExposure(
-                           udlAddr,
-                           owner
-                        )
-                    );
+                if (cData.udlFound == false) {
+                    {
+                        cData.coll = cData.coll.sub(
+                            int256(
+                                MoreMath.abs(
+                                    int256(
+                                        IBaseHedgingManager(cData.hmngr).getHedgeExposure(
+                                           cData.udlAddr,
+                                           owner
+                                        )
+                                    )
+                                )
+                            )
+                        );
+                    }
 
-                    coll = coll.sub(
-                        int256(MoreMath.abs(int256(hedgeExposure)))
-                    );
-
-                    underlyings[i] = udlAddr;
+                    underlyings[i] = cData.udlAddr;
                 }
                 
             }
         }
 
-        return coll;
+        return cData.coll;
     }
 
     function foundUnderlying(address udl, address[] memory udlArray) private view returns (bool){

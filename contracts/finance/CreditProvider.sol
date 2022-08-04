@@ -486,8 +486,6 @@ contract CreditProvider is ManagedContract {
     function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         ensurePrimeCaller();
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
-
-        address[] memory tokens = settings.getAllowedTokens();
        
         // preferred order
         for (uint i = 0; i < tokensInOrder.length && value > 0; i++) {

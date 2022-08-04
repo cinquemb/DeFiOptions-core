@@ -20,6 +20,37 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     bytes32 private referralCode;
 
+    struct ExposureData {
+        IERC20 t;
+
+        int256 diff;
+        int256 real;
+        int256 ideal;
+
+        uint256 r;
+        uint256 b;
+        
+        uint256 pos_size;
+        uint256 diffBal;
+        uint256 balAfter;
+        uint256 balBefore;
+        uint256 udlPrice;
+        uint256 totalStables;
+        uint256 poolLeverage;
+        uint256 totalPosValue;
+        uint256 totalPosValueToTransfer;
+        
+        address routerAddr;
+        address underlying;
+        
+        address[] at;
+        address[] _pathDecLong;
+        address[] allowedTokens;
+        uint256[] tv;
+        uint256[] openPos;
+        
+    }
+
     // TODO: need to use constructor to initalizae
     function initialize(Deployer deployer, address _positionManager, address _reader, bytes32 _referralCode) internal {
         super.initialize(deployer);
@@ -143,86 +174,89 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
     
     function balanceExposure(address udlFeedAddr, address account) override external returns (bool) {
+        ExposureData memory exData;
+        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        exData.ideal = idealHedgeExposure(exData.underlying, account);
+        exData.real = realHedgeExposure(exData.underlying, account);
+        exData.diff = exData.ideal - exData.real;
+        exData.allowedTokens = settings.getAllowedTokens();
+        exData.totalStables = creditProvider.totalTokenStock();
 
-        address underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        int256 ideal = idealHedgeExposure(underlying, account);
-        int256 real = realHedgeExposure(underlying, account);
-        int256 diff = ideal - real;
-        address[] memory allowedTokens = settings.getAllowedTokens();
-        uint totalStables = creditProvider.totalTokenStock();
-
-        uint poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
+        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
 
 
-        require(poolLeverage <= maxLeverage && poolLeverage >= minLeverage, "leverage out of range");
+        require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
 
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
+        exData.udlPrice = uint256(udlPrice);
 
-        if (ideal >= 0) {
-            uint256 pos_size = uint256(MoreMath.abs(diff));
-            if (real > 0) {
+        exData.openPos = getPosSize(exData.underlying, account, true);
+
+        if (exData.ideal >= 0) {
+            exData.pos_size = uint256(MoreMath.abs(exData.diff));
+            if (exData.real > 0) {
                 //need to close long position first
-                uint[] memory openPos = getPosSize(underlying, account, true);
-
                 //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
-                for(uint i=0; i< openPos.length; i++){
-                    (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
-                    IERC20 t = IERC20(allowedTokens[i]);
-                    uint balBefore = t.balanceOf(address(creditProvider));
-                    address[] memory _path = new address[](2);
-                    _path[0] = underlying;
-                    _path[1] = allowedTokens[i];
+                for(uint i=0; i< exData.openPos.length; i++){
+                    exData.t = IERC20(exData.allowedTokens[i]);
+                    exData.balBefore = exData.t.balanceOf(address(creditProvider));
+                    exData._pathDecLong = new address[](2);
+                    exData._pathDecLong[0] = exData.underlying;
+                    exData._pathDecLong[1] = exData.allowedTokens[i];
 
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        _path, //address[] memory _path
-                        underlying,//address _indexToken,
-                        openPos[i],//uint256 _collateralDelta, USD 1e30 mult
-                        openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                        exData._pathDecLong, //address[] memory _path
+                        exData.underlying,//address _indexToken,
+                        exData.openPos[i],//uint256 _collateralDelta, USD 1e30 mult
+                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         true,//bool _isLong,
                         address(creditProvider),//address _receiver,
-                        uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        uint256(Convert.formatValue(openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                        uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
                         referralCode//bytes32 _referralCode
                     );
-                    uint balafter = t.balanceOf(address(creditProvider));
-                    uint diffBal = balafter.sub(balBefore);
+                    exData.balAfter = exData.t.balanceOf(address(creditProvider));
+                    exData.diffBal = exData.balAfter.sub(exData.balBefore);
                     //back to exchange decimals
-                    creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);    
+                    creditProvider.creditPoolBalance(account, exData.allowedTokens[i], exData.diffBal);    
                 }
                 
-                pos_size = uint256(ideal);
+                exData.pos_size = uint256(exData.ideal);
             }
             
             // increase short position by pos_size
-            if (pos_size != 0) {
-                //TODO: need to add function to exchange to transfer stablecoinds to hedging contract, then from hedging contract to metavault
-                uint totalPosValue = pos_size.mul(uint256(udlPrice));
-                uint totalPosValueToTransfer = totalPosValue.div(poolLeverage);
+            if (exData.pos_size != 0) {
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
                 // hedging should fail if not enough stables in exchange
-                if (totalStables.mul(poolLeverage) > totalPosValue) {
-                    for (uint i=0; i< allowedTokens.length; i++) {
+                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
+                    for (uint i=0; i< exData.allowedTokens.length; i++) {
 
-                        if (totalPosValueToTransfer > 0) {
-                            IERC20 t = IERC20(allowedTokens[i]);
-                            address routerAddr = IPositionManager(positionManagerAddr).router();
+                        if (exData.totalPosValueToTransfer > 0) {
+                            exData.t = IERC20(exData.allowedTokens[i]);
+                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
-                            (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
+                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
+                            if (exData.b != 0) {
+                                uint v = MoreMath.min(
+                                    exData.totalPosValueToTransfer, 
+                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
+                                );
 
-                            uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r); //convert to exchange decimals
-                            if (b != 0) {
-                                uint v = MoreMath.min(totalPosValueToTransfer, bal);
-                                if (t.allowance(address(this), address(routerAddr)) > 0) {
-                                    t.safeApprove(address(routerAddr), 0);
+                                //.mul(b).div(r); //convert to exchange decimals
+
+                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
+                                    exData.t.safeApprove(exData.routerAddr, 0);
                                 }
-                                t.safeApprove(address(routerAddr), v.mul(r).div(b));
+                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
-                                address[] memory at = new address[](1);
-                                at[0] = allowedTokens[i];
+                                exData.at = new address[](1);
+                                exData.at[0] = exData.allowedTokens[i];
 
-                                uint[] memory tv = new uint[](1);
-                                tv[0] = v;
+                                exData.tv = new uint[](1);
+                                exData.tv[0] = v;
 
 
                                 ICollateralManager(
@@ -230,124 +264,137 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, at, tv
+                                    address(this), v, exData.at, exData.tv
                                 );
 
-                                v = v.mul(r).div(b);//converts to token decimals
+                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
                                 IPositionManager(positionManagerAddr).increasePosition(
-                                    at,//address[] memory _path,
-                                    underlying,//address _indexToken,
+                                    exData.at,//address[] memory _path,
+                                    exData.underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
                                     0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
+                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
                                     false,// bool _isLong
-                                    uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
+                                    convertPriceAndApplySlippage(exData.udlPrice, false),//uint256 _price, USD 1e30 mult
                                     referralCode//bytes32 _referralCode
                                 );
 
                                 //back to exchange decimals
-                                totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+
+                                exData.r = 0;
+                                exData.b = 0;
                             }                            
                         }
                     }
                 }
             }
-        } else if (ideal < 0) {
-            uint256 pos_size = uint256(MoreMath.abs(diff));
-            if (real < 0) {
+        } else if (exData.ideal < 0) {
+            exData.pos_size = uint256(MoreMath.abs(exData.diff));
+            if (exData.real < 0) {
                 // need to close short position first
-                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
-                
-                uint[] memory openPos = getPosSize(underlying, account, true);
-                
-                for(uint i=0; i< openPos.length; i++){
-
-                    (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
-                    IERC20 t = IERC20(allowedTokens[i]);
-                    uint balBefore = t.balanceOf(address(creditProvider));
+                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)                
+                for(uint i=0; i< exData.openPos.length; i++){
+                    exData.t = IERC20(exData.allowedTokens[i]);
+                    exData.balBefore = exData.t.balanceOf(address(creditProvider));
 
                     IPositionManager(positionManagerAddr).decreasePosition(
-                        allowedTokens[i],//address _collateralToken,
-                        underlying,//address _indexToken,
-                        openPos[i],//uint256 _collateralDelta,
-                        openPos[i],//uint256 _sizeDelta,
+                        exData.allowedTokens[i],//address _collateralToken,
+                        exData.underlying,//address _indexToken,
+                        exData.openPos[i],//uint256 _collateralDelta,
+                        exData.openPos[i],//uint256 _sizeDelta,
                         false,//bool _isLong,
                         address(creditProvider),//address _receiver,
-                        Convert.formatValue(uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), 30, 18),//uint256 _price,
+                        convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
                         referralCode//bytes32 _referralCode
                     );
-                    uint balAfter = t.balanceOf(address(creditProvider));
-                    uint diffBal = balAfter.sub(balBefore);
-                    creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);
+                    exData.balAfter = exData.t.balanceOf(address(creditProvider));
+                    exData.diffBal = exData.balAfter.sub(exData.balBefore);
+                    creditProvider.creditPoolBalance(account, exData.allowedTokens[i], exData.diffBal);
                 }
 
-                pos_size = uint256(MoreMath.abs(ideal));
+                exData.pos_size = uint256(MoreMath.abs(exData.ideal));
             }
 
             // increase long position by pos_size
-            if (pos_size != 0) {
-
-                //TODO: need to add function to exchange to transfer stablecoinds to hedging contract, then from hedging contract to metavault
-                uint totalPosValue = pos_size.mul(uint256(udlPrice));
-                uint totalPosValueToTransfer = totalPosValue.div(poolLeverage);
+            if (exData.pos_size != 0) {
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
                 // hedging should fail if not enough stables in exchange
-                if (totalStables.mul(poolLeverage) > totalPosValue) {
-                    for (uint i=0; i< allowedTokens.length; i++) {
+                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
+                    for (uint i=0; i< exData.allowedTokens.length; i++) {
 
-                        if (totalPosValueToTransfer > 0) {
-                            IERC20 t = IERC20(allowedTokens[i]);
-                            address routerAddr = IPositionManager(positionManagerAddr).router();
+                        if (exData.totalPosValueToTransfer > 0) {
+                            exData.t = IERC20(exData.allowedTokens[i]);
+                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
-                            (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
-                            uint bal = t.balanceOf(address(creditProvider)).mul(b).div(r);
-                            if (b != 0) {
-                                uint v = MoreMath.min(totalPosValueToTransfer, bal);
-                                if (t.allowance(address(this), address(routerAddr)) > 0) {
-                                    t.safeApprove(address(routerAddr), 0);
+                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
+                            if (exData.b != 0) {
+                                uint v = MoreMath.min(
+                                    exData.totalPosValueToTransfer,
+                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
+                                );
+                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
+                                    exData.t.safeApprove(exData.routerAddr, 0);
                                 }
-                                t.safeApprove(address(routerAddr), v.mul(r).div(b));
+                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
-                                address[] memory at = new address[](1);
+                                exData.at = new address[](1);
                                 address[] memory at_s = new address[](2);
-                                at[0] = allowedTokens[i];
+                                exData.at[0] = exData.allowedTokens[i];
                                 
-                                at_s[0] = allowedTokens[i];
-                                at_s[1] = underlying;
+                                at_s[0] = exData.allowedTokens[i];
+                                at_s[1] = exData.underlying;
 
-                                uint[] memory tv = new uint[](1);
-                                tv[0] = v;
+                                exData.tv = new uint[](1);
+                                exData.tv[0] = v;
 
                                 ICollateralManager(
                                     settings.getUdlCollateralManager(
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, at, tv
+                                    address(this), v, exData.at, exData.tv
                                 );
 
-                                v = v.mul(r).div(b);//converts to token decimals
+                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
                                 IPositionManager(positionManagerAddr).increasePosition(
                                     at_s,//address[] memory _path,
-                                    underlying,//address _indexToken,
+                                    exData.underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
-                                    Convert.formatValue(v.div(uint256(udlPrice)).mul(b).div(r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    Convert.formatValue(v.mul(poolLeverage).mul(b).div(r), 30, 18),//uint256 _sizeDelta, USD 1e30 mult
+                                    Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
                                     true,// bool _isLong
-                                    Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice)).mul(5).div(1000), 30, 18),//uint256 _price, USD 1e30 mult
+                                    convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price, USD 1e30 mult
                                     referralCode//bytes32 _referralCode
                                 );
 
                                 //back to exchange decimals
-                                totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+                                exData.r = 0;
+                                exData.b = 0;
                             }                             
                         }
                     }
                 }
             }
         }
-    } 
+    }
+
+    function convertNotitionalValue(uint256 value, uint256 multiplier, uint256 b, uint256 r) pure internal returns (uint256) {
+        return Convert.formatValue(value.mul(multiplier).mul(b).div(r), 30, 18);
+    }
+
+    function convertPriceAndApplySlippage(uint256 value, bool isAdd) pure internal returns (uint256) {
+        if (isAdd) {
+            return uint256(Convert.formatValue(value.add(value.mul(5).div(1000)), 30, 18));
+        } else {
+            return uint256(Convert.formatValue(value.sub(value.mul(5).div(1000)), 30, 18));
+        }
+
+    }
 }
