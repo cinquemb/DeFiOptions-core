@@ -21,7 +21,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     bytes32 private referralCode;
 
     // TODO: need to use constructor to initalizae
-    function initialize(Deployer deployer, address _positionManager, address _reader, address _referralCode) override internal {
+    function initialize(Deployer deployer, address _positionManager, address _reader, bytes32 _referralCode) internal {
         super.initialize(deployer);
         positionManagerAddr = _positionManager;
         readerAddr = _reader;
@@ -35,9 +35,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         bool[] memory _isLong = new bool[](allowedTokens.length);
 
         for (uint i=0; i<allowedTokens.length; i++) {
-            _collateralTokens.push(allowedTokens[i]);
-            _indexTokens.push(underlying);
-            _isLong.push(isLong);
+            _collateralTokens[i] = allowedTokens[i];
+            _indexTokens[i] = underlying;
+            _isLong[i] = isLong;
         }
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
@@ -45,19 +45,19 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             account,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
-            isLong
+            _isLong
         );
 
-        uint[] memory posSize = new address[](allowedTokens.length);
+        uint[] memory posSize = new uint[](allowedTokens.length);
 
         for (uint i=0; i<(allowedTokens.length); i++) {
-            posSize.push(posData[i*9]);
+            posSize[i] = posData[i*9];
         }
 
         return posSize;
     }
 
-    function getHedgeExposure(address underlying, address account) override public view returns (int) {
+    function getHedgeExposure(address underlying, address account) override public view returns (int256) {
         address[] memory allowedTokens = settings.getAllowedTokens();
         address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
         address[] memory _indexTokens = new address[](allowedTokens.length * 2);
@@ -65,14 +65,14 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
-            _collateralTokens.push(allowedTokens[i]);
-            _collateralTokens.push(allowedTokens[i]);
+            _collateralTokens[i] = allowedTokens[i];
+            _collateralTokens[i] = allowedTokens[i];
             
-            _indexTokens.push(underlying);
-            _indexTokens.push(underlying);
+            _indexTokens[i] = underlying;
+            _indexTokens[i] = underlying;
             
-            _isLong.push(true);
-            _isLong.push(false);
+            _isLong[i] = true;
+            _isLong[i] = false;
         }
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
@@ -89,9 +89,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         for (uint i=0; i<(allowedTokens.length*2); i++) {
             if (posData[(i*9)] != 0) {
                 if (_isLong[i] == true) {
-                    totalExposure = totalExposure.add(posData[(i*9)]);
+                    totalExposure = totalExposure.add(int256(posData[(i*9)]));
                 } else {
-                    totalExposure = totalExposure.sub(posData[(i*9)]);
+                    totalExposure = totalExposure.sub(int256(posData[(i*9)]));
                 }
             }
         }
@@ -108,7 +108,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         for (uint i = 0; i < _tokens.length; i++) {
             address _tk = _tokens[i];
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
-            if (exchange.getUnderlyingAddr(opt) == underlying){
+            if (UnderlyingFeed(opt.udlFeed).getUnderlyingAddr() == underlying){
                 int256 delta;
 
                 if (_uncovered[i].sub(_holding[i]) > 0) {
@@ -169,9 +169,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
                     IERC20 t = IERC20(allowedTokens[i]);
                     uint balBefore = t.balanceOf(address(creditProvider));
+                    address[] memory _path = new address[](2);
+                    _path[0] = underlying;
+                    _path[1] = allowedTokens[i];
 
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        [underlying, allowedTokens[i]], //address[] memory _path
+                        _path, //address[] memory _path
                         underlying,//address _indexToken,
                         openPos[i],//uint256 _collateralDelta, USD 1e30 mult
                         openPos[i],//uint256 _sizeDelta, USD 1e30 mult
@@ -215,18 +218,25 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 t.safeApprove(address(routerAddr), v.mul(r).div(b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
+                                address[] memory at = new address[](1);
+                                at[0] = allowedTokens[i];
+
+                                uint[] memory tv = new uint[](1);
+                                tv[0] = v;
+
+
                                 ICollateralManager(
                                     settings.getUdlCollateralManager(
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, [allowedTokens[i]], [v]
+                                    address(this), v, at, tv
                                 );
 
                                 v = v.mul(r).div(b);//converts to token decimals
 
                                 IPositionManager(positionManagerAddr).increasePosition(
-                                    [allowedTokens[i]],//address[] memory _path,
+                                    at,//address[] memory _path,
                                     underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
                                     0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
@@ -257,15 +267,14 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     IERC20 t = IERC20(allowedTokens[i]);
                     uint balBefore = t.balanceOf(address(creditProvider));
 
-                    IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        [underlying, allowedTokens[i]], //address[] memory _path
+                    IPositionManager(positionManagerAddr).decreasePosition(
+                        allowedTokens[i],//address _collateralToken,
                         underlying,//address _indexToken,
-                        openPos[i],//uint256 _collateralDelta, USD 1e30 mult
-                        openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                        openPos[i],//uint256 _collateralDelta,
+                        openPos[i],//uint256 _sizeDelta,
                         false,//bool _isLong,
                         address(creditProvider),//address _receiver,
-                        Convert.formatValue(uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), 30, 18), //use current price of underlying, 5/1000 slippage? is this needed? equals %0.5 sliipage, USD 1e30 mult
-                        openPos[i],//uint256 _minOut, TOKEN DECIMALS
+                        Convert.formatValue(uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), 30, 18),//uint256 _price,
                         referralCode//bytes32 _referralCode
                     );
                     uint balAfter = t.balanceOf(address(creditProvider));
@@ -301,24 +310,34 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 t.safeApprove(address(routerAddr), v.mul(r).div(b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
+                                address[] memory at = new address[](1);
+                                address[] memory at_s = new address[](2);
+                                at[0] = allowedTokens[i];
+                                
+                                at_s[0] = allowedTokens[i];
+                                at_s[1] = underlying;
+
+                                uint[] memory tv = new uint[](1);
+                                tv[0] = v;
+
                                 ICollateralManager(
                                     settings.getUdlCollateralManager(
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, [allowedTokens[i]], [v]
+                                    address(this), v, at, tv
                                 );
 
                                 v = v.mul(r).div(b);//converts to token decimals
 
                                 IPositionManager(positionManagerAddr).increasePosition(
-                                    [allowedTokens[i], underlying],//address[] memory _path,
+                                    at_s,//address[] memory _path,
                                     underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
-                                    uint256(Convert.formatValue(v.div(uint256(udlPrice.mul(r).div(b))), 30, 18)),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
+                                    Convert.formatValue(v.div(uint256(udlPrice)).mul(b).div(r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    Convert.formatValue(v.mul(poolLeverage).mul(b).div(r), 30, 18),//uint256 _sizeDelta, USD 1e30 mult
                                     true,// bool _isLong
-                                    uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
+                                    Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice)).mul(5).div(1000), 30, 18),//uint256 _price, USD 1e30 mult
                                     referralCode//bytes32 _referralCode
                                 );
 

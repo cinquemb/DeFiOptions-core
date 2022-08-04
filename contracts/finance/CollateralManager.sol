@@ -58,21 +58,22 @@ contract CollateralManager is BaseCollateralManager {
 
             address hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
             if (settings.isAllowedHedgingManager(hmngr)) {
-                address udlAddr = exchange.getUnderlyingAddr(opt);
+                address udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
                 bool udlFound = foundUnderlying(udlAddr, underlyings);
 
                 if (udlFound == false) {
                     int256 hedgeExposure = int256(
                         IBaseHedgingManager(hmngr).getHedgeExposure(
-                            exchange.getUnderlyingAddr(opt)
+                           udlAddr,
+                           owner
                         )
                     );
 
                     coll = coll.sub(
-                        MoreMath.abs(hedgeExposure)
+                        int256(MoreMath.abs(int256(hedgeExposure)))
                     );
 
-                    underlyings.push(udlAddr);
+                    underlyings[i] = udlAddr;
                 }
                 
             }
@@ -126,8 +127,8 @@ contract CollateralManager is BaseCollateralManager {
 
         // using exchange 90 day window
         uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod());
-        uint256 price_div_strike = exchange.getUdlPrice(opt).div(opt.strike);
-        uint256 dt = opt.maturity.sub(settings.exchangeTime());
+        uint256 price_div_strike = uint256(exchange.getUdlPrice(opt).div(opt.strike));
+        uint256 dt = uint256(opt.maturity).sub(settings.exchangeTime());
 
 
         //18 decimals to 128 decimals
@@ -138,7 +139,7 @@ contract CollateralManager is BaseCollateralManager {
 
 
         int256 d1 = ln_price_div_strike.add(
-            ((sigma.pow(2)).div(2)).mul(dt)
+            int256(((MoreMath.pow(sigma, 2)).div(2)).mul(dt))
         ).div(
             int256(sigma.mul(MoreMath.sqrt(dt)))
         );
@@ -153,7 +154,7 @@ contract CollateralManager is BaseCollateralManager {
             delta = MoreMath.cumulativeDistributionFunction(d1);
         }
 
-        return delta.mul(100).mul(volume);
+        return delta.mul(100).mul(int256(volume));
     }
 
     function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {

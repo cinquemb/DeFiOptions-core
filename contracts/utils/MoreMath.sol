@@ -10,27 +10,27 @@ library MoreMath {
 
 
     //see: https://ethereum.stackexchange.com/questions/8086/logarithm-math-operation-in-solidity
-    /**
-     * 2^127.
+    /*
+     // 2^127.
      */
     uint128 private constant TWO127 = 0x80000000000000000000000000000000;
 
-    /**
-     * 2^128 - 1.
+    /*
+     // 2^128 - 1.
      */
     uint128 private constant TWO128_1 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-    /**
-     * ln(2) * 2^128.
+    /*
+     // ln(2) * 2^128.
      */
     uint128 private constant LN2 = 0xb17217f7d1cf79abc9e3b39803f2f6af;
 
-    /**
-     * Return index of most significant non-zero bit in given non-zero 256-bit
-     * unsigned integer value.
-     *
-     * @param x value to get index of most significant non-zero bit in
-     * @return index of most significant non-zero bit in given number
+    /*
+     // Return index of most significant non-zero bit in given non-zero 256-bit
+     // unsigned integer value.
+     
+     // @param x value to get index of most significant non-zero bit in
+     // @return index of most significant non-zero bit in given number
      */
     function mostSignificantBit (uint256 x) pure internal returns (uint8 r) {
       // for high-precision ln(x) implementation for 128.128 fixed point numbers
@@ -131,7 +131,7 @@ library MoreMath {
         int256 two = 2e18;//ABDKMath64x64.fromUInt(2);
         int256 a3 = 1421413741e9;//0x16a09e667f3bcc908;
         int256 z = x.div(a3);
-        int256 t = one.div(one.add(p.mul(z.abs())));
+        int256 t = one.div(one.add(p.mul(int256(abs(z)))));
         int256 erf = getErrorFunction(z, t);
         if (z < 0) {
             erf = one.sub(erf);
@@ -162,7 +162,7 @@ library MoreMath {
             result = one.sub(
                 t.mul(
                     step2.mul(
-                        int256(optimalExp(one.sub((z).pow(2))))
+                        int256(optimalExp(pow(uint256(one.sub((z))), 2)))
                     )
                 )
             );

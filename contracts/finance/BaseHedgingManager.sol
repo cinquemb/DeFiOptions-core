@@ -27,8 +27,9 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function getHedgeExposure(address underlying, address account) override public view returns (uint);
-    function idealHedgeExposure(address underlying, address account) override public view returns (uint);
-    function realHedgeExposure(address udlFeedAddr, address account) override public view returns (uint);
-    function balanceExposure(address underlying, address account) override public returns (bool);
+    function getPosSize(address underlying, address account, bool isLong) virtual override public view returns (uint[] memory);
+    function getHedgeExposure(address underlying, address account) virtual override public view returns (int256);
+    function idealHedgeExposure(address underlying, address account) virtual override public view returns (int256);
+    function realHedgeExposure(address udlFeedAddr, address account) virtual override public view returns (int256);
+    function balanceExposure(address underlying, address account) virtual override external returns (bool);
 }

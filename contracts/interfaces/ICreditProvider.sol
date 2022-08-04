@@ -15,6 +15,7 @@ interface ICreditProvider {
     function insertPoolCaller(address llp) external;
     function processIncentivizationPayment(address to, uint credit) external;
     function borrowBuyLiquidity(address to, uint credit, address option) external;
+    function borrowSellLiquidity(address to, uint credit, address option) external;
     function issueCredit(address to, uint value) external;
     function processEarlyLpWithdrawal(address to, uint credit) external;
     function nullOptionBorrowBalance(address option, address pool) external;

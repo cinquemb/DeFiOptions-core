@@ -102,7 +102,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
         _hedgingManagerAddress = _hmngr;
     }
 
-    function getHedgingManager() override public view returns (address) {
+    function getHedgingManager() public view returns (address){
         return _hedgingManagerAddress;
     }
 

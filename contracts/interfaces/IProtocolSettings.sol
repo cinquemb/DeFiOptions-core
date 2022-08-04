@@ -24,5 +24,7 @@ interface IProtocolSettings {
     function getBaseIncentivisation() external view returns (uint);
     function getProcessingFee() external view returns (uint v, uint b);
     function getMinShareForProposal() external view returns (uint v, uint b);
+    function isAllowedHedgingManager(address hedgeMngr) external view returns (bool);
+    function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool);
     function exchangeTime() external view returns (uint256);
 }
