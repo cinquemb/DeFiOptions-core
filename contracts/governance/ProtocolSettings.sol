@@ -445,7 +445,7 @@ contract ProtocolSettings is ManagedContract {
         poolSellCreditTradeable[poolAddress] = isTradable;
     }
 
-    function checkPoolBuyCreditTradable(address poolAddress) external view returns (bool) {
+    function checkPoolSellCreditTradable(address poolAddress) external view returns (bool) {
         return poolSellCreditTradeable[poolAddress];
     }
 

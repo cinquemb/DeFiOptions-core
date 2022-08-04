@@ -268,7 +268,7 @@ contract CreditProvider is ManagedContract {
 
         if (value > 0) {
 
-            if (balances[owner] == 0) {
+            if (balances[to] == 0) {
                 _totalOwners = _totalOwners.add(1);
             }
 
@@ -276,14 +276,14 @@ contract CreditProvider is ManagedContract {
             require(r != 0 && token != address(creditToken), "token not allowed");
             value = value.mul(b).div(r);
 
-            balances[owner] = balances[owner].add(value);
+            balances[to] = balances[to].add(value);
             _totalBalance = _totalBalance.add(value);
         }
     }
 
-    funtion debitPoolBalance(address from, address token, uint value) internal {
+    function debitPoolBalance(address from, address token, uint value) internal {
         ensurePrimeCaller();
-        
+
         require(
             settings.isAllowedHedgingManager(IGovernableLiquidityPool(from).getHedgingManager()) == true, 
             "pool hedge manager not allowed"
@@ -483,7 +483,7 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function borrowTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) external {
+    function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         ensurePrimeCaller();
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
 

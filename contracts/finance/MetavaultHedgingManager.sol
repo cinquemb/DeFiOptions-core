@@ -9,6 +9,7 @@ import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../utils/Convert.sol";
 
 contract MetavaultHedgingManager is BaseHedgingManager {
     address public positionManagerAddr;
@@ -24,7 +25,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         super.initialize(deployer);
         positionManagerAddr = _positionManager;
         readerAddr = _reader;
-        referralCode = referralCode;
+        referralCode = _referralCode;
     }
 
     function getPosSize(address underlying, address account, bool isLong) override public view returns (uint[] memory) {
@@ -39,7 +40,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong.push(isLong);
         }
 
-        uint256[] memory posData = IReader(reader).getPositions(
+        uint256[] memory posData = IReader(readerAddr).getPositions(
             IPositionManager(positionManagerAddr).vault(),
             account,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
@@ -74,7 +75,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong.push(false);
         }
 
-        uint256[] memory posData = IReader(reader).getPositions(
+        uint256[] memory posData = IReader(readerAddr).getPositions(
             IPositionManager(positionManagerAddr).vault(),
             account,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
@@ -82,30 +83,20 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong
         );
 
-        /*
-            posData[i * POSITION_PROPS_LENGTH] = size;
-            posData[i * POSITION_PROPS_LENGTH + 1] = collateral;
-            posData[i * POSITION_PROPS_LENGTH + 2] = averagePrice;
-            posData[i * POSITION_PROPS_LENGTH + 3] = entryFundingRate;
-            posData[i * POSITION_PROPS_LENGTH + 4] = hasRealisedProfit ? 1 : 0;
-            posData[i * POSITION_PROPS_LENGTH + 5] = realisedPnl;
-            posData[i * POSITION_PROPS_LENGTH + 6] = lastIncreasedTime;
-            posData[i * POSITION_PROPS_LENGTH + 7] = hasProfit ? 1 : 0;
-            posData[i * POSITION_PROPS_LENGTH + 8] = delta;
-        /*
+        //https://docs.metavault.trade/contracts#positions-list
 
         int256 totalExposure = 0;
         for (uint i=0; i<(allowedTokens.length*2); i++) {
             if (posData[(i*9)] != 0) {
                 if (_isLong[i] == true) {
-                    totalExposure = totalExposure.add(posData[(i*9)])
+                    totalExposure = totalExposure.add(posData[(i*9)]);
                 } else {
-                    totalExposure = totalExposure.sub(posData[(i*9)])
+                    totalExposure = totalExposure.sub(posData[(i*9)]);
                 }
             }
         }
 
-        return Convert.formatValue(totalExposure, 18, 30));
+        return Convert.formatValue(totalExposure, 18, 30);
     }
     
 
@@ -126,7 +117,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         settings.getUdlCollateralManager(opt.udlFeed)
                     ).calcDelta(
                         opt,
-                        _uncovered[i].sub(_holding[i]),
+                        _uncovered[i].sub(_holding[i])
                     ).mul(-1);
                 } else {
                     // net long thus does not need to be modified
@@ -134,7 +125,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         settings.getUdlCollateralManager(opt.udlFeed)
                     ).calcDelta(
                         opt,
-                        _holding[i],
+                        _holding[i]
                     );
                 }
 
@@ -152,30 +143,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
     
     function balanceExposure(address udlFeedAddr, address account) override external returns (bool) {
-        //options trades should trigger this
-
-            /*
-                USD values for _sizeDelta and _price are multiplied by (10 ** 30), so for example to open a long position of size 1000 USD, the value 1000 * (10 ** 30) should be used 
-
-                need to convert from 10 ** 18 and back when appropriate
-
-                //how to deal with buying againt someone who is providing covered call collateral in the exchange (pool will be long calls and needs to short)?
-                    - first check for avaialble stable coins (this needs to be done by default for both long/short)
-                        - located at the credit provider addr
-                        - credit provider addr needs to approve proper metvault addr
-
-                    -if no stablecoins, then use avaiable underlying asset? or only allow stablecoin covered volume for pools?
-                        - located at the vault addr
-                        - vault addr needs to approve the prover metavault addr
-                            - no swap required for longs
-
-                - _path allows swapping to the collateralToken if needed 
-                - For longs, the collateralToken must be the same as the indexToken 
-                - For shorts, the collateralToken can be any stablecoin token 
-                - _minOut can be zero if no swap is required 
-
-                //GET FEEDBACK ON LEVERAGE
-            */
 
         address underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
         int256 ideal = idealHedgeExposure(underlying, account);
@@ -187,25 +154,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         uint poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
 
 
-        requre(poolLeverage <= maxLeverage && poolLeverage >= minLeverage, "leverage out of range");
-
-        /*
-            - FOR increasePosition
-            - _sizeDelta is 0 for adding collateral with non zero _amountIn
-            - pool needs to have permision to sends funds from their exchange balance to perp protocol
-        */
-
-        /*
-            FOR decreasePositionAndSwap
-            - set _collateralDelta to the amount the exchagne wants to withdraw from perp protocol
-            - _receiver address needs to be withdrawn to the credit provider address in the acceabtle stablecoins
-                - liquidty pool needs to be credited with the amount recieved
-        */
+        require(poolLeverage <= maxLeverage && poolLeverage >= minLeverage, "leverage out of range");
 
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
 
         if (ideal >= 0) {
-            uint256 pos_size = uint256(abs(diff));
+            uint256 pos_size = uint256(MoreMath.abs(diff));
             if (real > 0) {
                 //need to close long position first
                 uint[] memory openPos = getPosSize(underlying, account, true);
@@ -223,9 +177,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         true,//bool _isLong,
                         address(creditProvider),//address _receiver,
-                        uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18), _price//use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                        uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
                         uint256(Convert.formatValue(openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                        _referralCode//bytes32 _referralCode
+                        referralCode//bytes32 _referralCode
                     );
                     uint balafter = t.balanceOf(address(creditProvider));
                     uint diffBal = balafter.sub(balBefore);
@@ -267,33 +221,36 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     )
                                 ).borrowTokensByPreference(
                                     address(this), v, [allowedTokens[i]], [v]
-                                )
-                            }
+                                );
 
-                            v = v.mul(r).div(b);//converts to token decimals
+                                v = v.mul(r).div(b);//converts to token decimals
 
-                            IPositionManager(positionManagerAddr).increasePosition(
-                                [allowedTokens[i]],//address[] memory _path,
-                                underlying,//address _indexToken,
-                                v,//uint256 _amountIn, TOKEN DECIMALS
-                                0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
-                                false,// bool _isLong
-                                uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
-                                referralCode//bytes32 _referralCode
-                            );
+                                IPositionManager(positionManagerAddr).increasePosition(
+                                    [allowedTokens[i]],//address[] memory _path,
+                                    underlying,//address _indexToken,
+                                    v,//uint256 _amountIn, TOKEN DECIMALS
+                                    0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
+                                    false,// bool _isLong
+                                    uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
+                                    referralCode//bytes32 _referralCode
+                                );
 
-                            //back to exchange decimals
-                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                                //back to exchange decimals
+                                totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                            }                            
                         }
                     }
                 }
             }
         } else if (ideal < 0) {
-            uint256 pos_size = uint256(abs(diff));
+            uint256 pos_size = uint256(MoreMath.abs(diff));
             if (real < 0) {
                 // need to close short position first
-                //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+                
+                uint[] memory openPos = getPosSize(underlying, account, true);
+                
                 for(uint i=0; i< openPos.length; i++){
 
                     (uint r, uint b) = settings.getTokenRate(allowedTokens[i]);
@@ -306,7 +263,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         openPos[i],//uint256 _collateralDelta, USD 1e30 mult
                         openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         false,//bool _isLong,
-                        address(creditProvider,//address _receiver,
+                        address(creditProvider),//address _receiver,
                         Convert.formatValue(uint256(udlPrice).sub(uint256(udlPrice).mul(5).div(1000)), 30, 18), //use current price of underlying, 5/1000 slippage? is this needed? equals %0.5 sliipage, USD 1e30 mult
                         openPos[i],//uint256 _minOut, TOKEN DECIMALS
                         referralCode//bytes32 _referralCode
@@ -316,7 +273,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     creditProvider.creditPoolBalance(account, allowedTokens[i], diffBal);
                 }
 
-                pos_size = uint256(abs(ideal));
+                pos_size = uint256(MoreMath.abs(ideal));
             }
 
             // increase long position by pos_size
@@ -350,24 +307,24 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     )
                                 ).borrowTokensByPreference(
                                     address(this), v, [allowedTokens[i]], [v]
-                                )
-                            }
+                                );
 
-                             v = v.mul(r).div(b);//converts to token decimals
+                                v = v.mul(r).div(b);//converts to token decimals
 
-                            IPositionManager(positionManagerAddr).increasePosition(
-                                [allowedTokens[i], underlying],//address[] memory _path,
-                                underlying,//address _indexToken,
-                                v,//uint256 _amountIn, TOKEN DECIMALS
-                                uint256(Convert.formatValue(v.div(uint256(udlPrice.mul(r).div(b))), 30, 18)),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
-                                true,// bool _isLong
-                                uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
-                                referralCode//bytes32 _referralCode
-                            );
+                                IPositionManager(positionManagerAddr).increasePosition(
+                                    [allowedTokens[i], underlying],//address[] memory _path,
+                                    underlying,//address _indexToken,
+                                    v,//uint256 _amountIn, TOKEN DECIMALS
+                                    uint256(Convert.formatValue(v.div(uint256(udlPrice.mul(r).div(b))), 30, 18)),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    uint256(Convert.formatValue(v.mul(poolLeverage).mul(r).div(b), 30, 18)),//uint256 _sizeDelta, USD 1e30 mult
+                                    true,// bool _isLong
+                                    uint256(Convert.formatValue(uint256(udlPrice).add(uint256(udlPrice).mul(5).div(1000)), 30, 18)),//uint256 _price, USD 1e30 mult
+                                    referralCode//bytes32 _referralCode
+                                );
 
-                            //back to exchange decimals
-                            totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                                //back to exchange decimals
+                                totalPosValueToTransfer = totalPosValueToTransfer.sub(v.mul(r).div(b));
+                            }                             
                         }
                     }
                 }

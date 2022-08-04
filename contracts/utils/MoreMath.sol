@@ -170,7 +170,7 @@ library MoreMath {
         return result;
     }
 
-    /**
+    /*
       * @dev computes e ^ (x / FIXED_1) * FIXED_1
       * input range: 0 <= x <= OPT_EXP_MAX_VAL - 1
       * auto-generated via 'PrintFunctionOptimalExp.py'
@@ -184,7 +184,7 @@ library MoreMath {
     */
     
     function optimalExp(uint256 x) internal pure returns (uint256) {
-        uint256 constant FIXED_1 = 0x080000000000000000000000000000000;
+        uint256 FIXED_1 = 0x080000000000000000000000000000000;
         uint256 res = 0;
 
         uint256 y;

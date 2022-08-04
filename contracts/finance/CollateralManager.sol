@@ -24,7 +24,7 @@ contract CollateralManager is BaseCollateralManager {
         int coll;
         (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
 
-        address[] underlyings = new address[](tokens.length);
+        address[] memory underlyings = new address[](_tokens.length);
 
         for (uint i = 0; i < _tokens.length; i++) {
 
@@ -81,7 +81,7 @@ contract CollateralManager is BaseCollateralManager {
         return coll;
     }
 
-    function foundUnderlying(address udl, address[] udlArray) private view returns (bool){
+    function foundUnderlying(address udl, address[] memory udlArray) private view returns (bool){
         for (uint i; i < udlArray.length; i++) {
             if (udlArray[i] == udl) {
                 return true;
@@ -116,16 +116,16 @@ contract CollateralManager is BaseCollateralManager {
     function calcDelta(
         IOptionsExchange.OptionData calldata opt,
         uint volume
-    ) override external view returns (int256){
+    ) external view returns (int256){
         /* 
             - rfr == 0% assumption
             - (1 / (sigma * sqrt(T - t))) * (ln(S/k) + (((sigma**2) / 2) * ((T-t)))) == d1
-                - underlying price S {\displaystyle S\,} S \, ,
-                - strike price K {\displaystyle K\,} K \, ,
+                - underlying price S
+                - strike price K
         */
 
         // using exchange 90 day window
-        uint256 sigma = feed.getDailyVolatility(settings.getVolatilityPeriod());
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod());
         uint256 price_div_strike = exchange.getUdlPrice(opt).div(opt.strike);
         uint256 dt = opt.maturity.sub(settings.exchangeTime());
 
@@ -141,7 +141,7 @@ contract CollateralManager is BaseCollateralManager {
             ((sigma.pow(2)).div(2)).mul(dt)
         ).div(
             int256(sigma.mul(MoreMath.sqrt(dt)))
-        )
+        );
         int256 delta;
 
         if (opt._type == IOptionsExchange.OptionType.PUT) {
@@ -153,10 +153,10 @@ contract CollateralManager is BaseCollateralManager {
             delta = MoreMath.cumulativeDistributionFunction(d1);
         }
 
-        returns delta.mul(100).mul(volume);
+        return delta.mul(100).mul(volume);
     }
 
-    function borrowTokensByPreference(address to, uint value, address[] memory tokensInOrder, uint[] memory amountsOutInOrder) external {
-        creditProvider.borrowTokensByPreference(to, value, tokensInOrder, amountsOutInOrder) external
+    function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        creditProvider.borrowTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
     }
 }

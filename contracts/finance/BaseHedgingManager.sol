@@ -5,6 +5,11 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IBaseHedgingManager.sol";
+import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IOptionsExchange.sol";
+import "../utils/MoreMath.sol";
+import "../utils/SafeERC20.sol";
+import "../utils/SafeCast.sol";
 
 abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
 	using SafeERC20 for IERC20;
@@ -12,8 +17,8 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
     using SafeMath for uint;
     using SignedSafeMath for int;
 
-    IProtocolSettings private settings;
-    ICreditProvider private creditProvider;
+    IProtocolSettings internal settings;
+    ICreditProvider internal creditProvider;
     IOptionsExchange internal exchange;
 
     function initialize(Deployer deployer) virtual override internal {
@@ -22,8 +27,8 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function getHedgeExposure(address underlying, address account) virtual internal view returns (uint);
-    function idealHedgeExposure(address underlying, address account) virtual internal view returns (uint);
-    function realHedgeExposure(address udlFeedAddr, address account) virtual internal view returns (uint);
-    function balanceExposure(address underlying, address account) virtual internal returns (bool);
+    function getHedgeExposure(address underlying, address account) override public view returns (uint);
+    function idealHedgeExposure(address underlying, address account) override public view returns (uint);
+    function realHedgeExposure(address udlFeedAddr, address account) override public view returns (uint);
+    function balanceExposure(address underlying, address account) override public returns (bool);
 }

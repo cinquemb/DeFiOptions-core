@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.6.12 <0.9.0;
+pragma solidity >=0.6.0;
 
 interface IPositionManagerClient {
     function increasePosition(
-        address[] memory _path,
+        address[] calldata _path,
         address _indexToken,
         uint256 _amountIn,
         uint256 _minOut,
@@ -15,7 +15,7 @@ interface IPositionManagerClient {
     ) external;
 
     function increasePositionETH(
-        address[] memory _path,
+        address[] calldata _path,
         address _indexToken,
         uint256 _minOut,
         uint256 _sizeDelta,
@@ -45,7 +45,7 @@ interface IPositionManagerClient {
     ) external;
 
     function decreasePositionAndSwap(
-        address[] memory _path,
+        address[] calldata _path,
         address _indexToken,
         uint256 _collateralDelta,
         uint256 _sizeDelta,
@@ -56,7 +56,7 @@ interface IPositionManagerClient {
     ) external;
 
     function decreasePositionAndSwapETH(
-        address[] memory _path,
+        address[] calldata _path,
         address _indexToken,
         uint256 _collateralDelta,
         uint256 _sizeDelta,

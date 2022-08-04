@@ -477,6 +477,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     }
     
     function calcIntrinsicValue(address _tk) external view returns (int) {
+        IOptionsExchange.OptionData memory opt = options[_tk];
         return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(options[_tk]);
     }
 

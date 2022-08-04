@@ -23,8 +23,8 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     using Decimal for Decimal.D256;
     
     IUnderlyingVault private vault;
-    IProtocolSettings private settings;
-    ICreditProvider private creditProvider;
+    IProtocolSettings internal settings;
+    ICreditProvider internal creditProvider;
     IOptionsExchange internal exchange;
 
     uint private timeBase;
