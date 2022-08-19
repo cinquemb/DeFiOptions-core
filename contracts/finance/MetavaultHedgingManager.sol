@@ -51,8 +51,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         
     }
 
-    // TODO: need to use constructor to initalizae
-    function initialize(Deployer deployer, address _positionManager, address _reader, bytes32 _referralCode) internal {
+    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode) public {
+        Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         positionManagerAddr = _positionManager;
         readerAddr = _reader;
