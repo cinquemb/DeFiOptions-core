@@ -89,6 +89,12 @@ contract CreditToken is ManagedContract, ERC20 {
         }
     }
 
+    function swapForExchangeBalance(uint value) external {
+        creditProvider.addBalance(value);
+        removeBalance(msg.sender, value);
+        emitTransfer(msg.sender, address(0), value);
+    }
+
     function addBalance(address owner, uint value) override internal {
 
         updateBalance(owner);

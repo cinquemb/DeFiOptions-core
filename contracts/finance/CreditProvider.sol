@@ -115,6 +115,11 @@ contract CreditProvider is ManagedContract {
         addBalance(to, token, value, false);
     }
 
+    function addBalance(uint value) external {
+        require(creditToken.balanceOf(msg.sender) >= value, "not enought redeemable debt");
+        addBalance(msg.sender, value);
+    }
+
     function transferBalance(address from, address to, uint value) external {
         ensurePrimeCaller();
         transferBalanceInternal(from, to, value);
