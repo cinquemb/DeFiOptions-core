@@ -104,7 +104,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
     function calcExpectedPayout(address owner) override external view returns (int payout) {
         // multi udl feed refs, need to make core accross all collateral models
-        (,address[] memory _tokens, uint[] memory _holding, uint[] memory _written,, int[] memory _iv) = exchange.getBook(owner);
+        (,address[] memory _tokens, uint[] memory _holding, uint[] memory _written,, int[] memory _iv,) = exchange.getBook(owner);
 
         for (uint i = 0; i < _tokens.length; i++) {
             int price = exchange.queryPoolPrice(owner, IOptionToken(_tokens[i]).name());

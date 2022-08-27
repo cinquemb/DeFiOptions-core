@@ -22,7 +22,7 @@ interface IOptionsExchange {
     function resolveToken(string calldata symbol) external view returns (address);
     function getExchangeFeeds(address udlFeed) external view returns (FeedData memory);
     function getFeedData(address udlFeed) external view returns (FeedData memory fd);
-    function getBook(address owner) external view returns (string memory symbols, address[] memory tokens, uint[] memory holding, uint[] memory written, uint[] memory uncovered, int[] memory iv);
+    function getBook(address owner) external view returns (string memory symbols, address[] memory tokens, uint[] memory holding, uint[] memory written, uint[] memory uncovered, int[] memory iv, address[] memory underlying);
     function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory);
     function calcExpectedPayout(address owner) external view returns (int payout);
     function calcIntrinsicValue(address udlFeed, OptionType optType, uint strike, uint maturity) external view returns (int);

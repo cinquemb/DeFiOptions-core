@@ -16,7 +16,14 @@ contract CollateralManager is BaseCollateralManager {
         address udlAddr;
         address hmngr;
         bool udlFound;
+        int udlFoundIdx;
         int coll;
+        int totalDelta;
+        int hedgedDelta;
+        uint totalAbsDelta;
+        address[] underlyings;
+        uint[] posDeltaNum;
+        uint[] posDeltaDenom;
     }
 
     function initialize(Deployer deployer) override internal {
@@ -30,9 +37,76 @@ contract CollateralManager is BaseCollateralManager {
         
 
         CollateralData memory cData;
-        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv) = exchange.getBook(owner);
+        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered, int[] memory _iv, address[] memory _underlying) = exchange.getBook(owner);
 
-        address[] memory underlyings = new address[](_tokens.length);
+        cData.underlyings = new address[](_tokens.length);
+        cData.posDeltaNum = new uint[](_tokens.length);
+        cData.posDeltaDenom = new uint[](_tokens.length);
+        cData.hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
+
+        
+        //for each underlying calculate the delta of their sub portfolio
+        for (uint i = 0; i < _underlying.length; i++) {
+            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
+
+            cData.udlAddr = _underlying[i];
+            (cData.udlFound, cData.udlFoundIdx) = foundUnderlying(cData.udlAddr, cData.underlyings);
+            if (cData.udlFound == false) {
+                cData.totalDelta = 0;
+                cData.hedgedDelta = 0;
+                cData.totalAbsDelta = 0;
+
+                if (settings.isAllowedHedgingManager(cData.hmngr)) {
+                     cData.hedgedDelta = int256(
+                        IBaseHedgingManager(cData.hmngr).realHedgeExposure(
+                           cData.udlAddr,
+                           owner
+                        )
+                    );
+                }
+                
+                for (uint j = 0; j < _tokens.length; j++) {
+                    if (_underlying[j] == cData.udlAddr){
+                        int256 delta;
+                        uint256 absDelta;
+
+                        if (_uncovered[j].sub(_holding[j]) > 0) {
+                            // net short this option, thus mult by -1
+                            delta = calcDelta(
+                                opt,
+                                _uncovered[j].sub(_holding[j])
+                            ).mul(-1);
+                            absDelta = MoreMath.abs(delta);
+                        } else {
+                            // net long thus does not need to be modified
+                            delta = calcDelta(
+                                opt,
+                                _holding[j]
+                            );
+                            absDelta = MoreMath.abs(delta);
+                        }
+                        
+                        cData.totalDelta = cData.totalDelta.add(delta);
+                        cData.totalAbsDelta = cData.totalAbsDelta.add(absDelta);
+                    }
+                }
+
+                cData.underlyings[i] = cData.udlAddr;
+                cData.posDeltaNum[i] = MoreMath.abs(cData.totalDelta.sub(cData.hedgedDelta));
+                cData.posDeltaDenom[i] = cData.totalAbsDelta;
+
+                cData.totalDelta = 0;
+                cData.hedgedDelta = 0;
+                cData.totalAbsDelta = 0;
+
+                cData.udlFound = true;
+            } else {
+                // copy preexisting
+                cData.underlyings[i] = cData.underlyings[uint(cData.udlFoundIdx)];
+                cData.posDeltaNum[i] = cData.posDeltaNum[uint(cData.udlFoundIdx)];
+                cData.posDeltaDenom[i] = cData.posDeltaDenom[uint(cData.udlFoundIdx)];
+            }
+        }
 
         for (uint i = 0; i < _tokens.length; i++) {
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
@@ -53,53 +127,22 @@ contract CollateralManager is BaseCollateralManager {
                         exchange.getExchangeFeeds(opt.udlFeed).upperVol,
                         _uncovered[i],
                         opt
-                    )
+                    ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
                 )
             );
-
-            /*
-                subtract off current exposure of position's underlying in dollars
-                //GET FEEDBACK ON HOW TO FACTOR IN HEDGE VALUE FOR COLLATERAL
-            */
-
-            cData.hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
-            if (settings.isAllowedHedgingManager(cData.hmngr)) {
-                cData.udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
-                cData.udlFound = foundUnderlying(cData.udlAddr, underlyings);
-
-                if (cData.udlFound == false) {
-                    {
-                        cData.coll = cData.coll.sub(
-                            int256(
-                                MoreMath.abs(
-                                    int256(
-                                        IBaseHedgingManager(cData.hmngr).getHedgeExposure(
-                                           cData.udlAddr,
-                                           owner
-                                        )
-                                    )
-                                )
-                            )
-                        );
-                    }
-
-                    underlyings[i] = cData.udlAddr;
-                }
-                
-            }
         }
 
         return cData.coll;
     }
 
-    function foundUnderlying(address udl, address[] memory udlArray) private view returns (bool){
+    function foundUnderlying(address udl, address[] memory udlArray) private view returns (bool, int){
         for (uint i; i < udlArray.length; i++) {
             if (udlArray[i] == udl) {
-                return true;
+                return (true, int(i));
             }
         }
 
-        return false;
+        return (false, -1);
     }
 
     function calcCollateral(
@@ -125,9 +168,9 @@ contract CollateralManager is BaseCollateralManager {
     }
 
     function calcDelta(
-        IOptionsExchange.OptionData calldata opt,
+        IOptionsExchange.OptionData memory opt,
         uint volume
-    ) external view returns (int256){
+    ) public view returns (int256){
         /* 
             - rfr == 0% assumption
             - (1 / (sigma * sqrt(T - t))) * (ln(S/k) + (((sigma**2) / 2) * ((T-t)))) == d1

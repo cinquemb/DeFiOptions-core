@@ -66,7 +66,7 @@ contract Proxy {
         require(msg.sender == owner && locked != 2);
         address oldImplementation = implementation;
         implementation = _implementation;
-        emit ImplementationUpdated(oldImplementation, implementation);
+        emit ImplementationUpdated(oldImplementation, _implementation);
     }
 
     function delegate(address _implementation) internal {

@@ -530,7 +530,8 @@ contract OptionsExchange is ERC20, ManagedContract {
             uint[] memory holding,
             uint[] memory written,
             uint[] memory uncovered,
-            int[] memory iv
+            int[] memory iv,
+            address[] memory underlying
         )
     {
         tokens = book[owner];
@@ -538,6 +539,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         written = new uint[](tokens.length);
         uncovered = new uint[](tokens.length);
         iv = new int[](tokens.length);
+        underlying = new address[](tokens.length);
 
         for (uint i = 0; i < tokens.length; i++) {
             OptionToken tk = OptionToken(tokens[i]);
@@ -551,6 +553,8 @@ contract OptionsExchange is ERC20, ManagedContract {
             written[i] = tk.writtenVolume(owner);
             uncovered[i] = tk.uncoveredVolume(owner);
             iv[i] = IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
+            underlying[i] = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
+
         }
     }
 

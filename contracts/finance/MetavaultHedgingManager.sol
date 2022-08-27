@@ -133,13 +133,13 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     function idealHedgeExposure(address underlying, address account) override public view returns (int256) {
         // look at order book for account and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the account is on)
-        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,) = exchange.getBook(account);
+        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,, address[] memory _underlying) = exchange.getBook(account);
 
         int totalDelta = 0;
         for (uint i = 0; i < _tokens.length; i++) {
             address _tk = _tokens[i];
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
-            if (UnderlyingFeed(opt.udlFeed).getUnderlyingAddr() == underlying){
+            if (_underlying[i] == underlying){
                 int256 delta;
 
                 if (_uncovered[i].sub(_holding[i]) > 0) {
@@ -189,7 +189,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
-
         exData.openPos = getPosSize(exData.underlying, account, true);
 
         if (exData.ideal >= 0) {
@@ -391,9 +390,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     function convertPriceAndApplySlippage(uint256 value, bool isAdd) pure internal returns (uint256) {
         if (isAdd) {
-            return uint256(Convert.formatValue(value.add(value.mul(5).div(1000)), 30, 18));
+            return uint256(Convert.formatValue(value.add(value.mul(3).div(1000)), 30, 18));
         } else {
-            return uint256(Convert.formatValue(value.sub(value.mul(5).div(1000)), 30, 18));
+            return uint256(Convert.formatValue(value.sub(value.mul(3).div(1000)), 30, 18));
         }
 
     }
