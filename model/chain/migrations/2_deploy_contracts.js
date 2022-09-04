@@ -8,6 +8,7 @@ const GovToken = artifacts.require("GovToken");
 const CreditToken = artifacts.require("CreditToken");
 const CreditProvider = artifacts.require("CreditProvider");
 const CollateralManager = artifacts.require("CollateralManager");
+const MetavaultHedgingManager = artifacts.require("MetavaultHedgingManager");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
@@ -82,6 +83,19 @@ module.exports = async function(deployer) {
     []
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
+
+  //TODO NEED TO DEPLOY MOCK POSITION MANAGER AND MOCK READER?
+
+  //address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode
+  const mvHedgingManager = await deployer.deploy(
+    MetavaultHedgingManager, 
+    Deployer4.address, // address _deployAddr
+    "0x0000000000000000000000000000000000000000", // address _positionManager
+    "0x0000000000000000000000000000000000000000", //address _reader
+    "DODtestHedge" //bytes32 _referralCode
+  );
+
+  console.log("MetaVaultHedgingManager is at: "+ mvHedgingManager.address);
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
