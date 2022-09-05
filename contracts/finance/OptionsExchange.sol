@@ -222,7 +222,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string memory nameSuffix, string memory symbolSuffix) external returns (address pool) {
+    function createPool(string calldata nameSuffix, string calldata symbolSuffix) external returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
         pool = poolFactory.create(nameSuffix, symbolSuffix);

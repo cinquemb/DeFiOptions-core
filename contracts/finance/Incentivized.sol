@@ -4,6 +4,8 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
+import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../feeds/DEXAggregatorV1.sol";
 
