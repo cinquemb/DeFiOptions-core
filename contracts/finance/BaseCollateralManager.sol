@@ -5,7 +5,7 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IOptionToken.sol";
@@ -187,12 +187,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         returns (int)
     {
         uint price = 0;
-        ILiquidityPool pool = ILiquidityPool(poolAddr);
+        IGovernableLiquidityPool pool = IGovernableLiquidityPool(poolAddr);
         
-        (uint _buyPrice,) = pool.queryBuy(symbol);
+        (uint _buyPrice,) = pool.queryBuy(symbol, true);
         price = price.add(_buyPrice);
         
-        (uint _sellPrice,) = pool.querySell(symbol);
+        (uint _sellPrice,) = pool.queryBuy(symbol, false);
         price = price.add(_sellPrice);
 
         return int(price).div(2);

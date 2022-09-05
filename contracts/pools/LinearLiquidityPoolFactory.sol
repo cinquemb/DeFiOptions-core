@@ -14,7 +14,6 @@ contract LinearLiquidityPoolFactory is ManagedContract {
     }
 
     function create(string calldata name, string calldata symbolSuffix) external returns (address) {
-        GovernableLinearLiquidityPool llp = new GovernableLinearLiquidityPool(name, symbolSuffix, deployerAddress);
-        return address(llp);
+        return address(new GovernableLinearLiquidityPool(name, symbolSuffix, deployerAddress));
     }
 }

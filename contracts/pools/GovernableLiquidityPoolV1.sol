@@ -205,22 +205,13 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         }
     }
 
-    function queryBuy(string memory optSymbol)
+    function queryBuy(string memory optSymbol, bool isBuy)
         override
         public
         view
         returns (uint price, uint volume)
     {
-        (price, volume) = queryHelper(optSymbol, Operation.BUY);
-    }
-
-    function querySell(string memory optSymbol)
-        override
-        public
-        view
-        returns (uint price, uint volume)
-    {
-        (price, volume) = queryHelper(optSymbol, Operation.SELL);
+        (price, volume) = queryHelper(optSymbol, (isBuy == true) ? Operation.BUY : Operation.SELL);
     }
 
     function queryHelper(string memory optSymbol, Operation op) private view returns (uint price, uint volume) {
@@ -232,25 +223,6 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
             calcVolume(optSymbol, param, price, op),
             (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
         );
-    }
-
-    function buy(
-        string calldata optSymbol,
-        uint price,
-        uint volume,
-        address token,
-        uint maxValue,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        override
-        external
-        returns (address _tk)
-    {        
-        IOptionToken(token).permit(msg.sender, address(this), maxValue, deadline, v, r, s);
-        _tk = buy(optSymbol, price, volume, token);
     }
 
     function buy(string memory optSymbol, uint price, uint volume, address token)
@@ -277,11 +249,7 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
     function sell(
         string memory optSymbol,
         uint price,
-        uint volume,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        uint volume
     )
         override
         public
@@ -293,9 +261,6 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
 
         address _tk = exchange.resolveToken(optSymbol);
         IOptionToken tk = IOptionToken(_tk);
-        if (deadline > 0) {
-            tk.permit(msg.sender, address(this), volume, deadline, v, r, s);
-        }
         tk.transferFrom(msg.sender, address(this), volume);
         
         uint _written = tk.writtenVolume(address(this));
@@ -310,10 +275,6 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         // holding <= sellStock
         require(calcFreeBalance() > 0 && tk.balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
         emit Sell(_tk, msg.sender, price, volume);
-    }
-
-    function sell(string calldata optSymbol, uint price, uint volume) override external {
-        sell(optSymbol, price, volume, 0, 0, "", "");
     }
 
     function getBalanceAndPayout() private view returns (uint bal, int pOut) {

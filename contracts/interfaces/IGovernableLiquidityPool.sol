@@ -42,23 +42,8 @@ interface IGovernableLiquidityPool {
 
     function listSymbols() external view returns (string memory available);
 
-    function queryBuy(string calldata optSymbol) external view returns (uint price, uint volume);
+    function queryBuy(string calldata optSymbol, bool isBuy) external view returns (uint price, uint volume);
 
-    function querySell(string calldata optSymbol) external view returns (uint price, uint volume);
-
-    function buy(
-        string calldata optSymbol,
-        uint price,
-        uint volume,
-        address token,
-        uint maxValue,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        external
-        returns (address addr);
 
     function buy(string calldata optSymbol, uint price, uint volume, address token)
         external
@@ -67,15 +52,9 @@ interface IGovernableLiquidityPool {
     function sell(
         string calldata optSymbol,
         uint price,
-        uint volume,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        uint volume
     )
         external;
-
-    function sell(string calldata optSymbol, uint price, uint volume) external;
 
     function getHedgingManager() external view returns (address manager);
     function getLeverage() external view returns (uint leverage);
