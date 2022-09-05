@@ -9,6 +9,8 @@ const CreditToken = artifacts.require("CreditToken");
 const CreditProvider = artifacts.require("CreditProvider");
 const CollateralManager = artifacts.require("CollateralManager");
 const MetavaultHedgingManager = artifacts.require("MetavaultHedgingManager");
+const MetavaultPositionManager = artifacts.require("PositionManagerMock");
+const MetavaultReader = artifacts.require("MetavaultReaderMock");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 
@@ -84,14 +86,17 @@ module.exports = async function(deployer) {
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
 
-  //TODO NEED TO DEPLOY MOCK POSITION MANAGER AND MOCK READER?
+  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
+  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
+  const metavaultReader = await deployer.deploy(MetavaultReader);
+  console.log("metavaultReader is at: "+ metavaultReader.address);
 
   //address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode
   const mvHedgingManager = await deployer.deploy(
     MetavaultHedgingManager, 
     Deployer4.address, // address _deployAddr
-    "0x0000000000000000000000000000000000000000", // address _positionManager
-    "0x0000000000000000000000000000000000000000", //address _reader
+    metavaultPositionManager.address, // address _positionManager
+    metavaultReader.address, //address _reader
     "DODtestHedge" //bytes32 _referralCode
   );
 
