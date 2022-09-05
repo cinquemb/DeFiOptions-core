@@ -56,8 +56,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     string private constant _name = "DeFi Options DAO Dollar";
     string private constant _symbol = "DODv2-DODD";
 
-    string[] private poolSymbols;
-    address[] private dexFeedAddresses;
+    string[] public poolSymbols;
     
     event WithdrawTokens(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
@@ -217,7 +216,13 @@ contract OptionsExchange is ERC20, ManagedContract {
         tk = optionTokenFactory.create(symbol, udlFeed);
         tokenAddress[symbol] = tk;
         options[tk] = opt;
-        prefetchFeedData(udlFeed);
+
+        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
+        uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
+        feeds[udlFeed] = IOptionsExchange.FeedData(
+            feed.calcLowerVolatility(uint(vol)).toUint120(),
+            feed.calcUpperVolatility(uint(vol)).toUint120()
+        );
 
         emit CreateSymbol(tk, msg.sender);
     }
@@ -234,17 +239,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         return pool;
     }
 
-    function listPoolSymbols(uint offset, uint range) external view returns (string memory available) {
-        for (uint i = offset; i < range; i++) {
-            if (bytes(available).length == 0) {
-                available = poolSymbols[i];
-            } else {
-                available = string(abi.encodePacked(available, "\n", poolSymbols[i]));
-            }
-
-        }
-    }
-
     function totalPoolSymbols() external view returns (uint) {
         return poolSymbols.length;
     }
@@ -258,23 +252,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         address feedAddr = dexFeedFactory.create(underlying, stable, dexTokenPair);
         dexFeedAddress[dexTokenPair] = feedAddr;
 
-        dexFeedAddresses.push(dexTokenPair);
         emit CreateDexFeed(feedAddr, msg.sender);
         return feedAddr;
-    }
-
-    function listDexFeedAddrs(uint offset, uint range) external view returns (address[] memory) {
-        address[] memory feedAddrs;
-        uint i_idx = 0;
-        for (uint i = offset; i < range; i++) {
-            feedAddrs[i_idx] = dexFeedAddresses[i];
-            i_idx++;
-        }
-        return feedAddrs;
-    }
-
-    function totalDexFeedAddrs() external view returns (uint) {
-        return dexFeedAddresses.length;
     }
 
     function getDexFeedAddress(address dexTokenPair) external view returns (address)  {
@@ -482,11 +461,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         return addr;
     }
 
-    function prefetchFeedData(address udlFeed) public {
-        
-        feeds[udlFeed] = getFeedData(udlFeed);
-    }
-
     function getExchangeFeeds(address udlFeed) external view returns (IOptionsExchange.FeedData memory) {
         return feeds[udlFeed];
     }
@@ -593,40 +567,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         symbol = getOptionSymbol(opt);
     }
 
-    function queryPoolPrice(
-        address poolAddr,
-        string memory symbol
-    )
-        public
-        view
-        returns (int)
-    {
-        uint price = 0;
-        ILiquidityPool pool = ILiquidityPool(poolAddr);
-        
-        (uint _buyPrice,) = pool.queryBuy(symbol);
-        price = price.add(_buyPrice);
-        
-        (uint _sellPrice,) = pool.querySell(symbol);
-        price = price.add(_sellPrice);
-
-        return int(price).div(2);
-    }
-
-    function getFeedData(address udlFeed) public view returns (IOptionsExchange.FeedData memory fd) {
-        
-        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
-
-        uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
-
-        fd = IOptionsExchange.FeedData(
-            feed.calcLowerVolatility(uint(vol)).toUint120(),
-            feed.calcUpperVolatility(uint(vol)).toUint120()
-        );
-    }
-
     function getOptionSymbol(IOptionsExchange.OptionData memory opt) public view returns (string memory symbol) {    
-
         symbol = getOptionSymbol(
             opt.udlFeed,
             opt._type,

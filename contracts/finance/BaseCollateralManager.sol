@@ -107,7 +107,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         (,address[] memory _tokens, uint[] memory _holding, uint[] memory _written,, int[] memory _iv,) = exchange.getBook(owner);
 
         for (uint i = 0; i < _tokens.length; i++) {
-            int price = exchange.queryPoolPrice(owner, IOptionToken(_tokens[i]).name());
+            int price = queryPoolPrice(owner, IOptionToken(_tokens[i]).name());
             payout = payout.add(
                 (price != 0 ? price : _iv[i]).mul(
                     int(_holding[i]).sub(int(_written[i]))
@@ -176,6 +176,37 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         } else if (opt._type == IOptionsExchange.OptionType.PUT) {
             value = MoreMath.max(0, strike.sub(udlPrice));
         }
+    }
+
+    function queryPoolPrice(
+        address poolAddr,
+        string memory symbol
+    )
+        override public
+        view
+        returns (int)
+    {
+        uint price = 0;
+        ILiquidityPool pool = ILiquidityPool(poolAddr);
+        
+        (uint _buyPrice,) = pool.queryBuy(symbol);
+        price = price.add(_buyPrice);
+        
+        (uint _sellPrice,) = pool.querySell(symbol);
+        price = price.add(_sellPrice);
+
+        return int(price).div(2);
+    }
+
+    function getFeedData(address udlFeed) override public view returns (IOptionsExchange.FeedData memory fd) {
+        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
+
+        uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
+
+        fd = IOptionsExchange.FeedData(
+            feed.calcLowerVolatility(uint(vol)).toUint120(),
+            feed.calcUpperVolatility(uint(vol)).toUint120()
+        );
     }
 
     function calcCollateral(

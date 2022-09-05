@@ -152,7 +152,7 @@ contract CollateralManager is BaseCollateralManager {
     {
         IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
         if (fd.lowerVol == 0 || fd.upperVol == 0) {
-            fd = exchange.getFeedData(opt.udlFeed);
+            fd = getFeedData(opt.udlFeed);
         }
 
         int coll = calcIntrinsicValue(opt).mul(int(volume)).add(
