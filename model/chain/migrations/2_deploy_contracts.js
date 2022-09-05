@@ -13,6 +13,7 @@ const MetavaultPositionManager = artifacts.require("PositionManagerMock");
 const MetavaultReader = artifacts.require("MetavaultReaderMock");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
+const Incentivized = artifacts.require("Incentivized");
 
 const DEXFeedFactory = artifacts.require("DEXFeedFactory");
 
@@ -40,6 +41,7 @@ module.exports = async function(deployer) {
   const gt = await deployer.deploy(GovToken);
   const yt = await deployer.deploy(YieldTracker);
   const uv = await deployer.deploy(UnderlyingVault);
+  const id = await deployer.deploy(Incentivized);
   const lasit = await deployer.deploy(LinearAnySlopeInterpolator);
   const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
@@ -85,22 +87,6 @@ module.exports = async function(deployer) {
     []
   );
   console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
-
-  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
-  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
-  const metavaultReader = await deployer.deploy(MetavaultReader);
-  console.log("metavaultReader is at: "+ metavaultReader.address);
-
-  //address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode
-  const mvHedgingManager = await deployer.deploy(
-    MetavaultHedgingManager, 
-    Deployer4.address, // address _deployAddr
-    metavaultPositionManager.address, // address _positionManager
-    metavaultReader.address, //address _reader
-    "DODtestHedge" //bytes32 _referralCode
-  );
-
-  console.log("MetaVaultHedgingManager is at: "+ mvHedgingManager.address);
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
@@ -117,6 +103,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("Interpolator", lasit.address);
   await deployer4.setContractAddress("YieldTracker", yt.address);
   await deployer4.setContractAddress("UnderlyingVault", uv.address);
+  await deployer4.setContractAddress("Incentivized", id.address);
 
   await deployer4.deploy();
 
@@ -132,4 +119,20 @@ module.exports = async function(deployer) {
   console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
   const DEXFeedFactoryAddress = await deployer4.getContractAddress("DEXFeedFactory");
   console.log("DEXFeedFactoryAddress is at: "+ DEXFeedFactoryAddress);
+
+  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
+  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
+  const metavaultReader = await deployer.deploy(MetavaultReader);
+  console.log("metavaultReader is at: "+ metavaultReader.address);
+
+  //address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode
+  const mvHedgingManager = await deployer.deploy(
+    MetavaultHedgingManager, 
+    Deployer4.address, // address _deployAddr
+    metavaultPositionManager.address, // address _positionManager
+    metavaultReader.address, //address _reader
+    "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
+  );
+
+  console.log("MetaVaultHedgingManager is at: "+ mvHedgingManager.address);
 };
