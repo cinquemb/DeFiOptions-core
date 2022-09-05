@@ -259,10 +259,17 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         public
         returns (address _tk)
     {
-        PricingParameters memory param = parameters[optSymbol];
-        require(volume > 0 && isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range or invalid volume");
+        PricingParameters memory param;
+        (price, param)  = validateOrder(volume, price, optSymbol, Operation.BUY);
 
-        (uint price, uint value) = receivePayment(param, price, volume, token);
+        uint value = price.mul(volume).div(volumeBase);
+        if (token != address(exchange)) {
+            (uint tv, uint tb) = settings.getTokenRate(token);
+            value = value.mul(tv).div(tb);
+            depositTokensInExchange(token, value);
+        } else {
+            exchange.transferBalance(msg.sender, address(this), value);
+        }
 
         _tk = exchange.resolveToken(optSymbol);
 
@@ -291,10 +298,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         override
         public
     {
-        PricingParameters memory param = parameters[optSymbol];        
-        require(volume > 0 && isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range or invalid volume");
-
-        price = validatePrice(price, param, Operation.SELL);
+        PricingParameters memory param;
+        (price, param) = validateOrder(volume, price, optSymbol, Operation.SELL);
 
         address _tk = exchange.resolveToken(optSymbol);
         IOptionToken(_tk).transferFrom(msg.sender, address(this), volume);
@@ -349,38 +354,18 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         return uint(udlPrice) >= r.start && uint(udlPrice) <= r.end;
     }
 
-    function receivePayment(
-        PricingParameters memory param,
-        uint price,
+    function validateOrder(
         uint volume,
-        address token
-    )
-        private
-        returns (uint, uint)
-    {
-        price = validatePrice(price, param, Operation.BUY);
-        uint value = price.mul(volume).div(volumeBase);
-
-        if (token != address(exchange)) {
-            (uint tv, uint tb) = settings.getTokenRate(token);
-            value = value.mul(tv).div(tb);
-            depositTokensInExchange(token, value);
-        } else {
-            exchange.transferBalance(msg.sender, address(this), value);
-        }
-
-        return (price, value);
-    }
-
-    function validatePrice(
         uint price, 
-        PricingParameters memory param, 
+        string memory optSymbol, 
         Operation op
     ) 
         private
         view
-        returns (uint p) 
+        returns (uint p, PricingParameters memory param) 
     {
+        param = parameters[optSymbol];
+        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "out of range or invalid volume");
         p = calcOptPrice(param, op);
         require(
             op == Operation.BUY ? price >= p : price <= p,
