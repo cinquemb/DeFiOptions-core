@@ -10,6 +10,7 @@ import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IOptionToken.sol";
 
 import "../utils/Arrays.sol";
 import "../utils/Convert.sol";
@@ -19,7 +20,6 @@ import "../utils/SafeCast.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
-import "./OptionToken.sol";
 import "./OptionTokenFactory.sol";
 import "../feeds/DEXFeedFactory.sol";
 import "../feeds/DEXAggregatorV1.sol";
@@ -60,8 +60,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     address[] private dexFeedAddresses;
     
     event WithdrawTokens(address indexed from, uint value);
-    event SwapTokens(address indexed from, uint value);
-    event IncentiveReward(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
     event CreateSymbol(address indexed token, address indexed sender);
     event CreateDexFeed(address indexed feed, address indexed sender);
@@ -203,17 +201,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         emit WithdrawTokens(msg.sender, value);
     }
 
-    function swapTokens(address to, address token, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
-        depositTokens(to, token, value);
-        (uint v, uint b) = settings.getProcessingFee();
-        if (v > 0) {
-            uint fee = MoreMath.min(value.mul(v).div(b), value);
-            value = value.sub(fee);
-        }
-        creditProvider.withdrawTokens(msg.sender, value, tokensInOrder, amountsOutInOrder);
-        emit SwapTokens(msg.sender, value);
-    }
-
     function createSymbol(
         address udlFeed,
         IOptionsExchange.OptionType optType,
@@ -223,7 +210,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         public
         returns (address tk)
     {
-        ensureFeedIsAlowed(udlFeed);
+        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         (IOptionsExchange.OptionData memory opt, string memory symbol) = createOptionInMemory(udlFeed, optType, strike, maturity);
 
         require(tokenAddress[symbol] == address(0), "already created");
@@ -235,7 +222,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string memory nameSuffix, string memory symbolSuffix) public returns (address pool) {
+    function createPool(string memory nameSuffix, string memory symbolSuffix) external returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
         pool = poolFactory.create(nameSuffix, symbolSuffix);
@@ -249,10 +236,12 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function listPoolSymbols(uint offset, uint range) external view returns (string memory available) {
         for (uint i = offset; i < range; i++) {
-            ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
-            if (llp.maturity() > settings.exchangeTime()) {
-                available = listPoolSymbolHelper(available, poolSymbols[i]);
+            if (bytes(available).length == 0) {
+                available = poolSymbols[i];
+            } else {
+                available = string(abi.encodePacked(available, "\n", poolSymbols[i]));
             }
+
         }
     }
 
@@ -260,30 +249,11 @@ contract OptionsExchange is ERC20, ManagedContract {
         return poolSymbols.length;
     }
 
-    function listExpiredPoolSymbols() external view returns (string memory available) {
-        for (uint i = 0; i < poolSymbols.length; i++) {
-            ILiquidityPool llp = ILiquidityPool(poolAddress[poolSymbols[i]]);
-            if (llp.maturity() < settings.exchangeTime()) {
-                available = listPoolSymbolHelper(available, poolSymbols[i]);
-            }
-        }
-    }
-
-    function listPoolSymbolHelper(string memory buffer, string memory poolSymbol) private pure returns (string memory) {
-        if (bytes(buffer).length == 0) {
-            buffer = poolSymbol;
-        } else {
-            buffer = string(abi.encodePacked(buffer, "\n", poolSymbol));
-        }
-
-        return buffer;
-    }
-
     function getPoolAddress(string calldata poolSymbol) external view returns (address)  {
         return poolAddress[poolSymbol];
     }
 
-    function createDexFeed(address underlying, address stable, address dexTokenPair) public returns (address) {
+    function createDexFeed(address underlying, address stable, address dexTokenPair) external returns (address) {
         require(dexFeedAddress[dexTokenPair] == address(0), "already created");
         address feedAddr = dexFeedFactory.create(underlying, stable, dexTokenPair);
         dexFeedAddress[dexTokenPair] = feedAddr;
@@ -368,7 +338,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             _tk = createSymbol(opt.udlFeed, IOptionsExchange.OptionType.CALL, strike, maturity);
         }
         
-        address underlying = getUnderlyingAddr(opt);
+        address underlying = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
         require(underlying != address(0), "underlying token not set");
         uint v = Convert.from18DecimalsBase(underlying, volume);
         IERC20(underlying).safeTransferFrom(msg.sender, address(vault), v);
@@ -388,7 +358,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         external
     {
         require(tokenAddress[symbol] == msg.sender, "unauthorized ownership transfer");        
-        OptionToken tk = OptionToken(msg.sender);
+        IOptionToken tk = IOptionToken(msg.sender);
         
         if (tk.writtenVolume(from) == 0 && tk.balanceOf(from) == 0) {
             Arrays.removeItem(book[from], msg.sender);
@@ -403,7 +373,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function release(address owner, uint udl, uint coll) external {
 
-        OptionToken tk = OptionToken(msg.sender);
+        IOptionToken tk = IOptionToken(msg.sender);
         require(tokenAddress[tk.symbol()] == msg.sender, "unauthorized release");
 
         IOptionsExchange.OptionData memory opt = options[msg.sender];
@@ -422,7 +392,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function cleanUp(address owner, address _tk) public {
 
-        OptionToken tk = OptionToken(_tk);
+        IOptionToken tk = IOptionToken(_tk);
 
         if (tk.balanceOf(owner) == 0 && tk.writtenVolume(owner) == 0) {
             Arrays.removeItem(book[owner], _tk);
@@ -448,8 +418,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     }
 
     function setCollateral(address owner) external {
-        /* UNUSED IN ANY CONTRACTS, DOES THIS NEED TO BE AN INCENTIVIZED FUNCTION */
-
         collateral[owner] = collateralManager.calcCollateral(owner, true); // multi udl feed refs
     }
 
@@ -495,11 +463,16 @@ contract OptionsExchange is ERC20, ManagedContract {
         return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
     }
 
-    function getUnderlyingPrice(string calldata symbol) external view returns (int) {
+    function getUnderlyingPrice(string calldata symbol) external view returns (int answer) {
         
         address _ts = tokenAddress[symbol];
         require(_ts != address(0), "token not found");
-        return getUdlPrice(options[_ts]);
+
+        if (options[_ts].maturity > settings.exchangeTime()) {
+            (,answer) = UnderlyingFeed(options[_ts].udlFeed).getLatestPrice();
+        } else {
+            (,answer) = UnderlyingFeed(options[_ts].udlFeed).getPrice(options[_ts].maturity);
+        }
     }
 
     function resolveToken(string calldata symbol) external view returns (address) {
@@ -542,7 +515,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         underlying = new address[](tokens.length);
 
         for (uint i = 0; i < tokens.length; i++) {
-            OptionToken tk = OptionToken(tokens[i]);
+            IOptionToken tk = IOptionToken(tokens[i]);
             IOptionsExchange.OptionData memory opt = options[tokens[i]];
             if (i == 0) {
                 symbols = getOptionSymbol(opt);
@@ -574,7 +547,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         private 
         returns (address _tk)
     {
-        ensureFeedIsAlowed(opt.udlFeed);
+        require(settings.getUdlFeed(opt.udlFeed) > 0, "feed not allowed");
         require(volume > 0, "invalid volume");
         require(opt.maturity > settings.exchangeTime(), "invalid maturity");
 
@@ -583,7 +556,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             _tk = createSymbol(opt.udlFeed, opt._type, opt.strike, opt.maturity);
         }
 
-        OptionToken tk = OptionToken(_tk);
+        IOptionToken tk = IOptionToken(_tk);
         if (tk.writtenVolume(msg.sender) == 0 && tk.balanceOf(msg.sender) == 0) {
             book[msg.sender].push(_tk);
         }
@@ -660,57 +633,5 @@ contract OptionsExchange is ERC20, ManagedContract {
             opt.strike,
             opt.maturity
         );
-    }
-
-    function getUdlPrice(IOptionsExchange.OptionData memory opt) private view returns (int answer) {
-
-        if (opt.maturity > settings.exchangeTime()) {
-            (,answer) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
-        } else {
-            (,answer) = UnderlyingFeed(opt.udlFeed).getPrice(opt.maturity);
-        }
-    }
-
-    function getUnderlyingAddr(IOptionsExchange.OptionData memory opt) private view returns (address) {
-        return UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
-    }
-
-    function incrementRoundDexAgg(address dexAggAddr) incentivized external {
-        // this is needed to provide data for UnderlyingFeed that originate from a dex
-        require(settings.checkDexAggIncentiveBlacklist(dexAggAddr) == false, "blacklisted for incentives");
-        DEXAggregatorV1(dexAggAddr).incrementRound();
-    }
-
-    function prefetchSample(address udlFeed) incentivized external {
-        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
-        UnderlyingFeed(udlFeed).prefetchSample();
-    }
-
-    function prefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
-        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
-        UnderlyingFeed(udlFeed).prefetchDailyPrice(roundId);
-    }
-
-    function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
-        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
-        UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
-    }
-
-    modifier incentivized() {
-        uint256 startGas = gasleft();
-
-        _;
-        
-        uint256 gasUsed = startGas - gasleft();
-        address[] memory tokens = settings.getAllowedTokens();
-
-        uint256 creditingValue = settings.getBaseIncentivisation();        
-        creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
-        emit IncentiveReward(msg.sender, creditingValue);    
-    }
-
-    function ensureFeedIsAlowed(address udlFeed) private view {
-        
-        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
     }
 }

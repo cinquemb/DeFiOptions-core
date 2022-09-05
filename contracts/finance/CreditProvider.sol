@@ -54,6 +54,9 @@ contract CreditProvider is ManagedContract {
 
     event AccrueFees(address indexed from, uint value);
 
+    event SwapTokens(address indexed from, uint value);
+
+
     function initialize(Deployer deployer) override internal {
 
         creditToken = ICreditToken(deployer.getContractAddress("CreditToken"));
@@ -61,12 +64,14 @@ contract CreditProvider is ManagedContract {
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         address vaultAddr = deployer.getContractAddress("UnderlyingVault");
         address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
+        address incentiveAddr = deployer.getContractAddress("Incentivized");
 
         primeCallers[exchangeAddr] = 1;
         primeCallers[address(settings)] = 1;
         primeCallers[address(creditToken)] = 1;
         primeCallers[vaultAddr] = 1;
         primeCallers[collateralManagerAddr] = 1;
+        primeCallers[incentiveAddr] = 1;
     }
 
     function totalTokenStock() external view returns (uint v) {
@@ -237,6 +242,24 @@ contract CreditProvider is ManagedContract {
                 emit AccumulateDebt(to, credit);
             }
         }
+    }
+
+    function swapTokens(address to, address token, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        
+        IERC20(token).safeTransferFrom(msg.sender, address(this), value);
+        addBalance(to, token, value, true);
+        emit DepositTokens(to, token, value);
+
+        (uint v, uint b) = settings.getProcessingFee();
+        if (v > 0) {
+            uint fee = MoreMath.min(value.mul(v).div(b), value);
+            value = value.sub(fee);
+        }
+        require(tokensInOrder.length == amountsOutInOrder.length, "token != amounts lists size");
+        require(value > 0, "no withdrawl amounts set");
+        removeBalance(to, value);
+        burnDebtAndTransferTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
+        emit SwapTokens(to, value);
     }
 
     function transferBalanceInternal(address from, address to, uint value) private {

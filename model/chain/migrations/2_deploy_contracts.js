@@ -25,13 +25,13 @@ const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x78E16370E879941b7d3628954F27d15ffB4938b6");
+  await deployer.deploy(Deployer4, "0x25Fd8fB6a62CD21308DE638Cdc1E85FB846A0a16");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
   const timeProvider = await deployer.deploy(TimeProviderMock);
   console.log("timeProvider is at: "+ timeProvider.address);
-  const settings = await deployer.deploy(ProtocolSettings);
+  const settings = await deployer.deploy(ProtocolSettings, false);
   console.log("settings is at: "+ settings.address);
   const ct = await deployer.deploy(CreditToken);
   const pm = await deployer.deploy(ProposalsManager);
