@@ -282,6 +282,50 @@ contract OptionsExchange is ERC20, ManagedContract {
         ));
     }
 
+    /* function openExposure(
+        string[] calldata symbols,
+        uint[] volume,
+        bool[] isShort,
+        bool[] isCovered,
+        address[] poolAddrs,
+        address[] paymentTokens,
+        address to
+    ) external returns address[] _tks {
+        require(symbols.length == volume.length == isShort.length == isCovered.length == poolAddrs.length == paymentTokens.length, "array missmatch");
+        // can this go in exchnageHelper.sol?
+
+        // BIG QUESTION not sure if run time gas requirements will allow for this
+            //- calc collateral gas question
+            //- gas cost of multiple buy/sell txs from pool, maybe need optimized function for pool
+        // validate that all the symbols exist, pool has prices, revert if not
+        // make all the options buys/sells
+        // compute collateral reqirements with uncovred volumes?
+            //need to figure out what uncovered volume is before this, keep track in local var
+
+        for (uint i=0; i< symbols.length; i++) {
+            require(tokenAddress[symbols[i]] != address(0), "symbol not available");
+            if (isShort[i] == true) {
+                if (isCovered[i] == true) {
+                    //sell covered
+                } else {
+                    //sell options
+
+
+                }
+
+                //ILiquidityPool(poolAddrs[i]).sell(string memory optSymbol, uint price, uint volume);
+            } else {
+                // buy options
+                //ILiquidityPool(poolAddrs[i]).buy(string memory optSymbol, uint price, uint volume, adddress token);
+            }
+        }
+
+        collateral[msg.sender] = collateral[msg.sender].add(
+            collateralManager.calcCollateral(symbols, netUncoveredVolumes)
+        );
+
+    }
+    */
     function writeOptions(
         address udlFeed,
         uint volume,
