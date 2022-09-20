@@ -1,0 +1,38 @@
+pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
+
+import "../governance/Proposal.sol";
+import "../interfaces/IERC20.sol";
+import "../interfaces/IProtocolSettings.sol";
+
+
+contract PoolManagementProposal is Proposal {
+
+    string[] executionBytes;
+
+    function setexecutionBytes(string[] memory _executionBytes) public {
+        executionBytes = _executionBytes;
+    }
+
+    function getExecutionBytes() public view returns (string[] memory) {
+        return executionBytes;
+    }
+
+    function getName() public override view returns (string memory) {
+
+        return "Transfer Balance";
+    }
+
+    function execute(IProtocolSettings _settings) public override {
+
+    }
+
+
+    function executePool(IERC20 pool) public override {
+        
+        require(executionBytes.length > 0, "no functions to call");
+        for (uint i=0; i< executionBytes.length; i++) {
+            address(pool).call(bytes(executionBytes[i]));
+        }
+    }
+}
