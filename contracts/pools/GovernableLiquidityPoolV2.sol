@@ -65,7 +65,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
         interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
-        proposalManager = IProposalManager(deployer.getContractAddress("ProposalManager"));
+        proposalManager = IProposalManager(deployer.getContractAddress("ProposalsManager"));
         volumeBase = 1e18;//exchange.volumeBase();
     }
 

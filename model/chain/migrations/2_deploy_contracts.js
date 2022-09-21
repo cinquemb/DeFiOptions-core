@@ -28,7 +28,7 @@ const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x90182cB63cA8DB0FBb74895aF735AB3867597d9D");
+  await deployer.deploy(Deployer4, "0xE1be200A278aa18586bD09d7B4f04590D1Ad1C54");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
