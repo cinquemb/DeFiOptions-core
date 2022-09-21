@@ -32,8 +32,6 @@ interface IGovernableLiquidityPool {
     
     event Sell(address indexed token, address indexed seller, uint price, uint volume);
 
-    function maturity() external view returns (uint);
-
     function yield(uint dt) external view returns (uint);
 
     function depositTokens(address to, address token, uint value) external;
