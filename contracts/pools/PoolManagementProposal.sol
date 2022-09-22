@@ -11,7 +11,7 @@ contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
 
     string[] executionBytes;
 
-    function setexecutionBytes(string[] memory _executionBytes) public {
+    function setexecutionBytes(string[] memory _executionBytes) onlyOwner public {
         executionBytes = _executionBytes;
     }
 
