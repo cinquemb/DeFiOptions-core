@@ -20,13 +20,12 @@ contract PoolManagementProposal is Proposal {
 
     function getName() public override view returns (string memory) {
 
-        return "Transfer Balance";
+        return "Pool Management Operation";
     }
 
     function execute(IProtocolSettings _settings) public override {
 
     }
-
 
     function executePool(IERC20 pool) public override {
         
