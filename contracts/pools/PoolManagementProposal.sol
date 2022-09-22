@@ -4,9 +4,10 @@ pragma experimental ABIEncoderV2;
 import "../governance/Proposal.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/IProtocolSettings.sol";
+import "../utils/OpenZeppelinOwnable.sol";
 
 
-contract PoolManagementProposal is Proposal {
+contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
 
     string[] executionBytes;
 
