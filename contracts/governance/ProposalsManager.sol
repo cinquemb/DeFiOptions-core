@@ -46,15 +46,15 @@ contract ProposalsManager is ManagedContract {
         public
         returns (uint id, address wp)
     {    
-        require(
-            proposingDate[msg.sender] == 0 || settings.exchangeTime().sub(proposingDate[msg.sender]) > 1 days,
-            "minimum interval between proposals not met"
-        );
         
         (uint v, uint b) = settings.getMinShareForProposal();
         address governanceToken;
         
-        if (voteType == ProposalWrapper.VoteType.PROTOCOL_SETTINGS) {
+        if ((voteType == ProposalWrapper.VoteType.PROTOCOL_SETTINGS) || (voteType == ProposalWrapper.VoteType.ORACLE_SETTINGS)) {
+            require(
+                proposingDate[msg.sender] == 0 || settings.exchangeTime().sub(proposingDate[msg.sender]) > 1 days,
+                "minimum interval between proposals not met"
+            );
             require(govToken.calcShare(msg.sender, b) >= v, "insufficient share");
             governanceToken = address(govToken);
         } else {

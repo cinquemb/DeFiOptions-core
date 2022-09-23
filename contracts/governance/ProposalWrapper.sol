@@ -91,6 +91,14 @@ contract ProposalWrapper {
         return status;
     }
 
+    function getVoteType() public view returns (VoteType) {
+        return voteType;
+    }
+
+    function getGovernanceToken() public view returns (address) {
+        return address(govToken);
+    }
+
     function isExecutionAllowed() public view returns (bool) {
 
         return status == Status.APPROVED && !closed;
