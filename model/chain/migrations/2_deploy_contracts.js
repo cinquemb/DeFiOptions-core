@@ -119,6 +119,8 @@ module.exports = async function(deployer) {
   console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
   const DEXFeedFactoryAddress = await deployer4.getContractAddress("DEXFeedFactory");
   console.log("DEXFeedFactoryAddress is at: "+ DEXFeedFactoryAddress);
+  const ProposalsManagerAddress = await deployer4.getContractAddress("ProposalsManager");
+  console.log("ProposalsManagerAddress is at: "+ ProposalsManagerAddress);
 
   const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
   console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
