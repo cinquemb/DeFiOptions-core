@@ -96,7 +96,11 @@ contract ProposalWrapper {
     }
 
     function getGovernanceToken() public view returns (address) {
-        return address(govToken);
+        if (voteType == VoteType.POOL_SETTINGS) {
+            return address(llpToken);
+        } else {
+            return address(govToken);
+        }
     }
 
     function isExecutionAllowed() public view returns (bool) {
