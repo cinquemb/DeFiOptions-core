@@ -9,13 +9,13 @@ import "../utils/OpenZeppelinOwnable.sol";
 
 contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
 
-    string[] executionBytes;
+    bytes[] executionBytes;
 
-    function setexecutionBytes(string[] memory _executionBytes) onlyOwner public {
+    function setexecutionBytes(bytes[] memory _executionBytes) onlyOwner public {
         executionBytes = _executionBytes;
     }
 
-    function getExecutionBytes() public view returns (string[] memory) {
+    function getExecutionBytes() public view returns (bytes[] memory) {
         return executionBytes;
     }
 
@@ -32,7 +32,7 @@ contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
         
         require(executionBytes.length > 0, "no functions to call");
         for (uint i=0; i< executionBytes.length; i++) {
-            address(pool).call(bytes(executionBytes[i]));
+            (bool success, ) = address(pool).call(executionBytes[i]);
         }
     }
 }
