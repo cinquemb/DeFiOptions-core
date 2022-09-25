@@ -2229,7 +2229,7 @@ def main():
     #proposal_manager_helper.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).getExecutionBytes())
 
 
-    sys.exit()
+    #sys.exit()
 
     #''
     '''

@@ -29,10 +29,10 @@ contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
     }
 
     function executePool(IERC20 pool) public override {
-        
         require(executionBytes.length > 0, "no functions to call");
         for (uint i=0; i< executionBytes.length; i++) {
             (bool success, ) = address(pool).call(executionBytes[i]);
+            require(success == true, "failed to sucessfully execute");
         }
     }
 }
