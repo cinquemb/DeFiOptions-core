@@ -11,12 +11,16 @@ contract PoolManagementProposal is Proposal, OpenZeppelinOwnable {
 
     bytes[] executionBytes;
 
-    function setexecutionBytes(bytes[] memory _executionBytes) onlyOwner public {
+    function setExecutionBytes(bytes[] memory _executionBytes) onlyOwner public {
         executionBytes = _executionBytes;
     }
 
     function getExecutionBytes() public view returns (bytes[] memory) {
         return executionBytes;
+    }
+
+    function getExecutionBytesSize() public view returns (uint) {
+        return executionBytes.length;
     }
 
     function getName() public override view returns (string memory) {
