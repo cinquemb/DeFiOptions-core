@@ -5,25 +5,24 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/IUnderlyingVault.sol";
 import "../interfaces/IOptionToken.sol";
+import "../interfaces/ILinearLiquidityPoolFactory.sol";
+import "../interfaces/IDEXFeedFactory.sol";
+import "../interfaces/IOptionTokenFactory.sol";
 
 import "../utils/Arrays.sol";
 import "../utils/Convert.sol";
-import "../utils/ERC20.sol";
+import "../utils/ERC20.sol"; //issues with verifying and ERC-20 that can reference other ERC20's
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
-import "./OptionTokenFactory.sol";
-import "../feeds/DEXFeedFactory.sol";
-import "../feeds/DEXAggregatorV1.sol";
-import "../pools/LinearLiquidityPoolFactory.sol";
 
 contract OptionsExchange is ERC20, ManagedContract {
 
@@ -35,11 +34,11 @@ contract OptionsExchange is ERC20, ManagedContract {
     IUnderlyingVault private vault;
     IProtocolSettings private settings;
     ICreditProvider private creditProvider;
-    DEXFeedFactory private dexFeedFactory;
+    IDEXFeedFactory private dexFeedFactory;
     IBaseCollateralManager private collateralManager;
 
-    OptionTokenFactory private optionTokenFactory;
-    LinearLiquidityPoolFactory private poolFactory;
+    IOptionTokenFactory private optionTokenFactory;
+    ILinearLiquidityPoolFactory private poolFactory;
 
     mapping(address => uint) public collateral;
 
@@ -79,8 +78,8 @@ contract OptionsExchange is ERC20, ManagedContract {
     function initialize(Deployer deployer) override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        optionTokenFactory = OptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
-        poolFactory  = LinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
+        optionTokenFactory = IOptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
+        poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
 
@@ -282,16 +281,22 @@ contract OptionsExchange is ERC20, ManagedContract {
         ));
     }
 
-    /* function openExposure(
+    function openExposure(
         string[] calldata symbols,
-        uint[] volume,
-        bool[] isShort,
-        bool[] isCovered,
-        address[] poolAddrs,
-        address[] paymentTokens,
-        address to
-    ) external returns address[] _tks {
-        require(symbols.length == volume.length == isShort.length == isCovered.length == poolAddrs.length == paymentTokens.length, "array missmatch");
+        uint[] calldata volume,
+        bool[] calldata isShort,
+        bool[] calldata isCovered,
+        address[] calldata poolAddrs,
+        address[] calldata paymentTokens
+    ) external returns (address[] memory _tks) {
+        require(
+            (symbols.length == volume.length)  && 
+            (symbols.length == isShort.length) && 
+            (symbols.length == isCovered.length) && 
+            (symbols.length == poolAddrs.length) && 
+            (symbols.length == paymentTokens.length), 
+            "array mismatch"
+        );
         // can this go in exchnageHelper.sol?
 
         // BIG QUESTION not sure if run time gas requirements will allow for this
@@ -299,33 +304,54 @@ contract OptionsExchange is ERC20, ManagedContract {
             //- gas cost of multiple buy/sell txs from pool, maybe need optimized function for pool
         // validate that all the symbols exist, pool has prices, revert if not
         // make all the options buys/sells
-        // compute collateral reqirements with uncovred volumes?
-            //need to figure out what uncovered volume is before this, keep track in local var
+        // compute collateral reqirements with uncovred volumes
 
         for (uint i=0; i< symbols.length; i++) {
-            require(tokenAddress[symbols[i]] != address(0), "symbol not available");
+            string memory symbol = symbols[i];
+            uint vol = volume[i];
+            require(tokenAddress[symbol] != address(0), "symbol not available");            
             if (isShort[i] == true) {
-                if (isCovered[i] == true) {
-                    //sell covered
-                } else {
-                    //sell options
-
-
-                }
-
-                //ILiquidityPool(poolAddrs[i]).sell(string memory optSymbol, uint price, uint volume);
+                openExposureInternal(symbol, isCovered[i], vol);
+                (uint _sellPrice,) = IGovernableLiquidityPool(poolAddrs[i]).queryBuy(symbol, false);
+                IGovernableLiquidityPool(poolAddrs[i]).sell(symbol, _sellPrice, vol);
             } else {
                 // buy options
-                //ILiquidityPool(poolAddrs[i]).buy(string memory optSymbol, uint price, uint volume, adddress token);
+                (uint _buyPrice,) = IGovernableLiquidityPool(poolAddrs[i]).queryBuy(symbol, true);        
+                IGovernableLiquidityPool(poolAddrs[i]).buy(symbol, _buyPrice, vol, paymentTokens[i]);
             }
         }
 
         collateral[msg.sender] = collateral[msg.sender].add(
-            collateralManager.calcCollateral(symbols, netUncoveredVolumes)
+            collateralManager.calcCollateral(msg.sender, true)
         );
 
+        ensureFunds(msg.sender);
     }
-    */
+
+    function openExposureInternal(
+        string memory symbol,
+        bool isCovered,
+        uint volume
+    ) private {
+        if (IOptionToken(tokenAddress[symbol]).writtenVolume(msg.sender) == 0 && IOptionToken(tokenAddress[symbol]).balanceOf(msg.sender) == 0) {
+            book[msg.sender].push(tokenAddress[symbol]);
+        }
+        IOptionToken(tokenAddress[symbol]).issue(msg.sender, msg.sender, volume);
+        if (isCovered == true) {
+            //write covered
+            address underlying = UnderlyingFeed(
+                options[tokenAddress[symbol]].udlFeed
+            ).getUnderlyingAddr();
+            IERC20(underlying).safeTransferFrom(
+                msg.sender,
+                address(vault), 
+                Convert.from18DecimalsBase(underlying, volume)
+            );
+            vault.lock(msg.sender, tokenAddress[symbol], volume);
+        }
+        emit WriteOptions(tokenAddress[symbol], msg.sender, msg.sender, volume);
+    }
+
     function writeOptions(
         address udlFeed,
         uint volume,
