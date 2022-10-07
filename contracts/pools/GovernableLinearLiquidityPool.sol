@@ -25,17 +25,18 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
         internal
         override
     {
-        require(IOptionToken(_tk).writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
-        require(calcFreeBalance() > 0, "pool balance too low");
+        address poolAddr = address(this);
+        require(IOptionToken(_tk).writtenVolume(poolAddr).add(volume) <= param.bsStockSpread[0].toUint120(), "2 high volume");
+        require(calcFreeBalance() > 0, "pool bal low");
         
         IOptionsExchange.OpenExposureInputs memory oEi;
         
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume;
         oEi.isShort[0] = true;
-        oEi.isCovered[0] = false;
-        oEi.poolAddrs[0] = address(this);
-        oEi.paymentTokens[0] = address(0);
+        //oEi.isCovered[0] = false; //expoliting default to save gas
+        oEi.poolAddrs[0] = poolAddr;
+        //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 
         exchange.openExposure(
             oEi,
@@ -112,14 +113,14 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
                     price.sub(iv)
                 );
 
-            volume = MoreMath.max(
-                volume, 
-                bal.mul(volumeBase).div(price)
-            );
+            uint balMulDiv = bal.mul(volumeBase).div(price);
 
             volume = MoreMath.min(
-                volume, 
-                bal.mul(volumeBase).div(price)
+                MoreMath.max(
+                    volume, 
+                    balMulDiv
+                ), 
+                balMulDiv
             );
         }
     }

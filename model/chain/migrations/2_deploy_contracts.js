@@ -28,7 +28,7 @@ const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0xE1be200A278aa18586bD09d7B4f04590D1Ad1C54");
+  await deployer.deploy(Deployer4, "0x0A05DAa71aca75923f366C41d1300AbCd0cD90b0");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -38,7 +38,7 @@ module.exports = async function(deployer) {
   console.log("settings is at: "+ settings.address);
   const ct = await deployer.deploy(CreditToken);
   const pm = await deployer.deploy(ProposalsManager);
-  const gt = await deployer.deploy(GovToken);
+  const gt = await deployer.deploy(GovToken,"0x0000000000000000000000000000000000000000");
   const yt = await deployer.deploy(YieldTracker);
   const uv = await deployer.deploy(UnderlyingVault);
   const id = await deployer.deploy(Incentivized);
@@ -64,6 +64,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("OptionsExchange", exchange.address);
   await deployer4.setContractAddress("OptionTokenFactory", otf.address);
   await deployer4.setContractAddress("GovToken", gt.address); //MAY JUST USE THE EXISTING GOV TOKEN ADDR ON POLYGON MAINNET TO MAKE THINGS SIMPLE
+  await deployer4.setContractAddress("ProtocolSettings", settings.address);
   await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
   await deployer4.setContractAddress("DEXFeedFactory", dexFeedFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);

@@ -58,14 +58,13 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         _symbol = _sb;
         _name = _nm;
 
-        Deployer deployer = Deployer(_deployAddr);
         fractionBase = 1e9;
-        exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
-        tracker = IYieldTracker(deployer.getContractAddress("YieldTracker"));
-        interpolator = IInterpolator(deployer.getContractAddress("Interpolator"));
-        proposalManager = IProposalManager(deployer.getContractAddress("ProposalsManager"));
+        exchange = IOptionsExchange(Deployer(_deployAddr).getContractAddress("OptionsExchange"));
+        settings = IProtocolSettings(Deployer(_deployAddr).getContractAddress("ProtocolSettings"));
+        creditProvider = ICreditProvider(Deployer(_deployAddr).getContractAddress("CreditProvider"));
+        tracker = IYieldTracker(Deployer(_deployAddr).getContractAddress("YieldTracker"));
+        interpolator = IInterpolator(Deployer(_deployAddr).getContractAddress("Interpolator"));
+        proposalManager = IProposalManager(Deployer(_deployAddr).getContractAddress("ProposalsManager"));
         volumeBase = 1e18;//exchange.volumeBase();
     }
 
@@ -117,7 +116,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         external
     {
         ensureCaller();
-        require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "invalid pricing surface or maturity");
+        require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "bad price surface or exp");
 
         string memory optSymbol = exchange.getOptionSymbol(
             IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())
@@ -152,7 +151,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function removeSymbol(string calldata optSymbol) external {
-        require(parameters[optSymbol].maturity >= block.timestamp, "cannot destroy befor maturity");        
+        require(parameters[optSymbol].maturity >= block.timestamp, "not before exp");        
         Arrays.removeItem(optSymbols, optSymbol);
     }
 
@@ -180,7 +179,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     function withdraw(uint amount) override external {
 
         uint bal = balanceOf(msg.sender);
-        require(bal >= amount, "insufficient caller balance");
+        require(bal >= amount, "low caller bal");
 
         uint val = valueOf(msg.sender).mul(amount).div(bal);
         uint discountedValue = val.mul(fractionBase.sub(withdrawFee)).div(fractionBase);
@@ -315,7 +314,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
              
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
-        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool balance too low or excessive volume");
+        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool bal 2 low or high volume");
         
         //trigger hedge, may need to factor in costs and charge it to msg.sender
         IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
@@ -360,7 +359,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         returns (uint p, PricingParameters memory param) 
     {
         param = parameters[optSymbol];
-        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "out of range or invalid volume");
+        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad range or volume");
         p = calcOptPrice(param, op);
         require(
             op == Operation.BUY ? price >= p : price <= p,
@@ -411,6 +410,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function ensureCaller() private view {
-        require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "proposal not registered/execution not allowed");
+        require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "not registered/exec not allowed");
     }
 }
