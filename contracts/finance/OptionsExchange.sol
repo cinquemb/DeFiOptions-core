@@ -17,7 +17,7 @@ import "../interfaces/IOptionTokenFactory.sol";
 
 import "../utils/Arrays.sol";
 import "../utils/Convert.sol";
-import "../utils/ERC20.sol"; //issues with verifying and ERC-20 that can reference other ERC20's
+import "../utils/ERC20.sol"; //issues with verifying and ERC20 that can reference other ERC20
 import "../utils/MoreMath.sol";
 import "../utils/SafeCast.sol";
 import "../utils/SafeERC20.sol";
@@ -282,22 +282,17 @@ contract OptionsExchange is ERC20, ManagedContract {
     }
 
     function openExposure(
-        string[] calldata symbols,
-        uint[] calldata volume,
-        bool[] calldata isShort,
-        bool[] calldata isCovered,
-        address[] calldata poolAddrs,
-        address[] calldata paymentTokens
-    ) external returns (address[] memory _tks) {
-        require(
-            (symbols.length == volume.length)  && 
-            (symbols.length == isShort.length) && 
-            (symbols.length == isCovered.length) && 
-            (symbols.length == poolAddrs.length) && 
-            (symbols.length == paymentTokens.length), 
+        IOptionsExchange.OpenExposureInputs memory oEi,
+        address to
+    ) public {
+        /*require(
+            (oEi.symbols.length == oEi.volume.length)  && 
+            (oEi.symbols.length == oEi.isShort.length) && 
+            (oEi.symbols.length == oEi.isCovered.length) && 
+            (oEi.symbols.length == oEi.poolAddrs.length) && 
+            (oEi.symbols.length == oEi.paymentTokens.length), 
             "array mismatch"
-        );
-        // can this go in exchnageHelper.sol?
+        );*/
 
         // BIG QUESTION not sure if run time gas requirements will allow for this
             //- calc collateral gas question
@@ -305,97 +300,67 @@ contract OptionsExchange is ERC20, ManagedContract {
         // validate that all the symbols exist, pool has prices, revert if not
         // make all the options buys/sells
         // compute collateral reqirements with uncovred volumes
-
-        for (uint i=0; i< symbols.length; i++) {
-            string memory symbol = symbols[i];
-            uint vol = volume[i];
-            require(tokenAddress[symbol] != address(0), "symbol not available");            
-            if (isShort[i] == true) {
-                openExposureInternal(symbol, isCovered[i], vol);
-                (uint _sellPrice,) = IGovernableLiquidityPool(poolAddrs[i]).queryBuy(symbol, false);
-                IGovernableLiquidityPool(poolAddrs[i]).sell(symbol, _sellPrice, vol);
+        IOptionsExchange.OpenExposureVars memory oEx;
+        for (uint i=0; i< oEi.symbols.length; i++) {
+            oEx = getOpenExposureInternalArgs(i, oEi);
+            require(tokenAddress[oEx.symbol] != address(0), "symbol not available");
+            IGovernableLiquidityPool pool = IGovernableLiquidityPool(oEx.poolAddr);        
+            if (oEi.isShort[i] == true) {
+                openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
+                (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
+                pool.sell(oEx.symbol, _sellPrice, oEx.vol);
             } else {
                 // buy options
-                (uint _buyPrice,) = IGovernableLiquidityPool(poolAddrs[i]).queryBuy(symbol, true);        
-                IGovernableLiquidityPool(poolAddrs[i]).buy(symbol, _buyPrice, vol, paymentTokens[i]);
-            }
+                (uint _buyPrice,) = pool.queryBuy(oEx.symbol, true);        
+                pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
+            }   
+            
         }
-
-        collateral[msg.sender] = collateral[msg.sender].add(
-            collateralManager.calcCollateral(msg.sender, true)
-        );
-
+        //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
+        collateral[msg.sender] = collateralManager.calcCollateral(msg.sender, true);
         ensureFunds(msg.sender);
+    }
+
+    function getOpenExposureInternalArgs(uint index, IOptionsExchange.OpenExposureInputs memory oEi) private pure returns (IOptionsExchange.OpenExposureVars memory) {
+        IOptionsExchange.OpenExposureVars memory oEx;
+
+        oEx.symbol= oEi.symbols[index];
+        oEx.vol = oEi.volume[index];
+        oEx.isCovered = oEi.isCovered[index];
+        oEx.poolAddr = oEi.poolAddrs[index];
+
+        return oEx;
     }
 
     function openExposureInternal(
         string memory symbol,
         bool isCovered,
-        uint volume
+        uint volume,
+        address to
     ) private {
-        if (IOptionToken(tokenAddress[symbol]).writtenVolume(msg.sender) == 0 && IOptionToken(tokenAddress[symbol]).balanceOf(msg.sender) == 0) {
-            book[msg.sender].push(tokenAddress[symbol]);
+        address _tk = tokenAddress[symbol];
+        IOptionToken tk = IOptionToken(_tk);
+        if (tk.writtenVolume(msg.sender) == 0 && tk.balanceOf(msg.sender) == 0) {
+            book[msg.sender].push(_tk);
         }
-        IOptionToken(tokenAddress[symbol]).issue(msg.sender, msg.sender, volume);
+
+        if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
+            book[to].push(_tk);
+        }
+        tk.issue(msg.sender, to, volume);
         if (isCovered == true) {
             //write covered
             address underlying = UnderlyingFeed(
-                options[tokenAddress[symbol]].udlFeed
+                options[_tk].udlFeed
             ).getUnderlyingAddr();
             IERC20(underlying).safeTransferFrom(
                 msg.sender,
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)
             );
-            vault.lock(msg.sender, tokenAddress[symbol], volume);
+            vault.lock(msg.sender, _tk, volume);
         }
-        emit WriteOptions(tokenAddress[symbol], msg.sender, msg.sender, volume);
-    }
-
-    function writeOptions(
-        address udlFeed,
-        uint volume,
-        IOptionsExchange.OptionType optType,
-        uint strike, 
-        uint maturity,
-        address to
-    )
-        external 
-        returns (address _tk)
-    {
-        (IOptionsExchange.OptionData memory opt, string memory symbol) =
-            createOptionInMemory(udlFeed, optType, strike, maturity);
-        (_tk) = writeOptionsInternal(opt, symbol, volume, to);
-        ensureFunds(msg.sender);
-    }
-
-    function writeCovered(
-        address udlFeed,
-        uint volume,
-        uint strike, 
-        uint maturity,
-        address to
-    )
-        external 
-        returns (address _tk)
-    {
-        (IOptionsExchange.OptionData memory opt, string memory symbol) =
-            createOptionInMemory(udlFeed, IOptionsExchange.OptionType.CALL, strike, maturity);
-        _tk = tokenAddress[symbol];
-
-        if (_tk == address(0)) {
-            _tk = createSymbol(opt.udlFeed, IOptionsExchange.OptionType.CALL, strike, maturity);
-        }
-        
-        address underlying = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
-        require(underlying != address(0), "underlying token not set");
-        uint v = Convert.from18DecimalsBase(underlying, volume);
-        IERC20(underlying).safeTransferFrom(msg.sender, address(vault), v);
-
-        vault.lock(msg.sender, _tk, volume);
-        writeOptionsInternal(opt, symbol, volume, to);
-
-        ensureFunds(msg.sender);
+        emit WriteOptions(_tk, msg.sender, to, volume);
     }
     
     function transferOwnership(
@@ -446,14 +411,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         if (tk.balanceOf(owner) == 0 && tk.writtenVolume(owner) == 0) {
             Arrays.removeItem(book[owner], _tk);
         }
-    }
-
-    function liquidateExpired(address _tk, address[] calldata owners) external {
-        IBaseCollateralManager(settings.getUdlCollateralManager(options[_tk].udlFeed)).liquidateExpired(_tk, owners);
-    }
-
-    function liquidateOptions(address _tk, address owner) public returns (uint value) {
-        value = IBaseCollateralManager(settings.getUdlCollateralManager(options[_tk].udlFeed)).liquidateOptions(_tk, owner);
     }
 
     function calcSurplus(address owner) public view returns (uint) {
@@ -516,11 +473,12 @@ contract OptionsExchange is ERC20, ManagedContract {
         
         address _ts = tokenAddress[symbol];
         require(_ts != address(0), "token not found");
+        UnderlyingFeed udlFeed = UnderlyingFeed(options[_ts].udlFeed);
 
         if (options[_ts].maturity > settings.exchangeTime()) {
-            (,answer) = UnderlyingFeed(options[_ts].udlFeed).getLatestPrice();
+            (,answer) = udlFeed.getLatestPrice();
         } else {
-            (,answer) = UnderlyingFeed(options[_ts].udlFeed).getPrice(options[_ts].maturity);
+            (,answer) = udlFeed.getPrice(options[_ts].maturity);
         }
     }
 
@@ -580,47 +538,6 @@ contract OptionsExchange is ERC20, ManagedContract {
             creditProvider.balanceOf(owner) >= collateral[owner],
             "insufficient collateral"
         );
-    }
-
-    function writeOptionsInternal(
-        IOptionsExchange.OptionData memory opt,
-        string memory symbol,
-        uint volume,
-        address to
-    )
-        private 
-        returns (address _tk)
-    {
-        require(settings.getUdlFeed(opt.udlFeed) > 0, "feed not allowed");
-        require(volume > 0, "invalid volume");
-        require(opt.maturity > settings.exchangeTime(), "invalid maturity");
-
-        _tk = tokenAddress[symbol];
-        if (_tk == address(0)) {
-            _tk = createSymbol(opt.udlFeed, opt._type, opt.strike, opt.maturity);
-        }
-
-        IOptionToken tk = IOptionToken(_tk);
-        if (tk.writtenVolume(msg.sender) == 0 && tk.balanceOf(msg.sender) == 0) {
-            book[msg.sender].push(_tk);
-        }
-        if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
-            book[to].push(_tk);
-        }
-        tk.issue(msg.sender, to, volume);
-
-        if (options[_tk].udlFeed == address(0)) {
-            options[_tk] = opt;
-        }
-        
-        uint v = MoreMath.min(volume, tk.uncoveredVolume(msg.sender));
-        if (v > 0) {
-            collateral[msg.sender] = collateral[msg.sender].add(
-                IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcCollateral(opt, v)
-            );
-        }
-
-        emit WriteOptions(_tk, msg.sender, to, volume);
     }
 
     function createOptionInMemory(

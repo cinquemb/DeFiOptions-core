@@ -7,6 +7,7 @@ import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IOptionsExchange.sol";
 import "../feeds/DEXAggregatorV1.sol";
 
 
@@ -15,6 +16,7 @@ contract Incentivized is ManagedContract {
 	IProtocolSettings private settings;
     ICreditProvider private creditProvider;
     IBaseCollateralManager private collateralManager;
+    IOptionsExchange private exchange;
 
     event IncentiveReward(address indexed from, uint value);
 
@@ -22,6 +24,7 @@ contract Incentivized is ManagedContract {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
+        exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
     function incrementRoundDexAgg(address dexAggAddr) incentivized external {
@@ -43,6 +46,18 @@ contract Incentivized is ManagedContract {
     function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
         require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
         UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
+    }
+
+    function liquidateExpired(address _tk, address[] calldata owners) external {
+        IBaseCollateralManager(
+            settings.getUdlCollateralManager(exchange.getOptionData(_tk).udlFeed)
+        ).liquidateExpired(_tk, owners);
+    }
+
+    function liquidateOptions(address _tk, address owner) public returns (uint value) {
+        value = IBaseCollateralManager(
+            settings.getUdlCollateralManager(exchange.getOptionData(_tk).udlFeed)
+        ).liquidateOptions(_tk, owner);
     }
 
     modifier incentivized() {

@@ -38,15 +38,19 @@ contract LinearLiquidityPool is LiquidityPool {
         internal
         override
     {
-        uint _written = tk.writtenVolume(address(this));
-        require(_written.add(volume) <= param.buyStock, "excessive volume");
+        require(tk.writtenVolume(address(this)).add(volume) <= param.buyStock, "excessive volume");
 
-        exchange.writeOptions(
-            param.udlFeed,
-            volume,
-            param.optType,
-            param.strike,
-            param.maturity,
+        IOptionsExchange.OpenExposureInputs memory oEi;
+        
+        oEi.symbols[0] = tk.symbol();
+        oEi.volume[0] = volume;
+        oEi.isShort[0] = true;
+        oEi.isCovered[0] = false;
+        oEi.poolAddrs[0] = address(this);
+        oEi.paymentTokens[0] = address(0);
+
+        exchange.openExposure(
+            oEi,
             to
         );
         

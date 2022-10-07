@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 import "./GovernableLiquidityPoolV2.sol";
 
 contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
-
     constructor(string memory _nm, string memory _sb, address _deployAddr)
         GovernableLiquidityPoolV2(_nm, _sb, _deployAddr) public {}
     
@@ -28,13 +27,18 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
     {
         require(IOptionToken(_tk).writtenVolume(address(this)).add(volume) <= param.bsStockSpread[0].toUint120(), "excessive volume");
         require(calcFreeBalance() > 0, "pool balance too low");
+        
+        IOptionsExchange.OpenExposureInputs memory oEi;
+        
+        oEi.symbols[0] = IOptionToken(_tk).symbol();
+        oEi.volume[0] = volume;
+        oEi.isShort[0] = true;
+        oEi.isCovered[0] = false;
+        oEi.poolAddrs[0] = address(this);
+        oEi.paymentTokens[0] = address(0);
 
-        exchange.writeOptions(
-            param.udlFeed,
-            volume,
-            param.optType,
-            param.strike,
-            param.maturity,
+        exchange.openExposure(
+            oEi,
             to
         );
         

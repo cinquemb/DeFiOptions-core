@@ -16,6 +16,22 @@ interface IOptionsExchange {
         uint120 upperVol;
     }
 
+    struct OpenExposureVars {
+        string symbol;
+        uint vol;
+        bool isCovered;
+        address poolAddr;
+    }
+
+    struct OpenExposureInputs {
+        string[] symbols;
+        uint[] volume;
+        bool[] isShort;
+        bool[] isCovered;
+        address[] poolAddrs;
+        address[] paymentTokens;
+    }
+
     function volumeBase() external view returns (uint);
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
@@ -30,7 +46,10 @@ interface IOptionsExchange {
     function getUdlPrice(IOptionsExchange.OptionData calldata opt) external view returns (int answer);
     function calcCollateral(address owner, bool is_regular) external view returns (uint);
     function calcCollateral(address udlFeed, uint volume, OptionType optType, uint strike,  uint maturity) external view returns (uint);
-    function writeOptions(address udlFeed, uint volume, OptionType optType, uint strike,  uint maturity, address to) external returns (address _tk);
+    function openExposure(
+        OpenExposureInputs calldata oEi,
+        address to
+    ) external;
     function transferBalance(address to, uint value) external;
     function transferBalance(address from, address to, uint value) external;
     function underlyingBalance(address owner, address _tk) external view returns (uint);
