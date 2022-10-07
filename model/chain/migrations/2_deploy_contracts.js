@@ -28,7 +28,7 @@ const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x90182cB63cA8DB0FBb74895aF735AB3867597d9D");
+  await deployer.deploy(Deployer4, "0xE1be200A278aa18586bD09d7B4f04590D1Ad1C54");
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -52,41 +52,8 @@ module.exports = async function(deployer) {
   console.log("poolFactory is at: "+ poolFactory.address);
   const dexFeedFactory = await deployer.deploy(DEXFeedFactory);
   console.log("dexFeedFactory is at: "+ dexFeedFactory.address);
-
   const collateralManager = await deployer.deploy(CollateralManager);
 
-
-  const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
-  console.log("BTCUSDAgg is at: "+ BTCUSDAgg.address);
-  const ETHUSDAgg = await deployer.deploy(AggregatorV3Mock);
-  console.log("ETHUSDAgg is at: "+ ETHUSDAgg.address);
-
-  /* TODO: Need to deply mock aggregator contracts for btc/usd and eth/usd first
-  and use the contract addresses for as arguments into the chaninlink feed*/
-
-  const BTCUSDMockFeed = await deployer.deploy(
-    MockChainLinkFeed, 
-    "BTC/USD",
-    "0x0000000000000000000000000000000000000000",
-    BTCUSDAgg.address,//btc/usd feed mock
-    timeProvider.address, //time provider address
-    0,//offset
-    [],
-    []
-  );
-  console.log("BTCUSDMockFeed is at: "+ BTCUSDMockFeed.address);
-
-  const ETHUSDMockFeed = await deployer.deploy(
-    MockChainLinkFeed, 
-    "ETH/USD", 
-    "0x0000000000000000000000000000000000000000",
-    ETHUSDAgg.address, //eth/usd feed mock
-    timeProvider.address, //time provider address
-    0,//offset
-    [],
-    []
-  );
-  console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
   await deployer4.setContractAddress("CreditProvider", creditProvider.address);
@@ -96,8 +63,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("CollateralManager", collateralManager.address);
   await deployer4.setContractAddress("OptionsExchange", exchange.address);
   await deployer4.setContractAddress("OptionTokenFactory", otf.address);
-  await deployer4.setContractAddress("GovToken", gt.address);
-  await deployer4.setContractAddress("ProtocolSettings", settings.address);
+  await deployer4.setContractAddress("GovToken", gt.address); //MAY JUST USE THE EXISTING GOV TOKEN ADDR ON POLYGON MAINNET TO MAKE THINGS SIMPLE
   await deployer4.setContractAddress("LinearLiquidityPoolFactory", poolFactory.address);
   await deployer4.setContractAddress("DEXFeedFactory", dexFeedFactory.address);
   await deployer4.setContractAddress("Interpolator", lasit.address);
@@ -119,13 +85,20 @@ module.exports = async function(deployer) {
   console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
   const DEXFeedFactoryAddress = await deployer4.getContractAddress("DEXFeedFactory");
   console.log("DEXFeedFactoryAddress is at: "+ DEXFeedFactoryAddress);
+  const ProposalsManagerAddress = await deployer4.getContractAddress("ProposalsManager");
+  console.log("ProposalsManagerAddress is at: "+ ProposalsManagerAddress);
+  const GovTokenAddress = await deployer4.getContractAddress("GovToken");
+  console.log("GovTokenAddress is at: "+ GovTokenAddress);
 
+  
+
+  /* MOCK BELOW */
   const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
   console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
   const metavaultReader = await deployer.deploy(MetavaultReader);
   console.log("metavaultReader is at: "+ metavaultReader.address);
+  /* MOCK ABOVE */
 
-  //address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode
   const mvHedgingManager = await deployer.deploy(
     MetavaultHedgingManager, 
     Deployer4.address, // address _deployAddr
@@ -133,6 +106,37 @@ module.exports = async function(deployer) {
     metavaultReader.address, //address _reader
     "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
   );
-
   console.log("MetaVaultHedgingManager is at: "+ mvHedgingManager.address);
+
+
+  /* MOCK BELOW */
+  const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
+  console.log("BTCUSDAgg is at: "+ BTCUSDAgg.address);
+  const ETHUSDAgg = await deployer.deploy(AggregatorV3Mock);
+  console.log("ETHUSDAgg is at: "+ ETHUSDAgg.address);
+  /* MOCK ABOVE */
+
+  const BTCUSDMockFeed = await deployer.deploy(
+    MockChainLinkFeed, 
+    "BTC/USD",
+    "0x0000000000000000000000000000000000000000", //underlying address on the chain
+    BTCUSDAgg.address,//btc/usd feed mock or chainlink agg
+    timeProvider.address, //time provider address
+    0,//offset
+    [],
+    []
+  );
+  console.log("BTCUSDMockFeed is at: "+ BTCUSDMockFeed.address);
+
+  const ETHUSDMockFeed = await deployer.deploy(
+    MockChainLinkFeed, 
+    "ETH/USD", 
+    "0x0000000000000000000000000000000000000000", // underlying addrsss on the chain
+    ETHUSDAgg.address, //eth/usd feed mock or chainlink agg
+    timeProvider.address, //time provider address
+    0,//offset
+    [],
+    []
+  );
+  console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
 };

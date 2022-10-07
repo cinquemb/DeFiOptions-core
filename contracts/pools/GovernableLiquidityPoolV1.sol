@@ -37,9 +37,9 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    uint private _maturity;
+    uint public maturity;
     uint internal volumeBase;
-    uint private withdrawFee;
+    uint public withdrawFee;
     uint internal reserveRatio;
     uint internal fractionBase;
     
@@ -72,17 +72,12 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         ensureCaller();
         reserveRatio = _reserveRatio;
         withdrawFee = _withdrawFee;
-        _maturity = _mt;
+        maturity = _mt;
     }
 
     function redeemAllowed() override public view returns (bool) {
         
-        return block.timestamp >= _maturity;
-    }
-
-    function maturity() override external view returns (uint) {
-        
-        return _maturity;
+        return block.timestamp >= maturity;
     }
 
     function yield(uint dt) override external view returns (uint) {
@@ -103,7 +98,7 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         external
     {
         ensureCaller();
-        require(x.length > 0 && x.length.mul(2) == y.length && _mt < _maturity, "invalid pricing surface or maturity");
+        require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "invalid pricing surface or maturity");
 
         string memory optSymbol = exchange.getOptionSymbol(
             IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())

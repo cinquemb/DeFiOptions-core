@@ -91,6 +91,18 @@ contract ProposalWrapper {
         return status;
     }
 
+    function getVoteType() public view returns (VoteType) {
+        return voteType;
+    }
+
+    function getGovernanceToken() public view returns (address) {
+        if (voteType == VoteType.POOL_SETTINGS) {
+            return address(llpToken);
+        } else {
+            return address(govToken);
+        }
+    }
+
     function isExecutionAllowed() public view returns (bool) {
 
         return status == Status.APPROVED && !closed;
@@ -98,7 +110,7 @@ contract ProposalWrapper {
 
     function isPoolSettingsAllowed() external view returns (bool) {
         //need to check that the propsal gov token address matches the pool token address as the sender
-        return (voteType == VoteType.POOL_SETTINGS) && (address(govToken) == msg.sender) && isExecutionAllowed();
+        return (voteType == VoteType.POOL_SETTINGS) && (address(llpToken) == msg.sender) && isExecutionAllowed();
     }
 
     function isProtocolSettingsAllowed() public view returns (bool) {

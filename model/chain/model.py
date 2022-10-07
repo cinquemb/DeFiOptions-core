@@ -59,6 +59,19 @@ EXCHG = {
     "deploy_slug": "OptionsExchangeAddress is at: "
 }
 
+PROPSMNGERHELPER = {
+    "addr":"0x04AbCcEEd429062b0b145e85a91ee2D529b2840A"
+}
+
+PROPSWRPR = {
+    "addr": Web3.toChecksumAddress("0xbe9a38abe9bb3c28b164f1b0f9aeca9591cb8fb1")
+}
+
+PROPSMNGER = {
+    "addr": '0x6fe9afFFc3ffa4D59638486bbD029d0138D6E0af',
+    "deploy_slug": "OptionsExchangeAddress is at: "
+} 
+
 CREDPRO = {
     "addr": '',
     "deploy_slug": "CreditProviderAddress is at: "
@@ -76,7 +89,7 @@ DPLY = {
 
 # USE FROM XSD SIMULATION
 USDT = {
-  "addr": '0x894E0346fd2132FAfb1E2Ea420f79F28c64405c0',
+  "addr": '0x351D75454225010b2d2EeBd0E96762291661CDcB',
   "decimals": 6,
   "symbol": 'USDT',
 }
@@ -117,6 +130,11 @@ AggregatorV3MockContract = json.loads(open('./build/contracts/AggregatorV3Mock.j
 ChainlinkFeedContract = json.loads(open('./build/contracts/ChainlinkFeed.json', 'r+').read())
 CreditProviderContract = json.loads(open('./build/contracts/CreditProvider.json', 'r+').read())
 OptionsExchangeContract = json.loads(open('./build/contracts/OptionsExchange.json', 'r+').read())
+ProposalManagerContract = json.loads(open('./build/contracts/ProposalsManager.json', 'r+').read())
+
+ProposalManagerHelperContract = json.loads(open('./build/contracts/PoolManagementProposal.json', 'r+').read())
+ProposalWrapperContract = json.loads(open('./build/contracts/ProposalWrapper.json', 'r+').read())
+ 
 USDTContract = json.loads(open('./build/contracts/TestnetUSDT.json', 'r+').read())
 OptionTokenContract = json.loads(open('./build/contracts/OptionToken.json', 'r+').read())
 ProtocolSettingsContract = json.loads(open('./build/contracts/ProtocolSettings.json', 'r+').read())
@@ -2172,9 +2190,9 @@ def main():
     '''
         curl -X POST --data '{ "jsonrpc":"2.0", "id" :1, "method" :"debug_increaseTime", "params" : ["0x45e8d9a7ca159a0f6957534cb25412b4daa4243906ef2b6e93125246b1e27d05"]}' -H 'content-type:application/json;' http://127.0.0.1:9545/ext/bc/C/rpc
     '''
-    #transaction = w3.eth.get_transaction("0xe0c89a15c74d9123a82aa831c8e12e2b38b727c7a5075c4a63bc733981d3fb2f")
+    transaction = w3.eth.get_transaction("0x5d385ebc44b8e1e6c01b24ef2a13fa574649d0993cae859a63af64ecc11f5851")
 
-    #print(transaction.input)
+    print(transaction.input)
     #print(provider.make_request("debug_traceTransaction", ["0x45e8d9a7ca159a0f6957534cb25412b4daa4243906ef2b6e93125246b1e27d05"]))
     #print(w3.eth.get_block('latest')['timestamp'])
     #
@@ -2182,8 +2200,12 @@ def main():
     
     logging.basicConfig(level=logging.INFO)
     logger.info('Total Agents: {}'.format(len(w3.eth.accounts[:max_accounts])))
+
     
     options_exchange = w3.eth.contract(abi=OptionsExchangeContract['abi'], address=EXCHG["addr"])
+    proposal_wrapper = w3.eth.contract(abi=ProposalWrapperContract['abi'], address=PROPSWRPR["addr"])
+    proposal_manager = w3.eth.contract(abi=ProposalManagerContract['abi'], address=PROPSMNGER["addr"])
+    proposal_manager_helper = w3.eth.contract(abi=ProposalManagerHelperContract['abi'], address=PROPSMNGERHELPER["addr"])
     usdt = TokenProxy(w3.eth.contract(abi=USDTContract['abi'], address=USDT["addr"]))
     credit_provider = w3.eth.contract(abi=CreditProviderContract['abi'], address=CREDPRO["addr"])
     linear_liquidity_pool_factory = w3.eth.contract(abi=LinearLiquidityPoolFactoryContract['abi'], address=LLPF["addr"])
@@ -2197,13 +2219,19 @@ def main():
     mock_time = w3.eth.contract(abi=TimeProviderMockContract['abi'], address=TPRO["addr"])
 
 
-    '''
+    #''
     #print(credit_provider.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).balanceOf(linear_liquidity_pool.address))
     print("tx-input -> 0xa53b0041")
-    print(options_exchange.decode_function_input("0xa53b0041"))
-    sys.exit()
+    print(proposal_wrapper.decode_function_input("0x5e4d3229"))
+    #print(proposal_manager.decode_function_input(transaction.input))
 
-    '''
+    #print(
+    #proposal_manager_helper.caller({'from' : w3.eth.accounts[0], 'gas': 8000000}).getExecutionBytes())
+
+
+    #sys.exit()
+
+    #''
     '''
         INIT FEEDS FOR BTCUSDAGG
     '''
@@ -2220,7 +2248,7 @@ def main():
     #print(Balance(4.474093538197649, 18).to_wei())
 
     #sys.exit()
-
+    '''
     with open('../../data/BTC-USD_vol_date_high_low_close.json', 'r+') as btcusd_file:
         btcusd_historical_ohlc = json.loads(btcusd_file.read())["chart"]
     
@@ -2228,7 +2256,6 @@ def main():
     daily_period = 60 * 60 * 24
     current_timestamp = int(w3.eth.get_block('latest')['timestamp'])
     print("current_timestamp", current_timestamp)
-
 
     btcusd_answers = []
     start_date = "2017-06-17"#"2017-12-17"
@@ -2253,6 +2280,7 @@ def main():
     btcusd_answers = btcusd_answers[btcusd_data_offset-btcusd_data_subtraction_set:]
 
     print('btcusd_data_offset', btcusd_data_offset, start_date)
+    '''
 
     avax_cchain_nonces = open(MMAP_FILE, "r+b")
 
@@ -2262,11 +2290,13 @@ def main():
 
     linear_liquidity_pool_address = None
     linear_liquidity_pool = None
-
-    opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
+    #''
+  # opx = OptionsExchange(options_exchange, usdt, btcusd_chainlink_feed)
+    opx = OptionsExchange(options_exchange, usdt, [])
     if not linear_liquidity_pool_address:
         # temp opx, llp, agent
         agent = Agent(None, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
+        '''
         p_hash = transaction_helper(
             agent,
             opx.contract.functions.createPool(
@@ -2287,11 +2317,62 @@ def main():
         print("linear pool address", logs[0].args.token)
         linear_liquidity_pool_address = logs[0].args.token
         linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
+        '''
     else:
         linear_liquidity_pool = w3.eth.contract(abi=LinearLiquidityPoolContract["abi"], address=linear_liquidity_pool_address)
-
+    '''
     _llp = LinearLiquidityPool(linear_liquidity_pool, usdt, opx)
     agent = Agent(_llp, opx, None, None, usdt, starting_axax=0, starting_usdt=0, wallet_address=w3.eth.accounts[0], is_mint=False)
+    '''
+    '''
+        BELOW: USE FOR TESTNET FUNDING OF FAKE STABLECOIN
+    '''
+    
+    sat_hash = transaction_helper(
+        agent,
+        protocol_settings.functions.setAllowedToken(
+            usdt.address,
+            1,
+            10**(18 - usdt.decimals)
+        ),
+        500000
+    )
+    tmp_tx_hash = {'type': 'setAllowedToken', 'hash': sat_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
+
+    
+
+    msp_hash= transaction_helper(
+        agent,
+        protocol_settings.functions.setMinShareForProposal(
+            10,
+            1000
+        ),
+        500000
+    )
+    tmp_tx_hash = {'type': 'setMinShareForProposal', 'hash': msp_hash}
+    tx_hashes.append(tmp_tx_hash)
+    print(tmp_tx_hash)
+    receipt = w3.eth.waitForTransactionReceipt(tmp_tx_hash['hash'], poll_latency=tx_pool_latency)
+    tx_hashes_good += receipt["status"]
+    if receipt["status"] == 0:
+        print(receipt)
+        tx_fails.append(tmp_tx_hash['type'])
+
+
+    
+    sys.exit()
+
+    '''
+        ABOVE: FR TESTNET FUNDING OF FAKE STABLECOIN
+    '''
+
 
     '''
         SETUP POOL:

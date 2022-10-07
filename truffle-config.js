@@ -32,7 +32,7 @@ module.exports = {
       provider: () => new Web3.providers.HttpProvider('http://127.0.0.1:9545/ext/bc/C/rpc'),
       network_id: "*",
       gas: 8000000,
-      gasPrice: 225000000000 // 225 nAVAX for now
+      gasPrice: 25000000000 // 25 nAVAX for now
     },
   
     matic: {
@@ -46,6 +46,18 @@ module.exports = {
       networkCheckTimeout: 1000000,
       timeoutBlocks: 200,
       gasPrice: 50e9 // 50 gewi
+    },
+
+    mumbai: {
+      provider: function() {
+        return new HDWalletProvider(process.env.TESTNET_PRIVATE_KEY, "https://matic-mumbai.chainstacklabs.com/")
+      },
+      gas: 8000000,
+      network_id: 80001,
+      networkCheckTimeout: 1000000,
+      timeoutBlocks: 200,
+      from: "0xe977757dA5fd73Ca3D2bA6b7B544bdF42bb2CBf6",
+      gasPrice: 401e8 // 50 gewi
     }
   },
 
@@ -55,7 +67,7 @@ module.exports = {
       settings: {
         optimizer: {
           enabled: true,
-          runs: 100
+          runs: 200
         }
       }
     }

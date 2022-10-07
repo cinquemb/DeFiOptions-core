@@ -12,13 +12,13 @@ V2 of Experimental DeFi options trading smart contracts enabling long and short 
 
 * able to have unique collateral management per underlying
 * create governance governable liquidity pools/operations
-* multi stablecoin withrawl
+* multi stablecoin withrawal
 * swap for multi stablecoins out
 * exchange balance is a proper erc20 (can tranfer to others in metamask)
 * spread collateral requiremnts thru all writers (rebates and increases)
 * pools can write options against borrowed liquidity
 * new credit token redemption process
-* able to allow for rehypothication of underlying collateral
+* ~~able to allow for rehypothication of underlying collateral~~
 * incentivization for all exchange operations (liquidations, feeds updates)
 * able to have dex twap oracle
 * pools are able to hedge option writing on dao approved external protocols
