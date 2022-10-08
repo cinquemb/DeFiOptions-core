@@ -234,7 +234,7 @@ contract CollateralManager is BaseCollateralManager {
         return cData.coll;
     }
 
-    function foundUnderlying(address udl, address[] memory udlArray) private view returns (bool, int){
+    function foundUnderlying(address udl, address[] memory udlArray) private pure returns (bool, int){
         for (uint i; i < udlArray.length; i++) {
             if (udlArray[i] == udl) {
                 return (true, int(i));
