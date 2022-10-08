@@ -120,6 +120,8 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
     function calcCollateralInternal(address owner, bool is_regular) virtual internal view returns (int);
 
+    function calcNetCollateralInternal(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular)  virtual internal view returns (int);
+
     function calcLiquidationVolume(
         address owner,
         IOptionsExchange.OptionData memory opt,
@@ -347,6 +349,22 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     
         // takes custom collateral requirements and applies exchange level normalizations   
         int coll = calcCollateralInternal(owner, is_regular);
+        
+        coll = collateralSkewForPosition(coll);
+        coll = coll.div(int(_volumeBase));
+
+        if (is_regular == false) {
+            return uint(coll);
+        }
+
+        if (coll < 0)
+            return 0;
+        return uint(coll);
+    }
+
+    function calcNetCollateral(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular) override public view returns (uint) {     
+        // takes custom collateral requirements and applies exchange level normalizations on prospective positions
+        int coll = calcNetCollateralInternal(_tokens, _uncovered, _holding, is_regular);
         
         coll = collateralSkewForPosition(coll);
         coll = coll.div(int(_volumeBase));

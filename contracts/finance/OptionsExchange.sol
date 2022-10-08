@@ -294,34 +294,47 @@ contract OptionsExchange is ERC20, ManagedContract {
             "array mismatch"
         );*/
 
+        IOptionsExchange.OpenExposureVars memory oEx;
+
         // BIG QUESTION not sure if run time gas requirements will allow for this
             //- calc collateral gas question
             //- gas cost of multiple buy/sell txs from pool, maybe need optimized function for pool
         // validate that all the symbols exist, pool has prices, revert if not
         // make all the options buys/sells
         // compute collateral reqirements with uncovred volumes
-        IOptionsExchange.OpenExposureVars memory oEx;
+        
         for (uint i=0; i< oEi.symbols.length; i++) {
-            oEx = getOpenExposureInternalArgs(i, oEi);
+            oEx = getOpenExposureInternalArgs(i, oEx, oEi);
             require(tokenAddress[oEx.symbol] != address(0), "symbol not available");
+            oEx._tokens[i] = tokenAddress[oEx.symbol];
             IGovernableLiquidityPool pool = IGovernableLiquidityPool(oEx.poolAddr);        
             if (oEi.isShort[i] == true) {
-                openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
-                (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
-                pool.sell(oEx.symbol, _sellPrice, oEx.vol);
+                //sell options
+                if (oEx.vol > 0) {
+                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
+                    (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
+                    pool.sell(oEx.symbol, _sellPrice, oEx.vol);
+                    oEx._uncovered[i] = oEx.vol;
+                }
+                
             } else {
                 // buy options
-                (uint _buyPrice,) = pool.queryBuy(oEx.symbol, true);        
-                pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
+                if (oEx.vol > 0) {
+                    (uint _buyPrice,) = pool.queryBuy(oEx.symbol, true);        
+                    pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
+                    oEx._holding[i] = oEx.vol;
+                }
             }   
             
         }
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
-        collateral[msg.sender] = collateralManager.calcCollateral(msg.sender, true);
+        collateral[msg.sender] = collateral[msg.sender].add(
+            collateralManager.calcNetCollateral(oEx._tokens, oEx._uncovered, oEx._holding, true)
+        );
         ensureFunds(msg.sender);
     }
 
-    function getOpenExposureInternalArgs(uint index, IOptionsExchange.OpenExposureInputs memory oEi) private pure returns (IOptionsExchange.OpenExposureVars memory) {
+    function getOpenExposureInternalArgs(uint index, IOptionsExchange.OpenExposureVars memory oEx, IOptionsExchange.OpenExposureInputs memory oEi) private pure returns (IOptionsExchange.OpenExposureVars memory) {
         IOptionsExchange.OpenExposureVars memory oEx;
 
         oEx.symbol= oEi.symbols[index];

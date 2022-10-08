@@ -22,12 +22,121 @@ contract CollateralManager is BaseCollateralManager {
         int hedgedDelta;
         uint totalAbsDelta;
         address[] underlyings;
+        int[] _iv;
         uint[] posDeltaNum;
         uint[] posDeltaDenom;
     }
 
     function initialize(Deployer deployer) override internal {
         super.initialize(deployer);
+    }
+
+    function calcNetCollateralInternal(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular) override internal view returns (int) {
+        // multi udl feed refs, need to make core accross all collateral models
+        // do not normalize by volumeBase in internal calls for calcCollateralInternal
+        
+
+        CollateralData memory cData;
+        cData.underlyings = new address[](_tokens.length);
+        cData.posDeltaNum = new uint[](_tokens.length);
+        cData.posDeltaDenom = new uint[](_tokens.length);
+        cData.hmngr = IGovernableLiquidityPool(msg.sender).getHedgingManager();//WILL THIS ERROR ON ACCOUNTS?
+
+        
+        //for each underlying calculate the delta of their sub portfolio
+        for (uint i = 0; i < _tokens.length; i++) {
+            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
+            cData.udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
+            cData._iv[i] = calcIntrinsicValue(opt);
+            
+            (cData.udlFound, cData.udlFoundIdx) = foundUnderlying(cData.udlAddr, cData.underlyings);
+            if (cData.udlFound == false) {
+                cData.totalDelta = 0;
+                cData.hedgedDelta = 0;
+                cData.totalAbsDelta = 0;
+
+                if (settings.isAllowedHedgingManager(cData.hmngr)) {
+                     cData.hedgedDelta = int256(
+                        IBaseHedgingManager(cData.hmngr).realHedgeExposure(
+                           cData.udlAddr,
+                           msg.sender
+                        )
+                    );
+                }
+                
+                for (uint j = 0; j < _tokens.length; j++) {
+                    //TODO: CAN THE BELOW BE DONE MORE OPTIMALLY?
+                    IOptionsExchange.OptionData memory optTemp = exchange.getOptionData(_tokens[j]);
+                    address udlTemp = UnderlyingFeed(optTemp.udlFeed).getUnderlyingAddr();
+                    //TODO: CAN THE ABOVE BE DONE MORE OPTIMALLY
+
+                    if (udlTemp == cData.udlAddr){
+                        int256 delta;
+                        uint256 absDelta;
+
+                        if (_uncovered[j] > 0) {
+                            // short this option, thus mult by -1
+                            delta = calcDelta(
+                                opt,
+                                _uncovered[j]
+                            ).mul(-1);
+                            absDelta = MoreMath.abs(delta);
+                        } else {
+                            // long thus does not need to be modified
+                            delta = calcDelta(
+                                opt,
+                                _holding[j]
+                            );
+                            absDelta = MoreMath.abs(delta);
+                        }
+                        
+                        cData.totalDelta = cData.totalDelta.add(delta);
+                        cData.totalAbsDelta = cData.totalAbsDelta.add(absDelta);
+                    }
+                }
+
+                cData.underlyings[i] = cData.udlAddr;
+                cData.posDeltaNum[i] = MoreMath.abs(cData.totalDelta.sub(cData.hedgedDelta));
+                cData.posDeltaDenom[i] = cData.totalAbsDelta;
+
+                cData.totalDelta = 0;
+                cData.hedgedDelta = 0;
+                cData.totalAbsDelta = 0;
+
+                cData.udlFound = true;
+            } else {
+                // copy preexisting
+                cData.underlyings[i] = cData.underlyings[uint(cData.udlFoundIdx)];
+                cData.posDeltaNum[i] = cData.posDeltaNum[uint(cData.udlFoundIdx)];
+                cData.posDeltaDenom[i] = cData.posDeltaDenom[uint(cData.udlFoundIdx)];
+            }
+        }
+
+        for (uint i = 0; i < _tokens.length; i++) {
+            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
+
+            if (is_regular == false) {
+                if (_uncovered[i] > _holding[i]) {
+                    continue;
+                }
+            }
+
+            cData.coll = cData.coll.add(
+                cData._iv[i].mul(
+                    int(_uncovered[i]).sub(int(_holding[i]))
+                )
+            ).add(
+                int(
+                    calcCollateral(
+                        exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                        _uncovered[i],
+                        opt
+                    ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                )
+            );
+        }
+
+        return cData.coll;
     }
 
 

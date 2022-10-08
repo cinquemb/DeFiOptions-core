@@ -21,6 +21,9 @@ interface IOptionsExchange {
         uint vol;
         bool isCovered;
         address poolAddr;
+        address[] _tokens;
+        uint[] _uncovered;
+        uint[] _holding;
     }
 
     struct OpenExposureInputs {
