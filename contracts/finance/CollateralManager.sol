@@ -40,7 +40,6 @@ contract CollateralManager is BaseCollateralManager {
         cData.underlyings = new address[](_tokens.length);
         cData.posDeltaNum = new uint[](_tokens.length);
         cData.posDeltaDenom = new uint[](_tokens.length);
-        cData.hmngr = IGovernableLiquidityPool(msg.sender).getHedgingManager();//WILL THIS ERROR ON ACCOUNTS?
 
         
         //for each underlying calculate the delta of their sub portfolio
@@ -55,15 +54,6 @@ contract CollateralManager is BaseCollateralManager {
                 cData.hedgedDelta = 0;
                 cData.totalAbsDelta = 0;
 
-                if (settings.isAllowedHedgingManager(cData.hmngr)) {
-                     cData.hedgedDelta = int256(
-                        IBaseHedgingManager(cData.hmngr).realHedgeExposure(
-                           cData.udlAddr,
-                           msg.sender
-                        )
-                    );
-                }
-                
                 for (uint j = 0; j < _tokens.length; j++) {
                     //TODO: CAN THE BELOW BE DONE MORE OPTIMALLY?
                     IOptionsExchange.OptionData memory optTemp = exchange.getOptionData(_tokens[j]);
@@ -151,7 +141,7 @@ contract CollateralManager is BaseCollateralManager {
         cData.underlyings = new address[](_tokens.length);
         cData.posDeltaNum = new uint[](_tokens.length);
         cData.posDeltaDenom = new uint[](_tokens.length);
-        cData.hmngr = IGovernableLiquidityPool(owner).getHedgingManager();
+        cData.hmngr = (settings.checkPoolSellCreditTradable(owner)) ? IGovernableLiquidityPool(owner).getHedgingManager() : address(0); //HACK: checks if owner is a pool that can sell options with borrowed liquidity
 
         
         //for each underlying calculate the delta of their sub portfolio

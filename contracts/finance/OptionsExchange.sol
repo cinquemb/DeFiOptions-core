@@ -335,8 +335,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     }
 
     function getOpenExposureInternalArgs(uint index, IOptionsExchange.OpenExposureVars memory oEx, IOptionsExchange.OpenExposureInputs memory oEi) private pure returns (IOptionsExchange.OpenExposureVars memory) {
-        IOptionsExchange.OpenExposureVars memory oEx;
-
         oEx.symbol= oEi.symbols[index];
         oEx.vol = oEi.volume[index];
         oEx.isCovered = oEi.isCovered[index];
