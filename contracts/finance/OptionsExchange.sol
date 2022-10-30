@@ -313,6 +313,14 @@ contract OptionsExchange is ERC20, ManagedContract {
                 if (oEx.vol > 0) {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
                     (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
+
+                    IERC20 oTk = IERC20(oEx._tokens[i]);
+                    if (oTk.allowance(msg.sender, address(pool)) > 0) {
+                        oTk.safeApprove(address(pool), 0);
+                    }
+                    oTk.safeApprove(address(pool), oEx.vol);
+
+
                     pool.sell(oEx.symbol, _sellPrice, oEx.vol);
                     oEx._uncovered[i] = oEx.vol;
                 }
