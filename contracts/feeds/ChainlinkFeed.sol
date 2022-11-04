@@ -71,6 +71,10 @@ contract ChainlinkFeed is UnderlyingFeed {
         return udlAddr;
     }
 
+    function getUnderlyingAggAddr() override external view returns (address) {
+        return address(aggregator);
+    }
+
     function getLatestPrice() override external view returns (uint timestamp, int price) {
 
         (, price,, timestamp,) = aggregator.latestRoundData();
