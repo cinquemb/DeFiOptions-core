@@ -102,21 +102,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         return creditProvider.getTotalBalance();
     }
 
-    function depositTokens(
-        address to,
-        address token,
-        uint value,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    )
-        external
-    {
-        IERC20Permit(token).permit(msg.sender, address(this), value, deadline, v, r, s);
-        depositTokens(to, token, value);
-    }
-
     function depositTokens(address to, address token, uint value) public {
 
         IERC20_2(token).safeTransferFrom(msg.sender, address(creditProvider), value);
@@ -178,13 +163,13 @@ contract OptionsExchange is ERC20, ManagedContract {
 
         return vault.balanceOf(owner, _tk);
     }
-    
+    /*
     function withdrawTokens(uint value) external {
         
         require(value <= calcSurplus(msg.sender), "insufficient surplus");
         creditProvider.withdrawTokens(msg.sender, value);
         emit WithdrawTokens(msg.sender, value);
-    }
+    }*/
 
     function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
 
