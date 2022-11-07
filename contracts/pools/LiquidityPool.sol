@@ -19,7 +19,7 @@ import "../utils/SignedSafeMath.sol";
 abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityPool {
 
     using SafeCast for uint;
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20_2;
     using SafeMath for uint;
     using SignedSafeMath for int;
 
@@ -530,7 +530,7 @@ abstract contract LiquidityPool is ManagedContract, RedeemableToken, ILiquidityP
     }
 
     function depositTokensInExchange(address token, uint value) private {
-        IERC20 t = IERC20(token);
+        IERC20_2 t = IERC20_2(token);
         t.safeTransferFrom(msg.sender, address(this), value);
         t.safeApprove(address(exchange), value);
         exchange.depositTokens(address(this), token, value);

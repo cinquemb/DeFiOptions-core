@@ -27,7 +27,7 @@ import "../utils/SignedSafeMath.sol";
 contract OptionsExchange is ERC20, ManagedContract {
 
     using SafeCast for uint;
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20_2;
     using SafeMath for uint;
     using SignedSafeMath for int;
     
@@ -119,8 +119,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function depositTokens(address to, address token, uint value) public {
 
-        IERC20 t = IERC20(token);
-        t.safeTransferFrom(msg.sender, address(creditProvider), value);
+        IERC20_2(token).safeTransferFrom(msg.sender, address(creditProvider), value);
         creditProvider.addBalance(to, token, value);
     }
 
@@ -314,7 +313,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
                     (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
 
-                    IERC20 oTk = IERC20(oEx._tokens[i]);
+                    IERC20_2 oTk = IERC20_2(oEx._tokens[i]);
                     if (oTk.allowance(msg.sender, address(pool)) > 0) {
                         oTk.safeApprove(address(pool), 0);
                     }
@@ -372,7 +371,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             address underlying = UnderlyingFeed(
                 options[_tk].udlFeed
             ).getUnderlyingAddr();
-            IERC20(underlying).safeTransferFrom(
+            IERC20_2(underlying).safeTransferFrom(
                 msg.sender,
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)

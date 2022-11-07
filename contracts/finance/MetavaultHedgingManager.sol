@@ -7,7 +7,6 @@ import "../interfaces/ICollateralManager.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
-import "../interfaces/IERC20.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/Convert.sol";
 
@@ -21,7 +20,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     bytes32 private referralCode;
 
     struct ExposureData {
-        IERC20 t;
+        IERC20_2 t;
 
         int256 diff;
         int256 real;
@@ -197,7 +196,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 //need to close long position first
                 //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
                 for(uint i=0; i< exData.openPos.length; i++){
-                    exData.t = IERC20(exData.allowedTokens[i]);
+                    exData.t = IERC20_2(exData.allowedTokens[i]);
                     exData.balBefore = exData.t.balanceOf(address(creditProvider));
                     exData._pathDecLong = new address[](2);
                     exData._pathDecLong[0] = exData.underlying;
@@ -233,7 +232,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     for (uint i=0; i< exData.allowedTokens.length; i++) {
 
                         if (exData.totalPosValueToTransfer > 0) {
-                            exData.t = IERC20(exData.allowedTokens[i]);
+                            exData.t = IERC20_2(exData.allowedTokens[i]);
                             exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
                             (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
@@ -295,7 +294,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 // need to close short position first
                 // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)                
                 for(uint i=0; i< exData.openPos.length; i++){
-                    exData.t = IERC20(exData.allowedTokens[i]);
+                    exData.t = IERC20_2(exData.allowedTokens[i]);
                     exData.balBefore = exData.t.balanceOf(address(creditProvider));
 
                     IPositionManager(positionManagerAddr).decreasePosition(
@@ -326,7 +325,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     for (uint i=0; i< exData.allowedTokens.length; i++) {
 
                         if (exData.totalPosValueToTransfer > 0) {
-                            exData.t = IERC20(exData.allowedTokens[i]);
+                            exData.t = IERC20_2(exData.allowedTokens[i]);
                             exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
                             (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
@@ -399,7 +398,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     function transferTokensToCreditProvider(address tokenAddr) external {
         //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
-        uint value = IERC20(tokenAddr).balanceOf(address(this));
-        IERC20(tokenAddr).safeTransfer(address(creditProvider), value);
+        uint value = IERC20_2(tokenAddr).balanceOf(address(this));
+        IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
     }
 }

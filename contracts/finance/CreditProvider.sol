@@ -5,7 +5,6 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
-import "../interfaces/IERC20.sol";
 import "../interfaces/ICreditToken.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
 import "../utils/MoreMath.sol";
@@ -16,7 +15,7 @@ import "../utils/SignedSafeMath.sol";
 
 contract CreditProvider is ManagedContract {
 
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20_2;
     using SafeMath for uint;
     using SignedSafeMath for int;
     
@@ -79,7 +78,7 @@ contract CreditProvider is ManagedContract {
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length; i++) {
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
-            uint value = IERC20(tokens[i]).balanceOf(address(this));
+            uint value = IERC20_2(tokens[i]).balanceOf(address(this));
             v = v.add(value.mul(b).div(r));
         }
     }
@@ -132,7 +131,7 @@ contract CreditProvider is ManagedContract {
     
     function depositTokens(address to, address token, uint value) external {
 
-        IERC20(token).safeTransferFrom(msg.sender, address(this), value);
+        IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
     }
@@ -246,7 +245,7 @@ contract CreditProvider is ManagedContract {
 
     function swapTokens(address to, address token, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         
-        IERC20(token).safeTransferFrom(msg.sender, address(this), value);
+        IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
 
@@ -496,7 +495,7 @@ contract CreditProvider is ManagedContract {
 
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length && value > 0; i++) {
-            IERC20 t = IERC20(tokens[i]);
+            IERC20_2 t = IERC20_2(tokens[i]);
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
             if (b != 0) {
                 uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));
@@ -518,7 +517,7 @@ contract CreditProvider is ManagedContract {
         // preferred order
         for (uint i = 0; i < tokensInOrder.length && value > 0; i++) {
             if (findAllowedToken(tokensInOrder[i]) && (amountsOutInOrder[i] > 0)) {
-                IERC20 t = IERC20(tokensInOrder[i]);
+                IERC20_2 t = IERC20_2(tokensInOrder[i]);
                 (uint r, uint b) = settings.getTokenRate(tokensInOrder[i]);
                 if (b != 0) {
                     uint v = MoreMath.min(amountsOutInOrder[i], t.balanceOf(address(this)).mul(b).div(r));
@@ -541,7 +540,7 @@ contract CreditProvider is ManagedContract {
         // preferred order
         for (uint i = 0; i < tokensInOrder.length && value > 0; i++) {
             if (findAllowedToken(tokensInOrder[i]) && (amountsOutInOrder[i] > 0)) {
-                IERC20 t = IERC20(tokensInOrder[i]);
+                IERC20_2 t = IERC20_2(tokensInOrder[i]);
                 (uint r, uint b) = settings.getTokenRate(tokensInOrder[i]);
                 if (b != 0) {
                     uint v = MoreMath.min(amountsOutInOrder[i], t.balanceOf(address(this)).mul(b).div(r));
@@ -556,7 +555,7 @@ contract CreditProvider is ManagedContract {
         // default order if lefter over after defined prefs or not enough in defined preferences
         if (value > 0) {
             for (uint i = 0; i < tokens.length && value > 0; i++) {
-                IERC20 t = IERC20(tokens[i]);
+                IERC20_2 t = IERC20_2(tokens[i]);
                 (uint r, uint b) = settings.getTokenRate(tokens[i]);
                 if (b != 0) {
                     uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));

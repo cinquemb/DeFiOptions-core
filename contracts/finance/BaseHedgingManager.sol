@@ -12,7 +12,7 @@ import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
 
 abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
-	using SafeERC20 for IERC20;
+	using SafeERC20 for IERC20_2;
     using SafeCast for uint;
     using SafeMath for uint;
     using SignedSafeMath for int;

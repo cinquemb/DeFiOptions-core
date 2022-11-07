@@ -14,7 +14,7 @@ import "../utils/SafeERC20.sol";
 
 contract UnderlyingVault is ManagedContract {
 
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20_2;
     using SafeMath for uint;
     using SignedSafeMath for int;
 
@@ -121,7 +121,7 @@ contract UnderlyingVault is ManagedContract {
             
             address underlying = UnderlyingFeed(feed).getUnderlyingAddr();
             uint v = Convert.from18DecimalsBase(underlying, value);
-            IERC20(underlying).safeTransfer(owner, v);
+            IERC20_2(underlying).safeTransfer(owner, v);
             
             emit Release(owner, token, value);
         }
@@ -155,7 +155,7 @@ contract UnderlyingVault is ManagedContract {
             amountInMax = udlBalance;
         }
 
-        IERC20 tk = IERC20(path[0]);
+        IERC20_2 tk = IERC20_2(path[0]);
         if (tk.allowance(address(this), address(router)) > 0) {
             tk.safeApprove(address(router), 0);
         }
