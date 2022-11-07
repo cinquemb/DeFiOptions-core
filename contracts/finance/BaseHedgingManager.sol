@@ -21,15 +21,17 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
     ICreditProvider internal creditProvider;
     IOptionsExchange internal exchange;
 
+    address poolAddr;
+
     function initialize(Deployer deployer) virtual override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function getPosSize(address underlying, address account, bool isLong) virtual override public view returns (uint[] memory);
-    function getHedgeExposure(address underlying, address account) virtual override public view returns (int256);
-    function idealHedgeExposure(address underlying, address account) virtual override public view returns (int256);
-    function realHedgeExposure(address udlFeedAddr, address account) virtual override public view returns (int256);
-    function balanceExposure(address underlying, address account) virtual override external returns (bool);
+    function getPosSize(address underlying, bool isLong) virtual override public view returns (uint[] memory);
+    function getHedgeExposure(address underlying) virtual override public view returns (int256);
+    function idealHedgeExposure(address underlying) virtual override public view returns (int256);
+    function realHedgeExposure(address udlFeedAddr) virtual override public view returns (int256);
+    function balanceExposure(address underlying) virtual override external returns (bool);
 }

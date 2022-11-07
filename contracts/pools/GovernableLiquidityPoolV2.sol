@@ -277,8 +277,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
 
         //trigger hedge, may need to factor in costs and charge it to msg.sender
         IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-            UnderlyingFeed(param.udlFeed).getUnderlyingAddr(),
-            address(this)
+            UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
         );
 
         emit Buy(_tk, msg.sender, price, volume);
@@ -318,8 +317,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         
         //trigger hedge, may need to factor in costs and charge it to msg.sender
         IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-            UnderlyingFeed(param.udlFeed).getUnderlyingAddr(),
-            address(this)
+            UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
         );
 
         emit Sell(_tk, msg.sender, price, volume);

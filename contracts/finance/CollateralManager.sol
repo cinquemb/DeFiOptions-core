@@ -158,8 +158,7 @@ contract CollateralManager is BaseCollateralManager {
                 if (settings.isAllowedHedgingManager(cData.hmngr)) {
                      cData.hedgedDelta = int256(
                         IBaseHedgingManager(cData.hmngr).realHedgeExposure(
-                           cData.udlAddr,
-                           owner
+                           cData.udlAddr
                         )
                     );
                 }

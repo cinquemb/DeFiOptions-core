@@ -50,15 +50,16 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         
     }
 
-    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode) public {
-        Deployer deployer = Deployer(_deployAddr);
+    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode, address _poolAddr) public {
+        Deployer deployer = Deployer(_deployAddr); //TODO: need to set this from hedging manager factory
         super.initialize(deployer);
-        positionManagerAddr = _positionManager;
-        readerAddr = _reader;
-        referralCode = _referralCode;
+        positionManagerAddr = _positionManager; //TODO: need to set this from hedging manager factory
+        readerAddr = _reader; //TODO: need to set this from hedging manager factory
+        referralCode = _referralCode; //TODO: need to set this from hedging manager factory
+        poolAddr = _poolAddr;
     }
 
-    function getPosSize(address underlying, address account, bool isLong) override public view returns (uint[] memory) {
+    function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
         address[] memory allowedTokens = settings.getAllowedTokens();
         address[] memory _collateralTokens = new address[](allowedTokens.length);
         address[] memory _indexTokens = new address[](allowedTokens.length);
@@ -72,7 +73,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
             IPositionManager(positionManagerAddr).vault(),
-            account,
+            poolAddr,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
             _isLong
@@ -87,7 +88,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         return posSize;
     }
 
-    function getHedgeExposure(address underlying, address account) override public view returns (int256) {
+    function getHedgeExposure(address underlying) override public view returns (int256) {
         address[] memory allowedTokens = settings.getAllowedTokens();
         address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
         address[] memory _indexTokens = new address[](allowedTokens.length * 2);
@@ -107,7 +108,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
             IPositionManager(positionManagerAddr).vault(),
-            account,
+            poolAddr,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
             _isLong
@@ -130,9 +131,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
     
 
-    function idealHedgeExposure(address underlying, address account) override public view returns (int256) {
-        // look at order book for account and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the account is on)
-        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,, address[] memory _underlying) = exchange.getBook(account);
+    function idealHedgeExposure(address underlying) override public view returns (int256) {
+        // look at order book for poolAddr and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the poolAddr is on)
+        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,, address[] memory _underlying) = exchange.getBook(poolAddr);
 
         int totalDelta = 0;
         for (uint i = 0; i < _tokens.length; i++) {
@@ -165,30 +166,30 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         return totalDelta;
     }
     
-    function realHedgeExposure(address udlFeedAddr, address account) override public view returns (int256) {
+    function realHedgeExposure(address udlFeedAddr) override public view returns (int256) {
         // look at metavault exposure for underlying, and divide by asset price
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
-        int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr(), account);
+        int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr());
         return exposure.div(udlPrice);
     }
     
-    function balanceExposure(address udlFeedAddr, address account) override external returns (bool) {
+    function balanceExposure(address udlFeedAddr) override external returns (bool) {
         ExposureData memory exData;
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        exData.ideal = idealHedgeExposure(exData.underlying, account);
-        exData.real = realHedgeExposure(exData.underlying, account);
+        exData.ideal = idealHedgeExposure(exData.underlying);
+        exData.real = realHedgeExposure(exData.underlying);
         exData.diff = exData.ideal - exData.real;
         exData.allowedTokens = settings.getAllowedTokens();
         exData.totalStables = creditProvider.totalTokenStock();
 
-        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(account) == true) ? IGovernableLiquidityPool(account).getLeverage() : defaultLeverage;
+        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
 
 
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
 
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
-        exData.openPos = getPosSize(exData.underlying, account, true);
+        exData.openPos = getPosSize(exData.underlying, true);
 
         if (exData.ideal >= 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
@@ -216,7 +217,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     exData.balAfter = exData.t.balanceOf(address(creditProvider));
                     exData.diffBal = exData.balAfter.sub(exData.balBefore);
                     //back to exchange decimals
-                    creditProvider.creditPoolBalance(account, exData.allowedTokens[i], exData.diffBal);    
+                    creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);    
                 }
                 
                 exData.pos_size = uint256(exData.ideal);
@@ -309,7 +310,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     );
                     exData.balAfter = exData.t.balanceOf(address(creditProvider));
                     exData.diffBal = exData.balAfter.sub(exData.balBefore);
-                    creditProvider.creditPoolBalance(account, exData.allowedTokens[i], exData.diffBal);
+                    creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);
                 }
 
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
