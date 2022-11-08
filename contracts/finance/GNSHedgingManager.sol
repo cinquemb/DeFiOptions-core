@@ -1,0 +1,377 @@
+/*
+
+- must use DAI
+
+- TOOD: NEED TO MAP UNDERLYING TOKENS ON NETWORK TO PAIR INDEX
+
+*/
+
+pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
+
+
+import "./BaseHedgingManager.sol";
+import "../interfaces/ICollateralManager.sol";
+import "../interfaces/IGovernableLiquidityPool.sol";
+import "../interfaces/external/gains_network/IGFarmTradingStorageV5.sol";
+import "../interfaces/external/gains_networkgains_network/IGNSPairInfosV6_1.sol";
+import "../interfaces/external/gains_network/IGNSTradingV6_2.sol";
+import "../interfaces/UnderlyingFeed.sol";
+import "../utils/Convert.sol";
+
+
+contract GNSHedgingManager is BaseHedgingManager {
+    address public positionManagerAddr;
+    address public gnsTradingAddr;
+    address public gnsPairInfoAddr;
+    address public gnsFarmTradingStorageAddr;
+
+    uint private maxLeverage = 150;
+    uint private minLeverage = 4;
+    uint private defaultLeverage = 15;
+
+    bytes32 private referralCode;
+
+    struct ExposureData {
+        IERC20_2 t;
+
+        int256 diff;
+        int256 real;
+        int256 ideal;
+
+        uint256 r;
+        uint256 b;
+        
+        uint256 pos_size;
+        uint256 diffBal;
+        uint256 balAfter;
+        uint256 balBefore;
+        uint256 udlPrice;
+        uint256 totalStables;
+        uint256 poolLeverage;
+        uint256 totalPosValue;
+        uint256 totalPosValueToTransfer;
+        
+        address routerAddr;
+        address underlying;
+        
+        address[] at;
+        address[] _pathDecLong;
+        address[] allowedTokens;
+        uint256[] tv;
+        
+    }
+
+    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode, address _poolAddr) public {
+        Deployer deployer = Deployer(_deployAddr); //TODO: need to set this from hedging manager factory
+        super.initialize(deployer);
+        positionManagerAddr = _positionManager; //TODO: need to set this from hedging manager factory
+        readerAddr = _reader; //TODO: need to set this from hedging manager factory
+        referralCode = _referralCode; //TODO: need to set this from hedging manager factory
+        poolAddr = _poolAddr;
+    }
+
+    function getHedgeExposure(address underlying) override public view returns (int256) {
+        /*
+
+        - get Position info
+        	- I think if you go to this function 38. openTradesCount(address, pair_index) you will get back the index of your trade (from your 3 slots, so 0, 1 or 2)
+        		https://polygonscan.com/address/0xaee4d11a16B2bc65EDD6416Fb626EB404a6D65BD#readContract#F38
+        	- Then the function just above it 37. openTrades(address, pair_index, index (the one you got back from the first))
+
+        	- https://polygonscan.com/address/0xaee4d11a16B2bc65EDD6416Fb626EB404a6D65BD#readContract#F37
+
+        */
+        //TODO: NEED TO GET PAIR INDEX FROM UNDERLYING
+        uint tradeIdx = IGFarmTradingStorageV5.openTradesCount(address(this), pair_index);
+        IGFarmTradingStorageV5.Trade tradeData = IGFarmTradingStorageV5.openTrades(address(this), pair_index, tradeIdx);
+        IGFarmTradingStorageV5.TradeInfo tradeInfoData = IGFarmTradingStorageV5.openTradesInfo(address(this), pair_index, tradeIdx);
+
+        return (tradeData.buy == true) ? tradeData.openInterestDai else tradeData.openInterestDai.mul(-1);
+    }
+    
+
+    function idealHedgeExposure(address underlying) override public view returns (int256) {
+        // look at order book for poolAddr and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the poolAddr is on)
+        (,address[] memory _tokens, uint[] memory _holding,, uint[] memory _uncovered,, address[] memory _underlying) = exchange.getBook(poolAddr);
+
+        int totalDelta = 0;
+        for (uint i = 0; i < _tokens.length; i++) {
+            address _tk = _tokens[i];
+            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tk);
+            if (_underlying[i] == underlying){
+                int256 delta;
+
+                if (_uncovered[i].sub(_holding[i]) > 0) {
+                    // net short this option, thus mult by -1
+                    delta = ICollateralManager(
+                        settings.getUdlCollateralManager(opt.udlFeed)
+                    ).calcDelta(
+                        opt,
+                        _uncovered[i].sub(_holding[i])
+                    ).mul(-1);
+                } else {
+                    // net long thus does not need to be modified
+                    delta = ICollateralManager(
+                        settings.getUdlCollateralManager(opt.udlFeed)
+                    ).calcDelta(
+                        opt,
+                        _holding[i]
+                    );
+                }
+
+                totalDelta = totalDelta.add(delta);
+            }
+        }
+        return totalDelta;
+    }
+    
+    function realHedgeExposure(address udlFeedAddr) override public view returns (int256) {
+        // look at metavault exposure for underlying, and divide by asset price
+        (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
+        int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr());
+        return exposure.div(udlPrice);
+    }
+    
+    function balanceExposure(address udlFeedAddr) override external returns (bool) {
+        ExposureData memory exData;
+        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        exData.ideal = idealHedgeExposure(exData.underlying);
+        exData.real = realHedgeExposure(exData.underlying);
+        exData.diff = exData.ideal - exData.real;
+        exData.allowedTokens = settings.getAllowedTokens();
+        exData.totalStables = creditProvider.totalTokenStock();
+
+        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
+
+
+        require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
+
+        (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
+        exData.udlPrice = uint256(udlPrice);
+
+        if (exData.ideal >= 0) {
+            exData.pos_size = uint256(MoreMath.abs(exData.diff));
+            if (exData.real > 0) {
+                //need to close long position first
+                //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+                //TODO: need to find allowed token that maps to dai
+                exData.t = IERC20_2(exData.allowedTokens[i]);
+                exData.balBefore = exData.t.balanceOf(address(creditProvider));
+                exData._pathDecLong = new address[](2);
+                exData._pathDecLong[0] = exData.underlying;
+                exData._pathDecLong[1] = exData.allowedTokens[i];
+
+                //TODO: need to map underlying to GNS PAIR ID
+
+                IGNSTradingV6_2.closeTradeMarket(
+			        uint pairIndex,
+			        uint index
+			    ) 
+
+                exData.balAfter = exData.t.balanceOf(address(creditProvider));
+                exData.diffBal = exData.balAfter.sub(exData.balBefore);
+                //back to exchange decimals
+                creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);    
+                
+                exData.pos_size = uint256(exData.ideal);
+            }
+            
+            // increase short position by pos_size
+            if (exData.pos_size != 0) {
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
+
+                // hedging should fail if not enough stables in exchange
+                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
+                    for (uint i=0; i< exData.allowedTokens.length; i++) {
+
+                        if (exData.totalPosValueToTransfer > 0) {
+                            exData.t = IERC20_2(exData.allowedTokens[i]);
+                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
+                            
+                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
+                            if (exData.b != 0) {
+                                uint v = MoreMath.min(
+                                    exData.totalPosValueToTransfer, 
+                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
+                                );
+
+                                //.mul(b).div(r); //convert to exchange decimals
+
+                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
+                                    exData.t.safeApprove(exData.routerAddr, 0);
+                                }
+                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
+
+                                //transfer collateral from credit provider to hedging manager and debit pool bal
+                                exData.at = new address[](1);
+                                exData.at[0] = exData.allowedTokens[i];
+
+                                exData.tv = new uint[](1);
+                                exData.tv[0] = v;
+
+
+                                ICollateralManager(
+                                    settings.getUdlCollateralManager(
+                                        udlFeedAddr
+                                    )
+                                ).borrowTokensByPreference(
+                                    address(this), v, exData.at, exData.tv
+                                );
+
+                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
+
+
+                                //TODO: need to map underlying to GNS PAIR ID
+
+
+                                IGNSTradingV6_2.closeTradeMarket(
+							        uint pairIndex,
+							        uint index
+							    ) 
+
+                                //TODO NEED TO CALCULATE SLIPPAGE FROM price impact percentage
+
+							    GNSPairInfosV6_1.getTradePriceImpact(
+							        uint openPrice,        // PRECISION
+							        uint pairIndex,
+							        bool long,
+							        uint tradeOpenInterest // 1e18 (DAI)
+							    ) /*external view returns(
+							        uint priceImpactP,     // PRECISION (%)
+							        uint priceAfterImpact  // PRECISION
+							    )*/
+
+                                IGNSTradingV6_2.openTrade(
+							        StorageInterfaceV5.Trade memory t,
+							        NftRewardsInterfaceV6.OpenLimitOrderType orderType, // LEGACY => market
+							        uint spreadReductionId,
+							        uint slippageP, // for market orders only
+							        address referrer
+							    )
+
+
+                                //back to exchange decimals
+                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+
+                                exData.r = 0;
+                                exData.b = 0;
+                            }                            
+                        }
+                    }
+                }
+            }
+        } else if (exData.ideal < 0) {
+            exData.pos_size = uint256(MoreMath.abs(exData.diff));
+            if (exData.real < 0) {
+                // need to close short position first
+                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)           
+                //TODO: NEED TO FIND THE ALLOWED TOKEN THAT MAPS TO DAI     
+                exData.t = IERC20_2(exData.allowedTokens[i]);
+                exData.balBefore = exData.t.balanceOf(address(creditProvider));
+
+
+                //TODO: need to map underlying to GNS PAIR ID
+
+                IGNSTradingV6_2.closeTradeMarket(
+						        uint pairIndex,
+						        uint index
+						    ) 
+                exData.balAfter = exData.t.balanceOf(address(creditProvider));
+                exData.diffBal = exData.balAfter.sub(exData.balBefore);
+                creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);
+
+                exData.pos_size = uint256(MoreMath.abs(exData.ideal));
+            }
+
+            // increase long position by pos_size
+            if (exData.pos_size != 0) {
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
+
+                // hedging should fail if not enough stables in exchange
+                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
+                    for (uint i=0; i< exData.allowedTokens.length; i++) {
+
+                        if (exData.totalPosValueToTransfer > 0) {
+                            exData.t = IERC20_2(exData.allowedTokens[i]);
+                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
+                            
+                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
+                            if (exData.b != 0) {
+                                uint v = MoreMath.min(
+                                    exData.totalPosValueToTransfer,
+                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
+                                );
+                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
+                                    exData.t.safeApprove(exData.routerAddr, 0);
+                                }
+                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
+
+                                //transfer collateral from credit provider to hedging manager and debit pool bal
+                                exData.at = new address[](1);
+                                address[] memory at_s = new address[](2);
+                                exData.at[0] = exData.allowedTokens[i];
+                                
+                                at_s[0] = exData.allowedTokens[i];
+                                at_s[1] = exData.underlying;
+
+                                exData.tv = new uint[](1);
+                                exData.tv[0] = v;
+
+                                ICollateralManager(
+                                    settings.getUdlCollateralManager(
+                                        udlFeedAddr
+                                    )
+                                ).borrowTokensByPreference(
+                                    address(this), v, exData.at, exData.tv
+                                );
+
+                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
+
+                                //TODO: need to map underlying to GNS PAIR ID
+
+                                IGNSTradingV6_2.closeTradeMarket(
+							        uint pairIndex,
+							        uint index
+							    )
+
+							    //TODO NEED TO CALCULATE SLIPPAGE FROM price impact percentage
+
+							    GNSPairInfosV6_1.getTradePriceImpact(
+							        uint openPrice,        // PRECISION
+							        uint pairIndex,
+							        bool long,
+							        uint tradeOpenInterest // 1e18 (DAI)
+							    ) /*external view returns(
+							        uint priceImpactP,     // PRECISION (%)
+							        uint priceAfterImpact  // PRECISION
+							    )*/
+
+                                IGNSTradingV6_2.openTrade(
+							        StorageInterfaceV5.Trade memory t,
+							        NftRewardsInterfaceV6.OpenLimitOrderType orderType, // LEGACY => market
+							        uint spreadReductionId,
+							        uint slippageP, // for market orders only
+							        address referrer
+							    )
+
+                                //back to exchange decimals
+                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+                                exData.r = 0;
+                                exData.b = 0;
+                            }                             
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function transferTokensToCreditProvider(address tokenAddr) external {
+        //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
+        uint value = IERC20_2(tokenAddr).balanceOf(address(this));
+        IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
+    }
+}
