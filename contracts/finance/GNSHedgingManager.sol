@@ -17,20 +17,22 @@ import "../interfaces/external/gains_network/IGFarmTradingStorageV5.sol";
 import "../interfaces/external/gains_networkgains_network/IGNSPairInfosV6_1.sol";
 import "../interfaces/external/gains_network/IGNSTradingV6_2.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IGNSHedgingmanagerFactory.sol";
 import "../utils/Convert.sol";
 
 
 contract GNSHedgingManager is BaseHedgingManager {
-    address public positionManagerAddr;
+	address private referrer;
     address public gnsTradingAddr;
     address public gnsPairInfoAddr;
     address public gnsFarmTradingStorageAddr;
+
+    address private gnsHedgingmanagerFactoryAddr;
 
     uint private maxLeverage = 150;
     uint private minLeverage = 4;
     uint private defaultLeverage = 15;
 
-    bytes32 private referralCode;
 
     struct ExposureData {
         IERC20_2 t;
@@ -47,6 +49,7 @@ contract GNSHedgingManager is BaseHedgingManager {
         uint256 balAfter;
         uint256 balBefore;
         uint256 udlPrice;
+        uint256 pairIndex;
         uint256 totalStables;
         uint256 poolLeverage;
         uint256 totalPosValue;
@@ -54,21 +57,40 @@ contract GNSHedgingManager is BaseHedgingManager {
         
         address routerAddr;
         address underlying;
+
         
         address[] at;
-        address[] _pathDecLong;
         address[] allowedTokens;
         uint256[] tv;
         
     }
 
-    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode, address _poolAddr) public {
-        Deployer deployer = Deployer(_deployAddr); //TODO: need to set this from hedging manager factory
+    mapping(string => uint) pairIndexMap;
+
+    //https://gains-network.gitbook.io/docs-home/what-is-gains-network/contract-addresses
+    constructor(address _deployAddr, address _poolAddr) public {
+        Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
-        positionManagerAddr = _positionManager; //TODO: need to set this from hedging manager factory
-        readerAddr = _reader; //TODO: need to set this from hedging manager factory
-        referralCode = _referralCode; //TODO: need to set this from hedging manager factory
+        gnsHedgingmanagerFactoryAddr = deployer.getContractAddress("GNSHedgingManagerFactory");
+        gnsTradingAddr = IGNSHedgingmanagerFactory(gnsHedgingmanagerFactoryAddr)._gnsTradingAddr();
+        gnsPairInfoAddr = IGNSHedgingmanagerFactory(gnsHedgingmanagerFactoryAddr)._gnsPairInfoAddr();
+        gnsFarmTradingStorageAddr = IGNSHedgingmanagerFactory(gnsHedgingmanagerFactoryAddr)._gnsFarmTradingStorageAddr();
+        referrer = IGNSHedgingmanagerFactory(gnsHedgingmanagerFactoryAddr)._referrer();
         poolAddr = _poolAddr;
+
+        //off by 1 on purpose
+        pairIndexMap["BTC/USD"] = 1;
+        pairIndexMap["ETH/USD"] = 2;
+        pairIndexMap["LINK/USD"] = 3;
+        pairIndexMap["DOGE/USD"] = 4;
+        pairIndexMap["MATIC/USD"] = 5;
+        pairIndexMap["ADA/USD"] = 6;
+        pairIndexMap["SUSHI/USD"] = 7;
+        pairIndexMap["AAVE/USD"] = 8;
+        pairIndexMap["MATIC/USD"] = 9;
+        pairIndexMap["ADA/USD"] = 10;
+        pairIndexMap["SUSHI/USD"] = 11;
+        pairIndexMap["AAVE/USD"] = 12;
     }
 
     function getHedgeExposure(address underlying) override public view returns (int256) {
@@ -82,10 +104,14 @@ contract GNSHedgingManager is BaseHedgingManager {
         	- https://polygonscan.com/address/0xaee4d11a16B2bc65EDD6416Fb626EB404a6D65BD#readContract#F37
 
         */
-        //TODO: NEED TO GET PAIR INDEX FROM UNDERLYING
-        uint tradeIdx = IGFarmTradingStorageV5.openTradesCount(address(this), pair_index);
-        IGFarmTradingStorageV5.Trade tradeData = IGFarmTradingStorageV5.openTrades(address(this), pair_index, tradeIdx);
-        IGFarmTradingStorageV5.TradeInfo tradeInfoData = IGFarmTradingStorageV5.openTradesInfo(address(this), pair_index, tradeIdx);
+        uint256 pairIndexOffByOne = pairIndexMap[UnderlyingFeed(underlying).symbol()];
+        require(pairIndexOffByOne > 0, "no pair available");
+        uint256 pairIndex = pairIndexOffByOne.sub(1);
+
+
+        uint256 tradeIdx = IGFarmTradingStorageV5.openTradesCount(address(this), pairIndex);
+        IGFarmTradingStorageV5.Trade tradeData = IGFarmTradingStorageV5.openTrades(address(this), pairIndex, tradeIdx);
+        IGFarmTradingStorageV5.TradeInfo tradeInfoData = IGFarmTradingStorageV5.openTradesInfo(address(this), pairIndex, tradeIdx);
 
         return (tradeData.buy == true) ? tradeData.openInterestDai else tradeData.openInterestDai.mul(-1);
     }
@@ -129,7 +155,7 @@ contract GNSHedgingManager is BaseHedgingManager {
     function realHedgeExposure(address udlFeedAddr) override public view returns (int256) {
         // look at metavault exposure for underlying, and divide by asset price
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
-        int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr());
+        int256 exposure = getHedgeExposure(udlFeedAddr);
         return exposure.div(udlPrice);
     }
     
@@ -141,6 +167,10 @@ contract GNSHedgingManager is BaseHedgingManager {
         exData.diff = exData.ideal - exData.real;
         exData.allowedTokens = settings.getAllowedTokens();
         exData.totalStables = creditProvider.totalTokenStock();
+
+        exData.pairIndex = pairIndexMap[UnderlyingFeed(udlFeedAddr).symbol()];
+        require(exData.pairIndex > 0, "cannot hedge underlying");
+        exData.pairIndex = exData.pairIndex.sub(1);
 
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
 
@@ -158,17 +188,18 @@ contract GNSHedgingManager is BaseHedgingManager {
                 //TODO: need to find allowed token that maps to dai
                 exData.t = IERC20_2(exData.allowedTokens[i]);
                 exData.balBefore = exData.t.balanceOf(address(creditProvider));
-                exData._pathDecLong = new address[](2);
-                exData._pathDecLong[0] = exData.underlying;
-                exData._pathDecLong[1] = exData.allowedTokens[i];
 
-                //TODO: need to map underlying to GNS PAIR ID
+                uint256 tradeIdx = IGFarmTradingStorageV5.openTradesCount(address(this), exData.pairIndex);
+                IGFarmTradingStorageV5.Trade tradeData = IGFarmTradingStorageV5.openTrades(address(this), exData.pairIndex, tradeIdx);
+                IGFarmTradingStorageV5.TradeInfo tradeInfoData = IGFarmTradingStorageV5.openTradesInfo(address(this), exData.pairIndex, tradeIdx);
+
+                //TODO: need to get PNL then credit pool with proper amount
 
                 IGNSTradingV6_2.closeTradeMarket(
-			        uint pairIndex,
+                	exData.pairIndex,
 			        uint index
-			    ) 
-
+			    )
+			    //need to transfer dai to credit provider
                 exData.balAfter = exData.t.balanceOf(address(creditProvider));
                 exData.diffBal = exData.balAfter.sub(exData.balBefore);
                 //back to exchange decimals
@@ -227,7 +258,7 @@ contract GNSHedgingManager is BaseHedgingManager {
 
 
                                 IGNSTradingV6_2.closeTradeMarket(
-							        uint pairIndex,
+							        exData.pairIndex,
 							        uint index
 							    ) 
 
@@ -235,7 +266,7 @@ contract GNSHedgingManager is BaseHedgingManager {
 
 							    GNSPairInfosV6_1.getTradePriceImpact(
 							        uint openPrice,        // PRECISION
-							        uint pairIndex,
+							        exData.pairIndex,
 							        bool long,
 							        uint tradeOpenInterest // 1e18 (DAI)
 							    ) /*external view returns(
@@ -248,7 +279,7 @@ contract GNSHedgingManager is BaseHedgingManager {
 							        NftRewardsInterfaceV6.OpenLimitOrderType orderType, // LEGACY => market
 							        uint spreadReductionId,
 							        uint slippageP, // for market orders only
-							        address referrer
+							        referrer
 							    )
 
 
@@ -275,9 +306,9 @@ contract GNSHedgingManager is BaseHedgingManager {
                 //TODO: need to map underlying to GNS PAIR ID
 
                 IGNSTradingV6_2.closeTradeMarket(
-						        uint pairIndex,
-						        uint index
-						    ) 
+			        exData.pairIndex,
+			        uint index
+			    );
                 exData.balAfter = exData.t.balanceOf(address(creditProvider));
                 exData.diffBal = exData.balAfter.sub(exData.balBefore);
                 creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);
@@ -300,6 +331,7 @@ contract GNSHedgingManager is BaseHedgingManager {
                             
                             (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
                             if (exData.b != 0) {
+                            	//TODO: NEED TO APPROVE PROPER EXT CONTRACT
                                 uint v = MoreMath.min(
                                     exData.totalPosValueToTransfer,
                                     exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
@@ -330,10 +362,8 @@ contract GNSHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-                                //TODO: need to map underlying to GNS PAIR ID
-
                                 IGNSTradingV6_2.closeTradeMarket(
-							        uint pairIndex,
+							        exData.pairIndex,
 							        uint index
 							    )
 
@@ -341,7 +371,7 @@ contract GNSHedgingManager is BaseHedgingManager {
 
 							    GNSPairInfosV6_1.getTradePriceImpact(
 							        uint openPrice,        // PRECISION
-							        uint pairIndex,
+							        exData.pairIndex,
 							        bool long,
 							        uint tradeOpenInterest // 1e18 (DAI)
 							    ) /*external view returns(
@@ -349,12 +379,13 @@ contract GNSHedgingManager is BaseHedgingManager {
 							        uint priceAfterImpact  // PRECISION
 							    )*/
 
+
                                 IGNSTradingV6_2.openTrade(
-							        StorageInterfaceV5.Trade memory t,
-							        NftRewardsInterfaceV6.OpenLimitOrderType orderType, // LEGACY => market
+							        IGNSTradingV6_2.StorageInterfaceV5.Trade memory t,
+							        IGNSTradingV6_2.NftRewardsInterfaceV6.OpenLimitOrderType orderType, // LEGACY => market
 							        uint spreadReductionId,
 							        uint slippageP, // for market orders only
-							        address referrer
+							        referrer
 							    )
 
                                 //back to exchange decimals

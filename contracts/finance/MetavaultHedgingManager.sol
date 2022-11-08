@@ -8,11 +8,13 @@ import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IMetavaultHedgingmanagerFactory.sol";
 import "../utils/Convert.sol";
 
 contract MetavaultHedgingManager is BaseHedgingManager {
     address public positionManagerAddr;
     address public readerAddr;
+    address private metavaultHedgingmanagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
@@ -50,12 +52,14 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         
     }
 
-    constructor(address _deployAddr, address _positionManager, address _reader, bytes32 _referralCode, address _poolAddr) public {
-        Deployer deployer = Deployer(_deployAddr); //TODO: need to set this from hedging manager factory
+    constructor(address _deployAddr, address _poolAddr) public {
+        Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
-        positionManagerAddr = _positionManager; //TODO: need to set this from hedging manager factory
-        readerAddr = _reader; //TODO: need to set this from hedging manager factory
-        referralCode = _referralCode; //TODO: need to set this from hedging manager factory
+        metavaultHedgingmanagerFactoryAddr = deployer.getContractAddress("MetavaultHedgingManagerFactory");
+
+        positionManagerAddr = IMetavaultHedgingmanagerFactory(metavaultHedgingmanagerFactoryAddr)._positionManager();
+        readerAddr = IMetavaultHedgingmanagerFactory(positionManagerAddr)._reader();
+        referralCode = IMetavaultHedgingmanagerFactory(positionManagerAddr)._referralCode();
         poolAddr = _poolAddr;
     }
 

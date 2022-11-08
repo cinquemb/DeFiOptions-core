@@ -7,10 +7,11 @@ import "./MetavaultHedgingManager.sol";
 
 contract MetavaultHedgingManagerFactory is ManagedContract {
 
-    address private readerAddr;
+    address public _readerAddr;
+    address public positionManagerAddr;
+    bytes32 public referralCode;
+
     address private deployerAddress;
-    address private positionManagerAddr;
-    bytes32 private referralCode;
 
     constructor(address _positionManager, address _reader, bytes32 _referralCode) public {
         positionManagerAddr = _positionManager;
@@ -26,9 +27,6 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
         address hdgMngr = address(
             new MetavaultHedgingManager(
                 deployerAddress,
-                positionManagerAddr,
-                readerAddr,
-                referralCode,
                 _poolAddr
             )
         );
