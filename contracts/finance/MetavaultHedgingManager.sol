@@ -32,13 +32,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         uint256 b;
         
         uint256 pos_size;
-        uint256 diffBal;
-        uint256 balAfter;
-        uint256 balBefore;
         uint256 udlPrice;
         uint256 totalStables;
         uint256 poolLeverage;
         uint256 totalPosValue;
+        uint256 totalHedgingStables;
         uint256 totalPosValueToTransfer;
         
         address routerAddr;
@@ -191,6 +189,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
 
+        exData.totalHedgingStables = totalTokenStock();
+
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
         exData.openPos = getPosSize(exData.underlying, true);
@@ -258,13 +258,15 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 exData.tv[0] = v;
 
 
-                                ICollateralManager(
-                                    settings.getUdlCollateralManager(
-                                        udlFeedAddr
-                                    )
-                                ).borrowTokensByPreference(
-                                    address(this), poolAddr, v, exData.at, exData.tv
-                                );
+                                if (exData.totalHedgingStables < exData.totalPosValueToTransfer){
+                                    ICollateralManager(
+                                        settings.getUdlCollateralManager(
+                                            udlFeedAddr
+                                        )
+                                    ).borrowTokensByPreference(
+                                        address(this), poolAddr, v, exData.at, exData.tv
+                                    );
+                                }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
@@ -346,13 +348,15 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 exData.tv = new uint[](1);
                                 exData.tv[0] = v;
 
-                                ICollateralManager(
-                                    settings.getUdlCollateralManager(
-                                        udlFeedAddr
-                                    )
-                                ).borrowTokensByPreference(
-                                    address(this), poolAddr, v, exData.at, exData.tv
-                                );
+                                if (exData.totalHedgingStables < exData.totalPosValueToTransfer){
+                                    ICollateralManager(
+                                        settings.getUdlCollateralManager(
+                                            udlFeedAddr
+                                        )
+                                    ).borrowTokensByPreference(
+                                        address(this), poolAddr, v, exData.at, exData.tv
+                                    );
+                                }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
@@ -376,6 +380,16 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     }
                 }
             }
+        }
+    }
+
+    function totalTokenStock() public view returns (uint v) {
+
+        address[] memory tokens = settings.getAllowedTokens();
+        for (uint i = 0; i < tokens.length; i++) {
+            (uint r, uint b) = settings.getTokenRate(tokens[i]);
+            uint value = IERC20_2(tokens[i]).balanceOf(address(this));
+            v = v.add(value.mul(b).div(r));
         }
     }
 

@@ -46,9 +46,6 @@ contract GNSHedgingManager is BaseHedgingManager {
         uint256 b;
         
         uint256 pos_size;
-        uint256 diffBal;
-        uint256 balAfter;
-        uint256 balBefore;
         uint256 udlPrice;
         uint256 pairIndex;
         uint256 totalStables;

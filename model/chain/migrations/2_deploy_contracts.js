@@ -8,7 +8,7 @@ const GovToken = artifacts.require("GovToken");
 const CreditToken = artifacts.require("CreditToken");
 const CreditProvider = artifacts.require("CreditProvider");
 const CollateralManager = artifacts.require("CollateralManager");
-const MetavaultHedgingManager = artifacts.require("MetavaultHedgingManager");
+const MetavaultHedgingManagerFactory = artifacts.require("MetavaultHedgingManagerFactory");
 const MetavaultPositionManager = artifacts.require("PositionManagerMock");
 const MetavaultReader = artifacts.require("MetavaultReaderMock");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
@@ -25,10 +25,14 @@ const AggregatorV3Mock = artifacts.require("AggregatorV3Mock");
 const YieldTracker = artifacts.require("YieldTracker");
 const UnderlyingVault = artifacts.require("UnderlyingVault");
 
+const ERC20 = artifacts.require("ERC20Mock");
+
 
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
-  await deployer.deploy(Deployer4, "0x0A05DAa71aca75923f366C41d1300AbCd0cD90b0");
+
+  const mAddr = "0x0A05DAa71aca75923f366C41d1300AbCd0cD90b0";
+  await deployer.deploy(Deployer4, mAddr);
 
   const deployer4 = await Deployer4.at(Deployer4.address);
   console.log("Deployer4 is at: "+ Deployer4.address);
@@ -38,7 +42,7 @@ module.exports = async function(deployer) {
   console.log("settings is at: "+ settings.address);
   const ct = await deployer.deploy(CreditToken);
   const pm = await deployer.deploy(ProposalsManager);
-  const gt = await deployer.deploy(GovToken,"0x0000000000000000000000000000000000000000");
+  const gt = await deployer.deploy(GovToken, mAddr);
   const yt = await deployer.deploy(YieldTracker);
   const uv = await deployer.deploy(UnderlyingVault);
   const id = await deployer.deploy(Incentivized);
@@ -53,6 +57,30 @@ module.exports = async function(deployer) {
   const dexFeedFactory = await deployer.deploy(DEXFeedFactory);
   console.log("dexFeedFactory is at: "+ dexFeedFactory.address);
   const collateralManager = await deployer.deploy(CollateralManager);
+
+    /* MOCK BELOW */
+  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
+  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
+  const metavaultReader = await deployer.deploy(MetavaultReader);
+  console.log("metavaultReader is at: "+ metavaultReader.address);
+  /* MOCK ABOVE */
+
+  const mvHedgingManagerFactory = await deployer.deploy(
+    MetavaultHedgingManagerFactory, 
+    metavaultPositionManager.address, // address _positionManager
+    metavaultReader.address, //address _reader
+    "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
+  );
+  console.log("MetavaultHedgingManagerFactory is at: "+ mvHedgingManager.address);
+
+  const FakeDAI = await deployer.deploy(ERC20, 18, "FakeDAI");
+  d.setContractAddress("FakeDAI", FakeDAI.address, false);
+  const FakeUSDC = await deployer.deploy(ERC20, 6, "FakeUSDC");
+  d.setContractAddress("FakeUSDC", FakeUSDC.address, false);
+  const FakeBTC = await deployer.deploy(ERC20, 18, "FakeBTC");
+  d.setContractAddress("FakeBTC", FakeBTC.address, false);
+  const FakeETH = await deployer.deploy(ERC20, 18, "FakeETH");
+  d.setContractAddress("FakeETH", FakeETH.address, false);
 
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
@@ -71,6 +99,7 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("YieldTracker", yt.address);
   await deployer4.setContractAddress("UnderlyingVault", uv.address);
   await deployer4.setContractAddress("Incentivized", id.address);
+  await deployer4.setContractAddress("MetavaultHedgingManagerFactory", mvHedgingManagerFactory.address);
 
   await deployer4.deploy();
 
@@ -90,24 +119,8 @@ module.exports = async function(deployer) {
   console.log("ProposalsManagerAddress is at: "+ ProposalsManagerAddress);
   const GovTokenAddress = await deployer4.getContractAddress("GovToken");
   console.log("GovTokenAddress is at: "+ GovTokenAddress);
-
-  
-
-  /* MOCK BELOW */
-  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
-  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
-  const metavaultReader = await deployer.deploy(MetavaultReader);
-  console.log("metavaultReader is at: "+ metavaultReader.address);
-  /* MOCK ABOVE */
-
-  const mvHedgingManager = await deployer.deploy(
-    MetavaultHedgingManager, 
-    Deployer4.address, // address _deployAddr
-    metavaultPositionManager.address, // address _positionManager
-    metavaultReader.address, //address _reader
-    "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
-  );
-  console.log("MetaVaultHedgingManager is at: "+ mvHedgingManager.address);
+  const MetavaultHedgingManagerFactoryAddress = await deployer4.getContractAddress("MetavaultHedgingManagerFactory");
+  console.log("MetavaultHedgingManagerFactoryAddress is at: "+ MetavaultHedgingManagerFactoryAddress);
 
 
   /* MOCK BELOW */
@@ -117,10 +130,13 @@ module.exports = async function(deployer) {
   console.log("ETHUSDAgg is at: "+ ETHUSDAgg.address);
   /* MOCK ABOVE */
 
+  const BTCProxyAddr = await deployer4.getContractAddress("FakeBTC");
+  const ETHProxyAddr = await deployer4.getContractAddress("FakeETH");
+
   const BTCUSDMockFeed = await deployer.deploy(
     MockChainLinkFeed, 
     "BTC/USD",
-    "0x0000000000000000000000000000000000000000", //underlying address on the chain
+    BTCProxyAddr, //underlying address on the chain
     BTCUSDAgg.address,//btc/usd feed mock or chainlink agg
     timeProvider.address, //time provider address
     0,//offset
@@ -132,7 +148,7 @@ module.exports = async function(deployer) {
   const ETHUSDMockFeed = await deployer.deploy(
     MockChainLinkFeed, 
     "ETH/USD", 
-    "0x0000000000000000000000000000000000000000", // underlying addrsss on the chain
+    ETHProxyAddr, // underlying addrsss on the chain
     ETHUSDAgg.address, //eth/usd feed mock or chainlink agg
     timeProvider.address, //time provider address
     0,//offset
