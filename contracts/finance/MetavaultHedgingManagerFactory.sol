@@ -8,15 +8,15 @@ import "./MetavaultHedgingManager.sol";
 contract MetavaultHedgingManagerFactory is ManagedContract {
 
     address public _readerAddr;
-    address public positionManagerAddr;
-    bytes32 public referralCode;
+    address public _positionManagerAddr;
+    bytes32 public _referralCode;
 
     address private deployerAddress;
 
-    constructor(address _positionManager, address _reader, bytes32 _referralCode) public {
-        positionManagerAddr = _positionManager;
-        readerAddr = _reader;
-        referralCode = _referralCode;
+    constructor(address _positionManager, address _reader, bytes32 referralCode) public {
+        _positionManagerAddr = _positionManager;
+        _readerAddr = _reader;
+        _referralCode = referralCode;
     }
     
     function initialize(Deployer deployer) override internal {

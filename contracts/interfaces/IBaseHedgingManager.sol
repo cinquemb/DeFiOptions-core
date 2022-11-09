@@ -7,4 +7,6 @@ interface IBaseHedgingManager {
     function idealHedgeExposure(address underlying) external view returns (int256);
     function realHedgeExposure(address udlFeedAddr) external view returns (int256);
     function balanceExposure(address underlying) external returns (bool);
+    function transferTokensToCreditProvider(address tokenAddr) external;
+
 }

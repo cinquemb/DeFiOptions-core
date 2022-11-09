@@ -8,13 +8,13 @@ import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
 import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/IMetavaultHedgingmanagerFactory.sol";
+import "../interfaces/IMetavaultHedgingManagerFactory.sol";
 import "../utils/Convert.sol";
 
 contract MetavaultHedgingManager is BaseHedgingManager {
-    address public positionManagerAddr;
-    address public readerAddr;
-    address private metavaultHedgingmanagerFactoryAddr;
+    address private positionManagerAddr;
+    address private readerAddr;
+    address private metavaultHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
@@ -55,11 +55,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     constructor(address _deployAddr, address _poolAddr) public {
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
-        metavaultHedgingmanagerFactoryAddr = deployer.getContractAddress("MetavaultHedgingManagerFactory");
+        metavaultHedgingManagerFactoryAddr = deployer.getContractAddress("MetavaultHedgingManagerFactory");
 
-        positionManagerAddr = IMetavaultHedgingmanagerFactory(metavaultHedgingmanagerFactoryAddr)._positionManager();
-        readerAddr = IMetavaultHedgingmanagerFactory(positionManagerAddr)._reader();
-        referralCode = IMetavaultHedgingmanagerFactory(positionManagerAddr)._referralCode();
+        positionManagerAddr = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._positionManagerAddr();
+        readerAddr = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._readerAddr();
+        referralCode = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._referralCode();
         poolAddr = _poolAddr;
     }
 
@@ -202,11 +202,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
                 for(uint i=0; i< exData.openPos.length; i++){
                     exData.t = IERC20_2(exData.allowedTokens[i]);
-                    exData.balBefore = exData.t.balanceOf(address(creditProvider));
                     exData._pathDecLong = new address[](2);
                     exData._pathDecLong[0] = exData.underlying;
                     exData._pathDecLong[1] = exData.allowedTokens[i];
 
+                    //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
                         exData._pathDecLong, //address[] memory _path
                         exData.underlying,//address _indexToken,
@@ -218,10 +218,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
                         referralCode//bytes32 _referralCode
                     );
-                    exData.balAfter = exData.t.balanceOf(address(creditProvider));
-                    exData.diffBal = exData.balAfter.sub(exData.balBefore);
-                    //back to exchange decimals
-                    creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);    
                 }
                 
                 exData.pos_size = uint256(exData.ideal);
@@ -267,7 +263,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, exData.at, exData.tv
+                                    address(this), poolAddr, v, exData.at, exData.tv
                                 );
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
@@ -299,9 +295,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 // need to close short position first
                 // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)                
                 for(uint i=0; i< exData.openPos.length; i++){
-                    exData.t = IERC20_2(exData.allowedTokens[i]);
-                    exData.balBefore = exData.t.balanceOf(address(creditProvider));
-
+                    //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
                     IPositionManager(positionManagerAddr).decreasePosition(
                         exData.allowedTokens[i],//address _collateralToken,
                         exData.underlying,//address _indexToken,
@@ -312,9 +306,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
                         referralCode//bytes32 _referralCode
                     );
-                    exData.balAfter = exData.t.balanceOf(address(creditProvider));
-                    exData.diffBal = exData.balAfter.sub(exData.balBefore);
-                    creditProvider.creditPoolBalance(poolAddr, exData.allowedTokens[i], exData.diffBal);
                 }
 
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
@@ -360,7 +351,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                         udlFeedAddr
                                     )
                                 ).borrowTokensByPreference(
-                                    address(this), v, exData.at, exData.tv
+                                    address(this), poolAddr, v, exData.at, exData.tv
                                 );
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
@@ -401,9 +392,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     }
 
-    function transferTokensToCreditProvider(address tokenAddr) external {
+    function transferTokensToCreditProvider(address tokenAddr) override external {
         //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
         uint value = IERC20_2(tokenAddr).balanceOf(address(this));
         IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
+        creditProvider.creditPoolBalance(poolAddr, tokenAddr, value);
+
     }
 }

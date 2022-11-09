@@ -308,7 +308,7 @@ contract CollateralManager is BaseCollateralManager {
         return delta.mul(100).mul(int256(volume));
     }
 
-    function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
-        creditProvider.borrowTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
+    function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        creditProvider.borrowTokensByPreference(to, pool, value, tokensInOrder, amountsOutInOrder);
     }
 }

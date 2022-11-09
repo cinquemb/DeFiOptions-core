@@ -28,8 +28,8 @@ interface IGFarmTradingStorageV5 {
     //mapping(address => mapping(uint => mapping(uint => TradeInfo))) public openTradesInfo;
     //mapping(address => mapping(uint => uint)) public openTradesCount;
 
-    function openTrades(address, uint, uint) public view returns (Trade);
-    function openTradesInfo(address, uint, uint) public view returns (TradeInfo);
-    function openTradesCount(address, uint) public view returns (uint);
+    function openTrades(address, uint, uint) external view returns (Trade memory);
+    function openTradesInfo(address, uint, uint) external view returns (TradeInfo memory);
+    function openTradesCount(address, uint) external view returns (uint);
 
 }

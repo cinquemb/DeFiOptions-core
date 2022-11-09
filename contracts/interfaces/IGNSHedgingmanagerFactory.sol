@@ -5,5 +5,6 @@ interface IGNSHedgingManagerFactory {
     function _gnsTradingAddr() external returns (address);
     function _gnsPairInfoAddr() external returns (address);
     function _gnsFarmTradingStorageAddr() external returns (address);
+    function _daiAddr() external returns (address);
     function create(address _poolAddr) external returns (address);
 }

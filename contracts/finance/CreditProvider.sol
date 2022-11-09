@@ -308,7 +308,7 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function debitPoolBalance(address from, address token, uint value) internal {
+    function debitPoolBalance(address from, uint value) internal {
         ensurePrimeCaller();
 
         require(
@@ -510,7 +510,7 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function borrowTokensByPreference(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+    function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         ensurePrimeCaller();
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
        
@@ -524,7 +524,7 @@ contract CreditProvider is ManagedContract {
                     t.safeTransfer(to, v.mul(r).div(b));
                     emit WithdrawTokens(to, tokensInOrder[i], v.mul(r).div(b));
                     value = value.sub(v);
-                    debitPoolBalance(to, tokensInOrder[i], v);
+                    debitPoolBalance(pool, v);
                 }
             }
 
