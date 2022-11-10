@@ -7,4 +7,5 @@ interface IGovToken {
     function isRegisteredProposal(address addr) external view returns (bool);
     function calcShare(address owner, uint base) external view returns (uint);
     function delegateBalanceOf(address delegate) external view returns (uint);
+    function delegateTo(address newDelegate) external;
 }
