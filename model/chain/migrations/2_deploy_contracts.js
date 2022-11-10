@@ -31,7 +31,7 @@ const ERC20 = artifacts.require("ERC20Mock");
 module.exports = async function(deployer) {
   //need to change address everytime network restarts
 
-  const mAddr = "0x0A05DAa71aca75923f366C41d1300AbCd0cD90b0";
+  const mAddr = "0x1552B37aaC78d7458BEDe858ccb578250173F0D1";
   await deployer.deploy(Deployer4, mAddr);
 
   const deployer4 = await Deployer4.at(Deployer4.address);
@@ -71,16 +71,16 @@ module.exports = async function(deployer) {
     metavaultReader.address, //address _reader
     "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
   );
-  console.log("MetavaultHedgingManagerFactory is at: "+ mvHedgingManager.address);
+  console.log("MetavaultHedgingManagerFactory is at: "+ mvHedgingManagerFactory.address);
 
   const FakeDAI = await deployer.deploy(ERC20, 18, "FakeDAI");
-  d.setContractAddress("FakeDAI", FakeDAI.address, false);
+  deployer4.setContractAddress("FakeDAI", FakeDAI.address, false);
   const FakeUSDC = await deployer.deploy(ERC20, 6, "FakeUSDC");
-  d.setContractAddress("FakeUSDC", FakeUSDC.address, false);
+  deployer4.setContractAddress("FakeUSDC", FakeUSDC.address, false);
   const FakeBTC = await deployer.deploy(ERC20, 18, "FakeBTC");
-  d.setContractAddress("FakeBTC", FakeBTC.address, false);
+  deployer4.setContractAddress("FakeBTC", FakeBTC.address, false);
   const FakeETH = await deployer.deploy(ERC20, 18, "FakeETH");
-  d.setContractAddress("FakeETH", FakeETH.address, false);
+  deployer4.setContractAddress("FakeETH", FakeETH.address, false);
 
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
