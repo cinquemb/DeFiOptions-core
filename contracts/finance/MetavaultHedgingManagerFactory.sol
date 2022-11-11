@@ -13,6 +13,11 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
 
     address private deployerAddress;
 
+    event NewHedgingManager(
+        address indexed hedgingManager,
+        address indexed pool
+    );
+
     constructor(address _positionManager, address _reader, bytes32 referralCode) public {
         _positionManagerAddr = _positionManager;
         _readerAddr = _reader;
@@ -30,6 +35,7 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
                 _poolAddr
             )
         );
+        emit NewHedgingManager(hdgMngr, _poolAddr);
         return hdgMngr;
     }
 }

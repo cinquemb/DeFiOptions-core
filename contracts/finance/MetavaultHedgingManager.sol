@@ -409,8 +409,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     function transferTokensToCreditProvider(address tokenAddr) override external {
         //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
         uint value = IERC20_2(tokenAddr).balanceOf(address(this));
-        IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
-        creditProvider.creditPoolBalance(poolAddr, tokenAddr, value);
-
+        if (value > 0) {
+            IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
+            creditProvider.creditPoolBalance(poolAddr, tokenAddr, value);
+        }
     }
 }
