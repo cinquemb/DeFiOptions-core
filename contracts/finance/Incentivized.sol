@@ -27,24 +27,27 @@ contract Incentivized is ManagedContract {
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function incrementRoundDexAgg(address dexAggAddr) incentivized external {
+    function incrementRoundDexAgg(address dexAggAddr) external {
         // this is needed to provide data for UnderlyingFeed that originate from a dex
-        require(settings.checkDexAggIncentiveBlacklist(dexAggAddr) == false, "blacklisted for incentives");
+        //require(settings.checkDexAggIncentiveBlacklist(dexAggAddr) == false, "blacklisted for incentives");
         DEXAggregatorV1(dexAggAddr).incrementRound();
     }
 
     function prefetchSample(address udlFeed) incentivized external {
         require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
+        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         UnderlyingFeed(udlFeed).prefetchSample();
     }
 
     function prefetchDailyPrice(address udlFeed, uint roundId) incentivized external {
         require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
+        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         UnderlyingFeed(udlFeed).prefetchDailyPrice(roundId);
     }
 
     function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
         require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
+        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
     }
 
