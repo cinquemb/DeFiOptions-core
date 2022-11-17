@@ -14,6 +14,8 @@ interface UnderlyingFeed {
 
     function getDailyVolatility(uint timespan) external view returns (uint vol);
 
+    function getDailyVolatilityCached(uint timespan) external view returns (uint vol, bool cached);
+
     function calcLowerVolatility(uint vol) external view returns (uint lowerVol);
 
     function calcUpperVolatility(uint vol) external view returns (uint upperVol);

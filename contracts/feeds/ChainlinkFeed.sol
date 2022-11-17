@@ -141,7 +141,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         (vol, ) = getDailyVolatilityCached(timespan);
     }
 
-    function getDailyVolatilityCached(uint timespan) public view returns (uint vol, bool cached) {
+    function getDailyVolatilityCached(uint timespan) override public view returns (uint vol, bool cached) {
 
         uint period = timespan.div(1 days);
         timespan = period.mul(1 days);

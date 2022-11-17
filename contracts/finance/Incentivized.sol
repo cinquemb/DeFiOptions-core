@@ -48,6 +48,9 @@ contract Incentivized is ManagedContract {
     function prefetchDailyVolatility(address udlFeed, uint timespan) incentivized external {
         require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
         require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
+        require(settings.getVolatilityPeriod() == timespan, "non gov timespan");
+        (uint vol, bool cached) = UnderlyingFeed(udlFeed).getDailyVolatilityCached(timespan);
+        require(cached != true, "already fetched vol");
         UnderlyingFeed(udlFeed).prefetchDailyVolatility(timespan);
     }
 
