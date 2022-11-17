@@ -23,6 +23,7 @@ contract ProtocolReader is ManagedContract {
       uint[] userPoolUsdValue;
       uint[] poolMaturityDate;
       uint[] poolWithdrawalFee;
+      string[] poolSymbolList;
     }
 
     event IncentiveReward(address indexed from, uint value);
@@ -45,6 +46,8 @@ contract ProtocolReader is ManagedContract {
       pd.userPoolUsdValue = new uint[](poolSymbolsMaxLen);
       pd.poolMaturityDate = new uint[](poolSymbolsMaxLen);
       pd.poolWithdrawalFee = new uint[](poolSymbolsMaxLen);
+      pd.poolSymbolList = new string[](poolSymbolsMaxLen);
+
 
       for (uint i=0; i < poolSymbolsMaxLen; i++) {
           string memory pSym = exchange.poolSymbols(i);
@@ -66,6 +69,7 @@ contract ProtocolReader is ManagedContract {
           pd.poolFreeBalance[i] = IGovernableLiquidityPool(poolAddr).calcFreeBalance();
           pd.poolMaturityDate[i] = IGovernableLiquidityPool(poolAddr).maturity();
           pd.poolWithdrawalFee[i] = IGovernableLiquidityPool(poolAddr).withdrawFee();
+          pd.poolSymbolList[i] = IGovernableLiquidityPool(poolAddr).listSymbols();
       }
 
       return pd;
