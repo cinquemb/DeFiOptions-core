@@ -32,7 +32,7 @@ contract ProtocolReader is ManagedContract {
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
     }
 
-    function listPoolsData() external view returns (poolData memory){
+    function listPoolsData(address account) external view returns (poolData memory){
       
       uint poolSymbolsMaxLen = exchange.totalPoolSymbols();
       poolData memory pd;
@@ -57,8 +57,8 @@ contract ProtocolReader is ManagedContract {
               pd.poolApy[i] = 0;
           }
           pd.poolBalance[i] = exchange.balanceOf(poolAddr);
-          pd.userPoolBalance[i] = IERC20(poolAddr).balanceOf(msg.sender);
-          try IGovernableLiquidityPool(poolAddr).valueOf(msg.sender) returns (uint v) {
+          pd.userPoolBalance[i] = IERC20(poolAddr).balanceOf(account);
+          try IGovernableLiquidityPool(poolAddr).valueOf(account) returns (uint v) {
               pd.userPoolUsdValue[i] = v;
           } catch (bytes memory /*lowLevelData*/) {
               pd.userPoolUsdValue[i] = 0;

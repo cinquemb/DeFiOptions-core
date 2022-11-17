@@ -13,5 +13,5 @@ interface IProtocolReader {
       uint[] poolMaturityDate;
       uint[] poolWithdrawalFee;
     }
-    function listPoolsData() external view returns (poolData memory);
+    function listPoolsData(address account) external view returns (poolData memory);
 }
