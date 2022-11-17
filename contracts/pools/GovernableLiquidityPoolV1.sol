@@ -37,9 +37,9 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
     mapping(string => PricingParameters) private parameters;
     mapping(string => mapping(uint => Range)) private ranges;
 
-    uint public maturity;
+    uint public override maturity;
     uint internal volumeBase;
-    uint public withdrawFee;
+    uint public override withdrawFee;
     uint internal reserveRatio;
     uint internal fractionBase;
     
@@ -334,7 +334,7 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         );
     }
 
-    function valueOf(address ownr) public view returns (uint) {
+    function valueOf(address ownr) override public view returns (uint) {
         (uint bal, int pOut) = getBalanceAndPayout();
         return uint(int(bal).add(pOut))
             .mul(balanceOf(ownr)).div(totalSupply());

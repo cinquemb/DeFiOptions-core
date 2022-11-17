@@ -2,5 +2,16 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 interface IProtocolReader {
-    function listPoolsData() external view returns (string[] memory, address[] memory);
+    struct poolData {
+      string[] poolSymbols;
+      address[] poolAddrs;
+      uint[] poolApy;
+      uint[] poolBalance;
+      uint[] poolFreeBalance;
+      uint[] userPoolBalance;
+      uint[] userPoolUsdValue;
+      uint[] poolMaturityDate;
+      uint[] poolWithdrawalFee;
+    }
+    function listPoolsData() external view returns (poolData memory);
 }

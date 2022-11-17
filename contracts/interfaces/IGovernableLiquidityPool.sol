@@ -38,6 +38,12 @@ interface IGovernableLiquidityPool {
 
     function withdraw(uint amount) external;
 
+    function valueOf(address ownr) external view returns (uint);
+    
+    function maturity() external view returns (uint);
+    
+    function withdrawFee() external view returns (uint);
+
     function listSymbols() external view returns (string memory available);
 
     function queryBuy(string calldata optSymbol, bool isBuy) external view returns (uint price, uint volume);
