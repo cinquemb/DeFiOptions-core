@@ -44,6 +44,8 @@ interface IGovernableLiquidityPool {
     
     function withdrawFee() external view returns (uint);
 
+    function calcFreeBalance() external view returns (uint balance);
+
     function listSymbols() external view returns (string memory available);
 
     function queryBuy(string calldata optSymbol, bool isBuy) external view returns (uint price, uint volume);

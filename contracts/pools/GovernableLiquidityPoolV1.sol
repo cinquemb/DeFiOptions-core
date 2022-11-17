@@ -183,7 +183,7 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         emitTransfer(msg.sender, address(0), amount);
     }
 
-    function calcFreeBalance() public view returns (uint balance) {
+    function calcFreeBalance() override public view returns (uint balance) {
         uint exBal = exchange.balanceOf(address(this));
         uint reserve = exBal.mul(reserveRatio).div(fractionBase);
         uint sp = exBal.sub(exchange.collateral(address(this)));
