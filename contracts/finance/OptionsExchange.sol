@@ -286,7 +286,11 @@ contract OptionsExchange is ERC20, ManagedContract {
         // validate that all the symbols exist, pool has prices, revert if not
         // make all the options buys/sells
         // compute collateral reqirements with uncovred volumes
-        
+
+        oEx._tokens = new address[](oEi.symbols.length);
+        oEx._uncovered = new uint[](oEi.symbols.length);
+        oEx._holding = new uint[](oEi.symbols.length);
+
         for (uint i=0; i< oEi.symbols.length; i++) {
             oEx = getOpenExposureInternalArgs(i, oEx, oEi);
             require(tokenAddress[oEx.symbol] != address(0), "symbol not available");
@@ -298,17 +302,14 @@ contract OptionsExchange is ERC20, ManagedContract {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
                     (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
 
-                    IERC20_2 oTk = IERC20_2(oEx._tokens[i]);
-                    if (oTk.allowance(msg.sender, address(pool)) > 0) {
-                        oTk.safeApprove(address(pool), 0);
-                    }
-                    oTk.safeApprove(address(pool), oEx.vol);
-
+                    IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
 
                     pool.sell(oEx.symbol, _sellPrice, oEx.vol);
-                    oEx._uncovered[i] = oEx.vol;
+                    //if not covered option
+                    if (oEx.isCovered == false) {
+                        oEx._uncovered[i] = oEx.vol;
+                    }
                 }
-                
             } else {
                 // buy options
                 if (oEx.vol > 0) {
@@ -350,7 +351,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
-        tk.issue(msg.sender, to, volume);
+        //mint to exchange, then send pool
+        tk.issue(msg.sender, address(this), volume);
         if (isCovered == true) {
             //write covered
             address underlying = UnderlyingFeed(

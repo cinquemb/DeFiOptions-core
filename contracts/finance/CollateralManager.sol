@@ -51,7 +51,6 @@ contract CollateralManager is BaseCollateralManager {
             (cData.udlFound, cData.udlFoundIdx) = foundUnderlying(cData.udlAddr, cData.underlyings);
             if (cData.udlFound == false) {
                 cData.totalDelta = 0;
-                cData.hedgedDelta = 0;
                 cData.totalAbsDelta = 0;
 
                 for (uint j = 0; j < _tokens.length; j++) {
@@ -86,11 +85,10 @@ contract CollateralManager is BaseCollateralManager {
                 }
 
                 cData.underlyings[i] = cData.udlAddr;
-                cData.posDeltaNum[i] = MoreMath.abs(cData.totalDelta.sub(cData.hedgedDelta));
+                cData.posDeltaNum[i] = MoreMath.abs(cData.totalDelta);
                 cData.posDeltaDenom[i] = cData.totalAbsDelta;
 
                 cData.totalDelta = 0;
-                cData.hedgedDelta = 0;
                 cData.totalAbsDelta = 0;
 
                 cData.udlFound = true;
@@ -100,10 +98,6 @@ contract CollateralManager is BaseCollateralManager {
                 cData.posDeltaNum[i] = cData.posDeltaNum[uint(cData.udlFoundIdx)];
                 cData.posDeltaDenom[i] = cData.posDeltaDenom[uint(cData.udlFoundIdx)];
             }
-        }
-
-        for (uint i = 0; i < _tokens.length; i++) {
-            IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
 
             if (is_regular == false) {
                 if (_uncovered[i] > _holding[i]) {
@@ -111,19 +105,22 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            cData.coll = cData.coll.add(
-                cData._iv[i].mul(
-                    int(_uncovered[i]).sub(int(_holding[i]))
-                )
-            ).add(
-                int(
-                    calcCollateral(
-                        exchange.getExchangeFeeds(opt.udlFeed).upperVol,
-                        _uncovered[i],
-                        opt
-                    ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
-                )
-            );
+            if (cData.posDeltaDenom[i] > 0) {
+                cData.coll = cData.coll.add(
+                    cData._iv[i].mul(
+                        int(_uncovered[i]).sub(int(_holding[i]))
+                    )
+                ).add(
+                    int(
+                        calcCollateral(
+                            exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                            _uncovered[i],
+                            opt
+                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                    )
+                );
+            }
+            
         }
 
         return cData.coll;
