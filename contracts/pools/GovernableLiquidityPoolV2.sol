@@ -42,7 +42,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
 
     uint public override maturity;
     uint public override withdrawFee;
-    uint internal volumeBase;
+    uint internal volumeBase = 1e18;
     uint internal reserveRatio;
     uint internal fractionBase;
     uint internal _leverageMultiplier;
@@ -65,7 +65,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         tracker = IYieldTracker(Deployer(_deployAddr).getContractAddress("YieldTracker"));
         interpolator = IInterpolator(Deployer(_deployAddr).getContractAddress("Interpolator"));
         proposalManager = IProposalManager(Deployer(_deployAddr).getContractAddress("ProposalsManager"));
-        volumeBase = 1e18;//exchange.volumeBase();
     }
 
     function setParameters(
@@ -116,7 +115,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         external
     {
         ensureCaller();
-        require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "bad price surface or exp");
+        require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "bad x/y or _mt");
 
         string memory optSymbol = exchange.getOptionSymbol(
             IOptionsExchange.OptionData(udlFeed, optType, strike.toUint120(), _mt.toUint32())
@@ -151,7 +150,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function removeSymbol(string calldata optSymbol) external {
-        require(parameters[optSymbol].maturity >= block.timestamp, "not before exp");        
+        require(parameters[optSymbol].maturity >= block.timestamp, "2 soon");        
         Arrays.removeItem(optSymbols, optSymbol);
     }
 
@@ -179,7 +178,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     function withdraw(uint amount) override external {
 
         uint bal = balanceOf(msg.sender);
-        require(bal >= amount, "low caller bal");
+        require(bal >= amount, "low bal");
 
         uint val = valueOf(msg.sender).mul(amount).div(bal);
         uint discountedValue = val.mul(fractionBase.sub(withdrawFee)).div(fractionBase);
@@ -276,9 +275,11 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         }
 
         //trigger hedge, may need to factor in costs and charge it to msg.sender
-        IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-            UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
-        );
+        if (_hedgingManagerAddress != address(0)) {
+            IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
+                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
+            );
+        }
 
         emit Buy(_tk, msg.sender, price, volume);
     }
@@ -313,12 +314,15 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
              
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
-        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "pool bal 2 low or high volume");
+        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "bal 2 low/high volume");
         
         //trigger hedge, may need to factor in costs and charge it to msg.sender
-        IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-            UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
-        );
+        if (_hedgingManagerAddress != address(0)) {
+            IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
+                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
+            );
+        }
+        
 
         emit Sell(_tk, msg.sender, price, volume);
     }
@@ -357,11 +361,11 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         returns (uint p, PricingParameters memory param) 
     {
         param = parameters[optSymbol];
-        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad range or volume");
+        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad rng or vol");
         p = calcOptPrice(param, op);
         require(
             op == Operation.BUY ? price >= p : price <= p,
-            "insufficient price"
+            "bad price"
         );
     }
 
@@ -408,6 +412,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function ensureCaller() private view {
-        require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "not registered/exec not allowed");
+        require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "ONG");
     }
 }
