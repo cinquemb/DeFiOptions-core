@@ -46,7 +46,6 @@ interface IOptionsExchange {
     function calcExpectedPayout(address owner) external view returns (int payout);
     function calcIntrinsicValue(address udlFeed, OptionType optType, uint strike, uint maturity) external view returns (int);
     function calcIntrinsicValue(OptionData calldata opt) external view returns (int value);
-    function getUdlPrice(IOptionsExchange.OptionData calldata opt) external view returns (int answer);
     function calcCollateral(address owner, bool is_regular) external view returns (uint);
     function calcCollateral(address udlFeed, uint volume, OptionType optType, uint strike,  uint maturity) external view returns (uint);
     function openExposure(

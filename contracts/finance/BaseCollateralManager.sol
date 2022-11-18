@@ -170,7 +170,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
     function calcIntrinsicValue(IOptionsExchange.OptionData memory opt) override public view returns (int value) {
         
-        int udlPrice = exchange.getUdlPrice(opt);
+        int udlPrice = getUdlPrice(opt);
         int strike = int(opt.strike);
 
         if (opt._type == IOptionsExchange.OptionType.CALL) {
@@ -384,6 +384,15 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             d = (timeBase.mul(uint(opt.maturity).sub(uint(_now)))).div(1 days);
         } else {
             d = 0;
+        }
+    }
+
+    function getUdlPrice(IOptionsExchange.OptionData memory opt) internal view returns (int answer) {
+
+        if (opt.maturity > settings.exchangeTime()) {
+            (,answer) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
+        } else {
+            (,answer) = UnderlyingFeed(opt.udlFeed).getPrice(opt.maturity);
         }
     }
 

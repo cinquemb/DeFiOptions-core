@@ -278,7 +278,7 @@ contract CollateralManager is BaseCollateralManager {
 
         // using exchange 90 day window
         uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod());
-        uint256 price_div_strike = uint256(exchange.getUdlPrice(opt).div(opt.strike));
+        uint256 price_div_strike = uint256(getUdlPrice(opt).div(opt.strike));
         uint256 dt = uint256(opt.maturity).sub(settings.exchangeTime());
 
 
