@@ -57,6 +57,7 @@ contract ProposalsManager is ManagedContract {
             );
             require(govToken.calcShare(msg.sender, b) >= v, "insufficient share");
             governanceToken = address(govToken);
+            proposingDate[msg.sender] = settings.exchangeTime();
         } else {
             governanceToken = poolAddress;
         }
@@ -71,7 +72,6 @@ contract ProposalsManager is ManagedContract {
             expiresAt
         );
 
-        proposingDate[msg.sender] = settings.exchangeTime();
         id = serial++;
         w.open(id);
         wp = address(w);
