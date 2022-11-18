@@ -7,11 +7,15 @@ import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
+import "../interfaces/IProposalManager.sol";
+import "../interfaces/IProposalWrapper.sol";
+
 
 contract ProtocolReader is ManagedContract {
 
     IProtocolSettings private settings;
     IOptionsExchange private exchange;
+    IProposalManager private proposalManager;
 
     struct poolData {
       string[] poolSymbols;
@@ -26,11 +30,20 @@ contract ProtocolReader is ManagedContract {
       string[] poolSymbolList;
     }
 
+    struct proposalData {
+      address[] addr;
+      address[] wrapperAddr;
+      address[] govToken;
+      IProposalWrapper.VoteType[] voteType;
+      IProposalWrapper.Status[] status;
+    }
+
     event IncentiveReward(address indexed from, uint value);
 
     function initialize(Deployer deployer) override internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+        proposalManager = IProposalManager(deployer.getContractAddress("ProposalsManager"));
     }
 
     function listPoolsData(address account) external view returns (poolData memory){
@@ -72,6 +85,26 @@ contract ProtocolReader is ManagedContract {
           pd.poolSymbolList[i] = IGovernableLiquidityPool(poolAddr).listSymbols();
       }
 
+      return pd;
+    }
+
+    function listProposals() external view returns (proposalData memory) {
+      proposalData memory pd;
+      uint totalProposals = proposalManager.proposalCount();
+
+      pd.addr = new address[](totalProposals);
+      pd.wrapperAddr = new address[](totalProposals);
+      pd.govToken = new address[](totalProposals);
+      pd.voteType = new IProposalWrapper.VoteType[](totalProposals);
+      pd.status = new IProposalWrapper.Status[](totalProposals);
+
+      for(uint i=1; i< totalProposals; i++){
+        pd.addr[i] = proposalManager.resolveProposal(i);
+        pd.wrapperAddr[i] = proposalManager.resolve(pd.addr[i]);
+        pd.govToken[i] = IProposalWrapper(pd.wrapperAddr[i]).getGovernanceToken();
+        pd.voteType[i] = IProposalWrapper(pd.wrapperAddr[i]).getVoteType();
+        pd.status[i] = IProposalWrapper(pd.wrapperAddr[i]).getStatus();
+      }
       return pd;
     }
 }

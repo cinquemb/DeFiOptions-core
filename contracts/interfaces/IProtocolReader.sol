@@ -1,6 +1,8 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
+import "../interfaces/IProposalWrapper.sol";
+
 interface IProtocolReader {
     struct poolData {
       string[] poolSymbols;
@@ -14,5 +16,13 @@ interface IProtocolReader {
       uint[] poolWithdrawalFee;
       string[] poolSymbolList;
     }
+    struct proposalData {
+      address[] addr;
+      address[] wrapperAddr;
+      address[] govToken;
+      IProposalWrapper.VoteType[] voteType;
+      IProposalWrapper.Status[] status;
+    }
     function listPoolsData(address account) external view returns (poolData memory);
+    function listProposals() external view returns (proposalData memory);
 }
