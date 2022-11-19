@@ -240,9 +240,10 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         PricingParameters memory param = parameters[optSymbol];
         price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
-        uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+        uint optBal = poolOptBal(_tk, op, (op == Operation.SELL) ? false : true);
+        uint optBalInv = poolOptBal(_tk, op, (op == Operation.SELL) ? true : false);
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, op),
+            calcVolume(optSymbol, param, price, op, optBalInv),
             (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
         );
     }
@@ -274,12 +275,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
             IOptionToken(_tk).transfer(msg.sender, volume);
         }
 
-        //trigger hedge, may need to factor in costs and charge it to msg.sender
-        if (_hedgingManagerAddress != address(0)) {
-            IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
-            );
-        }
+        hedge(param);
 
         emit Buy(_tk, msg.sender, price, volume);
     }
@@ -315,14 +311,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
         require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "bal 2 low/high volume");
-        
-        //trigger hedge, may need to factor in costs and charge it to msg.sender
-        if (_hedgingManagerAddress != address(0)) {
-            IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
-            );
-        }
-        
+
+        hedge(param);
 
         emit Sell(_tk, msg.sender, price, volume);
     }
@@ -331,6 +321,19 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         
         bal = exchange.balanceOf(address(this));
         pOut = exchange.calcExpectedPayout(address(this));
+    }
+
+    function poolOptBal(address _tk, Operation op, bool invert) private view returns (uint) {
+        return (op == ((invert == false) ? Operation.SELL : Operation.BUY)) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+    }
+
+    function hedge(PricingParameters memory param) private {
+        //trigger hedge, may need to factor in costs and charge it to msg.sender
+        if (_hedgingManagerAddress != address(0)) {
+            IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
+                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
+            );
+        }
     }
 
     function isInRange(
@@ -394,7 +397,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         string memory optSymbol,
         PricingParameters memory p,
         uint price,
-        Operation op
+        Operation op,
+        uint poolPos
     )
         virtual
         internal

@@ -65,7 +65,8 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
         string memory optSymbol,
         PricingParameters memory p,
         uint price,
-        Operation op
+        Operation op,
+        uint poolPos
     )
         internal
         override
@@ -82,12 +83,12 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
             p.maturity
         );
 
+        //IF APPROVED FOR HEDGING (FOR EITHER/OR SIDE, SHOULD USE TOTAL EXCHANGE TOKENS AND NOT FREE BAL)
         if (op == Operation.BUY) {
-
             volume = coll <= price ? uint(-1) :
                 calcFreeBalance().mul(volumeBase).div(
                     coll.sub(price.mul(r).div(fractionBase))
-                );
+                ).add(poolPos);
 
         } else {
 
@@ -111,7 +112,7 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
             volume = price <= iv ? uint(-1) :
                 bal.sub(poolColl.mul(fractionBase).div(r)).mul(volumeBase).div(
                     price.sub(iv)
-                );
+                ).add(poolPos);
 
             uint balMulDiv = bal.mul(volumeBase).div(price);
 

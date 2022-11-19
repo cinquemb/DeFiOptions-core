@@ -196,11 +196,18 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint price = 0;
         IGovernableLiquidityPool pool = IGovernableLiquidityPool(poolAddr);
         
-        (uint _buyPrice,) = pool.queryBuy(symbol, true);
-        price = price.add(_buyPrice);
-        
-        (uint _sellPrice,) = pool.queryBuy(symbol, false);
-        price = price.add(_sellPrice);
+
+        try pool.queryBuy(symbol, true) returns (uint _buyPrice, uint) {
+            price = price.add(_buyPrice);
+        } catch (bytes memory /*lowLevelData*/) {
+            return 0;
+        }
+
+        try pool.queryBuy(symbol, false) returns (uint _sellPrice, uint) {
+            price = price.add(_sellPrice);
+        } catch (bytes memory /*lowLevelData*/) {
+            return 0;
+        }
 
         return int(price).div(2);
     }

@@ -214,8 +214,10 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+        uint optBalInv = (op == Operation.BUY) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, op),
+            calcVolume(optSymbol, param, price, op, optBalInv),
             (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
         );
     }
@@ -359,7 +361,8 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         string memory optSymbol,
         PricingParameters memory p,
         uint price,
-        Operation op
+        Operation op,
+        uint poolPos
     )
         virtual
         internal

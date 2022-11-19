@@ -269,7 +269,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         IOptionsExchange.OpenExposureInputs memory oEi,
         address to
     ) public {
-        /*equire(
+        /*require(
             (oEi.symbols.length == oEi.volume.length)  && 
             (oEi.symbols.length == oEi.isShort.length) && 
             (oEi.symbols.length == oEi.isCovered.length) && 
@@ -295,21 +295,17 @@ contract OptionsExchange is ERC20, ManagedContract {
             oEx = getOpenExposureInternalArgs(i, oEx, oEi);
             require(tokenAddress[oEx.symbol] != address(0), "symbol not available");
             oEx._tokens[i] = tokenAddress[oEx.symbol];
-            IGovernableLiquidityPool pool = IGovernableLiquidityPool(oEx.poolAddr);        
+            IGovernableLiquidityPool pool = IGovernableLiquidityPool(oEx.poolAddr);
+            uint _price;    
             if (oEi.isShort[i] == true) {
                 //sell options
                 if (oEx.vol > 0) {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
-                    (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
+                    (_price,) = pool.queryBuy(oEx.symbol, false);
 
-                    /*
                     IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
-                    pool.sell(oEx.symbol, _sellPrice, oEx.vol);
-                    */
-
-                    (bool success,) = oEx.poolAddr.delegatecall(abi.encodePacked(bytes4(keccak256("sell(string,uint,uint)")), oEx.symbol, _sellPrice, oEx.vol));
-                    require(success == true, "fs");
-
+                    //this will credit exchange addr that needs to be transfered to the s
+                    pool.sell(oEx.symbol, _price, oEx.vol);
                     //if not covered option
                     if (oEx.isCovered == false) {
                         oEx._uncovered[i] = oEx.vol;
@@ -318,16 +314,18 @@ contract OptionsExchange is ERC20, ManagedContract {
             } else {
                 // buy options
                 if (oEx.vol > 0) {
-                    (uint _buyPrice,) = pool.queryBuy(oEx.symbol, true);        
-                    //pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
-
-                    (bool success,) = oEx.poolAddr.delegatecall(abi.encodePacked(bytes4(keccak256("buy(string,uint,uint,address)")), oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]));
-                    require(success == true, "fb");
-
-
+                    (_price,) = pool.queryBuy(oEx.symbol, true);
+                    //TODO: MANY NEED TO TRANSFER oEi.paymentTokens[i] to address(this)
+                    pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
+                    
                     oEx._holding[i] = oEx.vol;
                 }
-            } 
+            }
+            creditProvider.transferBalance(
+                address(this),
+                (oEi.isShort[i] == true) ? msg.sender : oEx.poolAddr, 
+                _price.mul(oEx.vol).div(_volumeBase)
+            );
         }
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
         collateral[msg.sender] = collateral[msg.sender].add(
@@ -360,8 +358,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
-        //mint to "to", then send pool
-        tk.issue(msg.sender, to, volume);
+        //mint to exchange, then send pool
+        tk.issue(msg.sender, address(this), volume);
         if (isCovered == true) {
             //write covered
             address underlying = UnderlyingFeed(
