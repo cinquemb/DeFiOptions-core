@@ -22,9 +22,11 @@ contract CollateralManager is BaseCollateralManager {
         int hedgedDelta;
         uint totalAbsDelta;
         address[] underlyings;
+        address[] rawUnderlyings;
         int[] _iv;
         uint[] posDeltaNum;
         uint[] posDeltaDenom;
+        IOptionsExchange.OptionData[] options;
     }
 
     function initialize(Deployer deployer) override internal {
@@ -37,43 +39,47 @@ contract CollateralManager is BaseCollateralManager {
         
 
         CollateralData memory cData;
-        cData.underlyings = new address[](_tokens.length);
         cData.posDeltaNum = new uint[](_tokens.length);
         cData.posDeltaDenom = new uint[](_tokens.length);
+        cData._iv = new int[](_tokens.length);
+        cData.options = new IOptionsExchange.OptionData[](_tokens.length);
+        cData.underlyings = new address[](_tokens.length);
+        cData.rawUnderlyings = new address[](_tokens.length);
+        cData.coll = 0;
 
-        
-        //for each underlying calculate the delta of their sub portfolio
+        //get the underlyings and option data
         for (uint i = 0; i < _tokens.length; i++) {
             IOptionsExchange.OptionData memory opt = exchange.getOptionData(_tokens[i]);
-            cData.udlAddr = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
+            cData.options[i] = opt;
             cData._iv[i] = calcIntrinsicValue(opt);
-            
+            cData.rawUnderlyings[i] = UnderlyingFeed(opt.udlFeed).getUnderlyingAddr();
+        }
+        //for each underlying calculate the delta of their sub portfolio
+        for (uint i = 0; i < _tokens.length; i++) {
+            cData.udlAddr = cData.rawUnderlyings[i];            
             (cData.udlFound, cData.udlFoundIdx) = foundUnderlying(cData.udlAddr, cData.underlyings);
+            
             if (cData.udlFound == false) {
                 cData.totalDelta = 0;
                 cData.totalAbsDelta = 0;
 
                 for (uint j = 0; j < _tokens.length; j++) {
-                    //TODO: CAN THE BELOW BE DONE MORE OPTIMALLY?
-                    IOptionsExchange.OptionData memory optTemp = exchange.getOptionData(_tokens[j]);
-                    address udlTemp = UnderlyingFeed(optTemp.udlFeed).getUnderlyingAddr();
-                    //TODO: CAN THE ABOVE BE DONE MORE OPTIMALLY
-
+                    address udlTemp = cData.rawUnderlyings[j];
                     if (udlTemp == cData.udlAddr){
-                        int256 delta;
-                        uint256 absDelta;
+                        int256 delta = 0;
+                        uint256 absDelta = 0;
 
                         if (_uncovered[j] > 0) {
                             // short this option, thus mult by -1
                             delta = calcDelta(
-                                opt,
+                                cData.options[j],
                                 _uncovered[j]
                             ).mul(-1);
                             absDelta = MoreMath.abs(delta);
-                        } else {
+                        } else if (_holding[j] > 0) {
                             // long thus does not need to be modified
                             delta = calcDelta(
-                                opt,
+                                cData.options[j],
                                 _holding[j]
                             );
                             absDelta = MoreMath.abs(delta);
@@ -113,9 +119,9 @@ contract CollateralManager is BaseCollateralManager {
                 ).add(
                     int(
                         calcCollateral(
-                            exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                            exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
                             _uncovered[i],
-                            opt
+                            cData.options[i]
                         ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
                     )
                 );
@@ -231,7 +237,7 @@ contract CollateralManager is BaseCollateralManager {
     }
 
     function foundUnderlying(address udl, address[] memory udlArray) private pure returns (bool, int){
-        for (uint i; i < udlArray.length; i++) {
+        for (uint i = 0; i < udlArray.length; i++) {
             if (udlArray[i] == udl) {
                 return (true, int(i));
             }

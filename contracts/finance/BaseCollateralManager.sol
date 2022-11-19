@@ -88,7 +88,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         // core across all collateral models
         int modColl;
         int skew = collateralSkew();
-        Decimal.D256 memory skewPct = Decimal.ratio(uint(coll), MoreMath.abs(skew));
+        Decimal.D256 memory skewPct;
+        if (skew != 0){
+            skewPct = Decimal.ratio(uint(coll), MoreMath.abs(skew));
+        } else {
+            skewPct = Decimal.zero();
+        }
 
         if (skewPct.greaterThanOrEqualTo(Decimal.one())) {
             modColl = coll.add(skew);

@@ -269,7 +269,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         IOptionsExchange.OpenExposureInputs memory oEi,
         address to
     ) public {
-        /*require(
+        /*equire(
             (oEi.symbols.length == oEi.volume.length)  && 
             (oEi.symbols.length == oEi.isShort.length) && 
             (oEi.symbols.length == oEi.isCovered.length) && 
@@ -302,9 +302,14 @@ contract OptionsExchange is ERC20, ManagedContract {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
                     (uint _sellPrice,) = pool.queryBuy(oEx.symbol, false);
 
+                    /*
                     IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
-
                     pool.sell(oEx.symbol, _sellPrice, oEx.vol);
+                    */
+
+                    (bool success,) = oEx.poolAddr.delegatecall(abi.encodePacked(bytes4(keccak256("sell(string,uint,uint)")), oEx.symbol, _sellPrice, oEx.vol));
+                    require(success == true, "fs");
+
                     //if not covered option
                     if (oEx.isCovered == false) {
                         oEx._uncovered[i] = oEx.vol;
@@ -314,11 +319,15 @@ contract OptionsExchange is ERC20, ManagedContract {
                 // buy options
                 if (oEx.vol > 0) {
                     (uint _buyPrice,) = pool.queryBuy(oEx.symbol, true);        
-                    pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
+                    //pool.buy(oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]);
+
+                    (bool success,) = oEx.poolAddr.delegatecall(abi.encodePacked(bytes4(keccak256("buy(string,uint,uint,address)")), oEx.symbol, _buyPrice, oEx.vol, oEi.paymentTokens[i]));
+                    require(success == true, "fb");
+
+
                     oEx._holding[i] = oEx.vol;
                 }
-            }   
-            
+            } 
         }
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
         collateral[msg.sender] = collateral[msg.sender].add(
@@ -351,8 +360,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
-        //mint to exchange, then send pool
-        tk.issue(msg.sender, address(this), volume);
+        //mint to "to", then send pool
+        tk.issue(msg.sender, to, volume);
         if (isCovered == true) {
             //write covered
             address underlying = UnderlyingFeed(
