@@ -8,117 +8,134 @@ library MoreMath {
     using SafeMath for uint;
     using SignedSafeMath for int;
 
+    //see: https://ethereum.stackexchange.com/questions/8086/logarithm-math-operation-in-solidity
+
+    /// @dev log2(e) as a signed 59.18-decimal fixed-point number.
+    int256 internal constant LOG2_E = 1_442695040888963407;
+
+    /// @dev Half the SCALE number.
+    int256 internal constant HALF_SCALE = 5e17;
+
+    int256 internal constant SCALE = 1e18;
+
+    /// @notice Finds the zero-based index of the first one in the binary representation of x.
+    /// @dev See the note on msb in the "Find First Set" Wikipedia article https://en.wikipedia.org/wiki/Find_first_set
+    /// @param x The uint256 number for which to find the index of the most significant bit.
+    /// @return msb The index of the most significant bit as an uint256.
+    function mostSignificantBit(uint256 x) internal pure returns (uint256 msb) {
+        if (x >= 2**128) {
+            x >>= 128;
+            msb += 128;
+        }
+        if (x >= 2**64) {
+            x >>= 64;
+            msb += 64;
+        }
+        if (x >= 2**32) {
+            x >>= 32;
+            msb += 32;
+        }
+        if (x >= 2**16) {
+            x >>= 16;
+            msb += 16;
+        }
+        if (x >= 2**8) {
+            x >>= 8;
+            msb += 8;
+        }
+        if (x >= 2**4) {
+            x >>= 4;
+            msb += 4;
+        }
+        if (x >= 2**2) {
+            x >>= 2;
+            msb += 2;
+        }
+        if (x >= 2**1) {
+            // No need to shift x any more.
+            msb += 1;
+        }
+    }
+    /// @notice Calculates the binary logarithm of x.
+    ///
+    /// @dev Based on the iterative approximation algorithm.
+    /// https://en.wikipedia.org/wiki/Binary_logarithm#Iterative_approximation
+    ///
+    /// Requirements:
+    /// - x must be greater than zero.
+    ///
+    /// Caveats:
+    /// - The results are nor perfectly accurate to the last digit, due to the lossy precision of the iterative approximation.
+    ///
+    /// @param x The signed 59.18-decimal fixed-point number for which to calculate the binary logarithm.
+    /// @return result The binary logarithm as a signed 59.18-decimal fixed-point number.
+    function log2(int256 x) internal pure returns (int256 result) {
+        require(x > 0);
+        // This works because log2(x) = -log2(1/x).
+        int256 sign;
+        if (x >= SCALE) {
+            sign = 1;
+        } else {
+            sign = -1;
+            // Do the fixed-point inversion inline to save gas. The numerator is SCALE * SCALE.
+            assembly {
+                x := div(1000000000000000000000000000000000000, x)
+            }
+        }
+
+        // Calculate the integer part of the logarithm and add it to the result and finally calculate y = x * 2^(-n).
+        uint256 n = mostSignificantBit(uint256(x / SCALE));
+
+        // The integer part of the logarithm as a signed 59.18-decimal fixed-point number. The operation can't overflow
+        // because n is maximum 255, SCALE is 1e18 and sign is either 1 or -1.
+        result = int256(n) * SCALE;
+
+        // This is y = x * 2^(-n).
+        int256 y = x >> n;
+
+        // If y = 1, the fractional part is zero.
+        if (y == SCALE) {
+            return result * sign;
+        }
+
+        // Calculate the fractional part via the iterative approximation.
+        // The "delta >>= 1" part is equivalent to "delta /= 2", but shifting bits is faster.
+        for (int256 delta = int256(HALF_SCALE); delta > 0; delta >>= 1) {
+            y = (y * y) / SCALE;
+
+            // Is y^2 > 2 and so in the range [2,4)?
+            if (y >= 2 * SCALE) {
+                // Add the 2^(-m) factor to the logarithm.
+                result += delta;
+
+                // Corresponds to z/2 on Wikipedia.
+                y >>= 1;
+            }
+        }
+        result *= sign;
+    }
+
+    /// @notice Calculates the natural logarithm of x.
+    ///
+    /// @dev Based on the insight that ln(x) = log2(x) / log2(e).
+    ///
+    /// Requirements:
+    /// - All from "log2".
+    ///
+    /// Caveats:
+    /// - All from "log2".
+    /// - This doesn't return exactly 1 for 2718281828459045235, for that we would need more fine-grained precision.
+    ///
+    /// @param x The signed 59.18-decimal fixed-point number for which to calculate the natural logarithm.
+    /// @return result The natural logarithm as a signed 59.18-decimal fixed-point number.
+    function ln(int256 x) internal pure returns (int256 result) {
+        // Do the fixed-point multiplication inline to save gas. This is overflow-safe because the maximum value that log2(x)
+        // can return is 195205294292027477728.
+        result = (log2(x) * SCALE) / LOG2_E;
+    }
+
 
     //see: https://ethereum.stackexchange.com/questions/8086/logarithm-math-operation-in-solidity
-    /*
-     // 2^127.
-     */
-    uint128 private constant TWO127 = 0x80000000000000000000000000000000;
-
-    /*
-     // 2^128 - 1.
-     */
-    uint128 private constant TWO128_1 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-
-    /*
-     // ln(2) * 2^128.
-     */
-    uint128 private constant LN2 = 0xb17217f7d1cf79abc9e3b39803f2f6af;
-
-    /*
-     // Return index of most significant non-zero bit in given non-zero 256-bit
-     // unsigned integer value.
-     
-     // @param x value to get index of most significant non-zero bit in
-     // @return index of most significant non-zero bit in given number
-     */
-    function mostSignificantBit (uint256 x) pure internal returns (uint8 r) {
-      // for high-precision ln(x) implementation for 128.128 fixed point numbers
-      require (x > 0);
-
-      if (x >= 0x100000000000000000000000000000000) {x >>= 128; r += 128;}
-      if (x >= 0x10000000000000000) {x >>= 64; r += 64;}
-      if (x >= 0x100000000) {x >>= 32; r += 32;}
-      if (x >= 0x10000) {x >>= 16; r += 16;}
-      if (x >= 0x100) {x >>= 8; r += 8;}
-      if (x >= 0x10) {x >>= 4; r += 4;}
-      if (x >= 0x4) {x >>= 2; r += 2;}
-      if (x >= 0x2) r += 1; // No need to shift x anymore
-    }
-    /*
-    function mostSignificantBit (uint256 x) pure internal returns (uint8) {
-      // for high-precision ln(x) implementation for 128.128 fixed point numbers
-      require (x > 0);
-
-      uint8 l = 0;
-      uint8 h = 255;
-
-      while (h > l) {
-        uint8 m = uint8 ((uint16 (l) + uint16 (h)) >> 1);
-        uint256 t = x >> m;
-        if (t == 0) h = m - 1;
-        else if (t > 1) l = m + 1;
-        else return m;
-      }
-
-      return h;
-    }
-    */
-
-    /**
-     * Calculate log_2 (x / 2^128) * 2^128.
-     *
-     * @param x parameter value
-     * @return log_2 (x / 2^128) * 2^128
-     */
-    function log_2 (uint256 x) pure internal returns (int256) {
-      // for high-precision ln(x) implementation for 128.128 fixed point numbers
-      require (x > 0);
-
-      uint8 msb = mostSignificantBit (x);
-
-      if (msb > 128) x >>= msb - 128;
-      else if (msb < 128) x <<= 128 - msb;
-
-      x &= TWO128_1;
-
-      int256 result = (int256 (msb) - 128) << 128; // Integer part of log_2
-
-      int256 bit = TWO127;
-      for (uint8 i = 0; i < 128 && x > 0; i++) {
-        x = (x << 1) + ((x * x + TWO127) >> 128);
-        if (x > TWO128_1) {
-          result |= bit;
-          x = (x >> 1) - TWO127;
-        }
-        bit >>= 1;
-      }
-
-      return result;
-    }
-
-    /**
-     * Calculate ln (x / 2^128) * 2^128.
-     *
-     * @param x parameter value
-     * @return ln (x / 2^128) * 2^128
-     */
-    function ln (uint256 x) pure internal returns (int256) {
-      // for high-precision ln(x) implementation for 128.128 fixed point numbers
-      require (x > 0);
-
-      int256 l2 = log_2 (x);
-      if (l2 == 0) return 0;
-      else {
-        uint256 al2 = uint256 (l2 > 0 ? l2 : -l2);
-        uint8 msb = mostSignificantBit (al2);
-        if (msb > 127) al2 >>= msb - 127;
-        al2 = (al2 * LN2 + TWO127) >> 128;
-        if (msb > 127) al2 <<= msb - 127;
-
-        return int256 (l2 >= 0 ? al2 : -al2);
-      }
-    }
 
     function cumulativeDistributionFunction(int256 x) internal pure returns (int256) {
         /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */

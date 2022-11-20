@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 import "./BaseCollateralManager.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/IBaseHedgingManager.sol";
-import "../utils/Convert.sol";
 
 contract CollateralManager is BaseCollateralManager {
 
@@ -276,17 +275,13 @@ contract CollateralManager is BaseCollateralManager {
                 - strike price K
         */
 
+        int256 delta;
+        
         // using exchange 90 day window
         uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod());
-        uint256 price_div_strike = uint256(getUdlPrice(opt).div(opt.strike));
+        int256 price_div_strike = int256(getUdlPrice(opt)).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
         uint256 dt = uint256(opt.maturity).sub(settings.exchangeTime());
-
-
-        //18 decimals to 128 decimals
-        uint256 price_div_strike_128 = Convert.formatValue(price_div_strike, 128, 18);
-        int256 ln_price_div_strike_128 = MoreMath.ln(price_div_strike_128);
-        //128 decimals  to 18 decimals
-        int256 ln_price_div_strike = Convert.formatValue(ln_price_div_strike_128, 18, 128);
+        int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
 
         int256 d1 = ln_price_div_strike.add(
@@ -294,7 +289,6 @@ contract CollateralManager is BaseCollateralManager {
         ).div(
             int256(sigma.mul(MoreMath.sqrt(dt)))
         );
-        int256 delta;
 
         if (opt._type == IOptionsExchange.OptionType.PUT) {
             // -1 * norm_cdf(-d1) == put_delta
@@ -304,6 +298,8 @@ contract CollateralManager is BaseCollateralManager {
             // norm_cdf(d1) == call_delta
             delta = MoreMath.cumulativeDistributionFunction(d1);
         }
+
+        require((-1e18 <= delta) && (delta <= 1e18), "delta out of range");
 
         return delta.mul(100).mul(int256(volume));
     }
