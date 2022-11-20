@@ -75,7 +75,9 @@ contract CollateralManager is BaseCollateralManager {
                                 _uncovered[j]
                             ).mul(-1);
                             absDelta = MoreMath.abs(delta);
-                        } else if (_holding[j] > 0) {
+                        }
+
+                        if (_holding[j] > 0) {
                             // long thus does not need to be modified
                             delta = calcDelta(
                                 cData.options[j],
@@ -110,7 +112,7 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            if (cData.posDeltaDenom[i] > 0) {
+            if ((cData.posDeltaDenom[i] > 0) && (_uncovered[i] > _holding[i])) {
                 cData.coll = cData.coll.add(
                     cData._iv[i].mul(
                         int(_uncovered[i]).sub(int(_holding[i]))
@@ -170,14 +172,16 @@ contract CollateralManager is BaseCollateralManager {
                         int256 delta;
                         uint256 absDelta;
 
-                        if (_uncovered[j].sub(_holding[j]) > 0) {
+                        if (_uncovered[j] > 0) {
                             // net short this option, thus mult by -1
                             delta = calcDelta(
                                 opt,
-                                _uncovered[j].sub(_holding[j])
+                                _uncovered[j]
                             ).mul(-1);
                             absDelta = MoreMath.abs(delta);
-                        } else {
+                        }
+
+                        if (_holding[j] > 0) {
                             // net long thus does not need to be modified
                             delta = calcDelta(
                                 opt,
@@ -213,7 +217,7 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            if (cData.posDeltaDenom[i] > 0) {
+            if ((cData.posDeltaDenom[i] > 0) && (_uncovered[i] > _holding[i])) {
                 cData.coll = cData.coll.add(
                     _iv[i].mul(
                         int(_uncovered[i]).sub(int(_holding[i]))
