@@ -240,11 +240,15 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         PricingParameters memory param = parameters[optSymbol];
         price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
-        uint optBal = poolOptBal(_tk, op, (op == Operation.SELL) ? false : true);
-        uint optBalInv = poolOptBal(_tk, op, (op == Operation.SELL) ? true : false);
+        uint optBal = (op == Operation.BUY) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+        //uint optBalInv = poolOptBal(_tk, op, (op == Operation.SELL) ? true : false);
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, op, optBalInv),
-            (op == Operation.SELL) ? uint(param.bsStockSpread[1].toUint120()).sub(optBal) : uint(param.bsStockSpread[0].toUint120()).sub(optBal)
+            calcVolume(optSymbol, param, price, op, optBal),
+            (op == Operation.SELL) ? (
+                (param.bsStockSpread[1] >= optBal) ? param.bsStockSpread[1].sub(optBal) : 0
+            ) : (
+            (param.bsStockSpread[0] >= optBal) ? param.bsStockSpread[0].sub(optBal) : 0
+            )
         );
     }
 
@@ -310,7 +314,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
              
         exchange.transferBalance(msg.sender, value);
         // holding <= sellStock
-        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1].toUint120(), "bal 2 low/high volume");
+        require(calcFreeBalance() > 0 && IOptionToken(_tk).balanceOf(address(this)) <= param.bsStockSpread[1], "bal 2 low/high volume");
 
         hedge(param);
 
@@ -323,9 +327,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         pOut = exchange.calcExpectedPayout(address(this));
     }
 
-    function poolOptBal(address _tk, Operation op, bool invert) private view returns (uint) {
+    /*function poolOptBal(address _tk, Operation op, bool invert) private view returns (uint) {
         return (op == ((invert == false) ? Operation.SELL : Operation.BUY)) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
-    }
+    }*/
 
     function hedge(PricingParameters memory param) private {
         //trigger hedge, may need to factor in costs and charge it to msg.sender
