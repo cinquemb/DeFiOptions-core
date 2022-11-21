@@ -27,7 +27,7 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
     {
         address poolAddr = address(this);
         require(IOptionToken(_tk).writtenVolume(poolAddr).add(volume) <= param.bsStockSpread[0].toUint120(), "2 high volume");
-        require(calcFreeBalance() > 0, "pool bal low");
+        require(calcFreeTradableBalance() > 0, "pool bal low");
         
         IOptionsExchange.OpenExposureInputs memory oEi;
         
@@ -83,16 +83,15 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
             p.maturity
         );
 
-        //IF APPROVED FOR HEDGING (FOR EITHER/OR SIDE, SHOULD USE TOTAL EXCHANGE TOKENS AND NOT FREE BAL)
         if (op == Operation.BUY) {
             volume = coll <= price ? uint(-1) :
-                calcFreeBalance().mul(volumeBase).div(
+                calcFreeTradableBalance().mul(volumeBase).div(
                     coll.sub(price.mul(r).div(fractionBase))
                 ).add(poolPos);
 
         } else {
 
-            uint bal = exchange.balanceOf(address(this));
+            uint bal = calcFreeTradableBalance();
 
             uint poolColl = exchange.collateral(address(this));
 

@@ -526,6 +526,14 @@ contract ProtocolSettings is ManagedContract {
         return poolCustomLeverage[poolAddr];
     }
 
+    function getPoolCreditTradeable(address poolAddr) external view returns (uint){
+        if((poolBuyCreditTradeable[poolAddr] == true) || (poolSellCreditTradeable[poolAddr] == true)) {
+            return creditProvider.totalTokenStock();
+        } else {
+            return creditProvider.balanceOf(poolAddr);
+        }
+    }
+
 
     function ensureWritePrivilege() private view {
         ensureWritePrivilege(false);

@@ -212,7 +212,16 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function calcFreeBalance() override public view returns (uint balance) {
+        //used for pool deposits/withdrawls of pool tokens
         uint exBal = exchange.balanceOf(address(this));
+        uint reserve = exBal.mul(reserveRatio).div(fractionBase);
+        uint sp = exBal.sub(exchange.collateral(address(this)));
+        balance = sp > reserve ? sp.sub(reserve) : 0;
+    }
+
+    function calcFreeTradableBalance() internal view returns (uint balance) {
+        //used for calcing what traders can trade against
+        uint exBal = settings.getPoolCreditTradeable(address(this));
         uint reserve = exBal.mul(reserveRatio).div(fractionBase);
         uint sp = exBal.sub(exchange.collateral(address(this)));
         balance = sp > reserve ? sp.sub(reserve) : 0;

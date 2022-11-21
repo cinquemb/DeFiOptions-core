@@ -8,6 +8,7 @@ interface IProtocolSettings {
 	function checkUdlIncentiveBlacklist(address udlAddr) external view returns (bool);
 	function checkDexAggIncentiveBlacklist(address dexAggAddress) external view returns (bool);
     function checkPoolSellCreditTradable(address poolAddress) external view returns (bool);
+    function getPoolCreditTradeable(address poolAddr) external view returns (uint);
 	function applyCreditInterestRate(uint value, uint date) external view returns (uint);
 	function getSwapRouterInfo() external view returns (address router, address token);
 	function getSwapRouterTolerance() external view returns (uint r, uint b);
