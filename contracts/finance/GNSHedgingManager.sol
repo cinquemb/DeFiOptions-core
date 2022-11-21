@@ -390,6 +390,16 @@ contract GNSHedgingManager is BaseHedgingManager {
         }
     }
 
+    function totalTokenStock() override public view returns (uint v) {
+
+        address[] memory tokens = settings.getAllowedTokens();
+        for (uint i = 0; i < tokens.length; i++) {
+            (uint r, uint b) = settings.getTokenRate(tokens[i]);
+            uint value = IERC20_2(tokens[i]).balanceOf(address(this));
+            v = v.add(value.mul(b).div(r));
+        }
+    }
+
     function transferTokensToCreditProvider(address tokenAddr) override external {
         //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
         uint value = IERC20_2(tokenAddr).balanceOf(address(this));

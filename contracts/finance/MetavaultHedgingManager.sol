@@ -383,7 +383,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         }
     }
 
-    function totalTokenStock() public view returns (uint v) {
+    function totalTokenStock() override public view returns (uint v) {
 
         address[] memory tokens = settings.getAllowedTokens();
         for (uint i = 0; i < tokens.length; i++) {

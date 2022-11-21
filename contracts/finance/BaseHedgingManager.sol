@@ -34,5 +34,6 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
     function idealHedgeExposure(address underlying) virtual override public view returns (int256);
     function realHedgeExposure(address udlFeedAddr) virtual override public view returns (int256);
     function balanceExposure(address underlying) virtual override external returns (bool);
+    function totalTokenStock() virtual override public view returns (uint v);
     function transferTokensToCreditProvider(address tokenAddr) virtual override external;
 }
