@@ -8,4 +8,5 @@ interface IProposalWrapper {
     function getStatus() external view returns (Status);
     function getVoteType() external view returns (VoteType);
     function getGovernanceToken() external view returns (address);
+    function isActive() external view returns (bool);
 }

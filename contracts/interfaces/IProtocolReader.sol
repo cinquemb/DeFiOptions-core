@@ -22,6 +22,8 @@ interface IProtocolReader {
       address[] govToken;
       IProposalWrapper.VoteType[] voteType;
       IProposalWrapper.Status[] status;
+      bool[] isActive;
+
     }
     function listPoolsData(address account) external view returns (poolData memory);
     function listProposals() external view returns (proposalData memory);

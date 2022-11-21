@@ -36,6 +36,7 @@ contract ProtocolReader is ManagedContract {
       address[] govToken;
       IProposalWrapper.VoteType[] voteType;
       IProposalWrapper.Status[] status;
+      bool[] isActive;
     }
 
     event IncentiveReward(address indexed from, uint value);
@@ -97,6 +98,7 @@ contract ProtocolReader is ManagedContract {
       pd.govToken = new address[](totalProposals);
       pd.voteType = new IProposalWrapper.VoteType[](totalProposals);
       pd.status = new IProposalWrapper.Status[](totalProposals);
+      pd.isActive = new bool[](totalProposals);
 
       for(uint i=1; i< totalProposals; i++){
         pd.addr[i] = proposalManager.resolveProposal(i);
@@ -104,6 +106,7 @@ contract ProtocolReader is ManagedContract {
         pd.govToken[i] = IProposalWrapper(pd.wrapperAddr[i]).getGovernanceToken();
         pd.voteType[i] = IProposalWrapper(pd.wrapperAddr[i]).getVoteType();
         pd.status[i] = IProposalWrapper(pd.wrapperAddr[i]).getStatus();
+        pd.isActive[i] = IProposalWrapper(pd.wrapperAddr[i]).isActive();
       }
       return pd;
     }
