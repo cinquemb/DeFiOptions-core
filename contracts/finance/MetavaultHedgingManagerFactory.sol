@@ -29,13 +29,25 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
     }
 
     function create(address _poolAddr) external returns (address) {
-        address hdgMngr = address(
+        /*address hdgMngr = address(
             new MetavaultHedgingManager(
                 deployerAddress,
                 _poolAddr
             )
+        );*/
+        address proxyAddr = address(
+            new Proxy(
+                ManagedContract(deployerAddress).getOwner(),
+                address(
+                    new MetavaultHedgingManager(
+                        deployerAddress,
+                        _poolAddr
+                    )
+                )
+            )
         );
-        emit NewHedgingManager(hdgMngr, _poolAddr);
-        return hdgMngr;
+        ManagedContract(proxyAddr).initializeAndLock(Deployer(deployerAddress));
+        emit NewHedgingManager(proxyAddr, _poolAddr);
+        return proxyAddr;
     }
 }
