@@ -7,9 +7,9 @@ import "./MetavaultHedgingManager.sol";
 
 contract MetavaultHedgingManagerFactory is ManagedContract {
 
-    address public _readerAddr;
-    address public _positionManagerAddr;
-    bytes32 public _referralCode;
+    address public readerAddr;
+    address public positionManagerAddr;
+    bytes32 public referralCode;
 
     address private deployerAddress;
 
@@ -18,32 +18,48 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
         address indexed pool
     );
 
-    constructor(address _positionManager, address _reader, bytes32 referralCode) public {
-        _positionManagerAddr = _positionManager;
-        _readerAddr = _reader;
-        _referralCode = referralCode;
+    constructor(address _positionManager, address _reader, bytes32 rCode) public {
+        positionManagerAddr = _positionManager;
+        readerAddr = _reader;
+        referralCode = rCode;
     }
     
     function initialize(Deployer deployer) override internal {
         deployerAddress = address(deployer);
     }
 
+    function getRemoteContractAddresses() external view returns (address, address, bytes32) {
+        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("readerAddr()")));
+        bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("positionManagerAddr()")));
+        bytes memory data2 = abi.encodeWithSelector(bytes4(keccak256("referralCode()")));
+        
+        (bool success, bytes memory returnedData) = getImplementation().staticcall(data);
+        (bool success1, bytes memory returnedData1) = getImplementation().staticcall(data1);
+        (bool success2, bytes memory returnedData2) = getImplementation().staticcall(data2);
+
+        address pAddr = abi.decode(returnedData1, (address));
+        address rAddr = abi.decode(returnedData, (address));
+        bytes32 rCode = abi.decode(returnedData2, (bytes32));
+
+        require(pAddr != address(0), "bad pos manager");
+        require(rAddr != address(0), "bad reader");
+
+        return (pAddr, rAddr, rCode);
+    }
+
     function create(address _poolAddr) external returns (address) {
-        /*address hdgMngr = address(
+        require(deployerAddress != address(0), "bad deployer addr");
+        address hdgMngr = address(
             new MetavaultHedgingManager(
                 deployerAddress,
                 _poolAddr
             )
-        );*/
+        );
+
         address proxyAddr = address(
             new Proxy(
-                ManagedContract(deployerAddress).getOwner(),
-                address(
-                    new MetavaultHedgingManager(
-                        deployerAddress,
-                        _poolAddr
-                    )
-                )
+                getOwner(),
+                hdgMngr
             )
         );
         ManagedContract(proxyAddr).initializeAndLock(Deployer(deployerAddress));

@@ -7,6 +7,7 @@ import "../interfaces/ICollateralManager.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
+import "../interfaces/external/metavault/IRouter.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IMetavaultHedgingManagerFactory.sol";
 import "../utils/Convert.sol";
@@ -14,6 +15,7 @@ import "../utils/Convert.sol";
 contract MetavaultHedgingManager is BaseHedgingManager {
     address private positionManagerAddr;
     address private readerAddr;
+    address private mvxRouter;
     address private metavaultHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
@@ -39,7 +41,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         uint256 totalHedgingStables;
         uint256 totalPosValueToTransfer;
         
-        address routerAddr;
         address underlying;
         
         address[] at;
@@ -51,14 +52,16 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
 
     constructor(address _deployAddr, address _poolAddr) public {
+        poolAddr = _poolAddr;
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         metavaultHedgingManagerFactoryAddr = deployer.getContractAddress("MetavaultHedgingManagerFactory");
+        (positionManagerAddr, readerAddr,  referralCode) = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        require(positionManagerAddr != address(0), "bad position manager");
+        require(readerAddr != address(0), "bad reader");
+        mvxRouter = IPositionManager(positionManagerAddr).router();
+        IRouter(mvxRouter).approvePlugin(positionManagerAddr);
 
-        positionManagerAddr = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._positionManagerAddr();
-        readerAddr = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._readerAddr();
-        referralCode = IMetavaultHedgingManagerFactory(metavaultHedgingManagerFactoryAddr)._referralCode();
-        poolAddr = _poolAddr;
     }
 
     function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
@@ -210,7 +213,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     IPositionManager(positionManagerAddr).decreasePositionAndSwap(
                         exData._pathDecLong, //address[] memory _path
                         exData.underlying,//address _indexToken,
-                        exData.openPos[i],//uint256 _collateralDelta, USD 1e30 mult
+                        0,//uint256 _collateralDelta, USD 1e30 mult
                         exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
                         true,//bool _isLong,
                         address(creditProvider),//address _receiver,
@@ -234,7 +237,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                         if (exData.totalPosValueToTransfer > 0) {
                             exData.t = IERC20_2(exData.allowedTokens[i]);
-                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
                             (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
                             if (exData.b != 0) {
@@ -245,10 +247,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                                 //.mul(b).div(r); //convert to exchange decimals
 
-                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
-                                    exData.t.safeApprove(exData.routerAddr, 0);
+                                if (exData.t.allowance(address(this), mvxRouter) > 0) {
+                                    exData.t.safeApprove(mvxRouter, 0);
                                 }
-                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
+                                exData.t.safeApprove(mvxRouter, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 exData.at = new address[](1);
@@ -301,7 +303,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     IPositionManager(positionManagerAddr).decreasePosition(
                         exData.allowedTokens[i],//address _collateralToken,
                         exData.underlying,//address _indexToken,
-                        exData.openPos[i],//uint256 _collateralDelta,
+                        0,//uint256 _collateralDelta,
                         exData.openPos[i],//uint256 _sizeDelta,
                         false,//bool _isLong,
                         address(creditProvider),//address _receiver,
@@ -324,7 +326,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                         if (exData.totalPosValueToTransfer > 0) {
                             exData.t = IERC20_2(exData.allowedTokens[i]);
-                            exData.routerAddr = IPositionManager(positionManagerAddr).router();
                             
                             (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
                             if (exData.b != 0) {
@@ -332,10 +333,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     exData.totalPosValueToTransfer,
                                     exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
                                 );
-                                if (exData.t.allowance(address(this), exData.routerAddr) > 0) {
-                                    exData.t.safeApprove(exData.routerAddr, 0);
+                                if (exData.t.allowance(address(this), mvxRouter) > 0) {
+                                    exData.t.safeApprove(mvxRouter, 0);
                                 }
-                                exData.t.safeApprove(exData.routerAddr, v.mul(exData.r).div(exData.b));
+                                exData.t.safeApprove(mvxRouter, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 exData.at = new address[](1);
