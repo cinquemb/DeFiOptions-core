@@ -33,9 +33,9 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
         bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("positionManagerAddr()")));
         bytes memory data2 = abi.encodeWithSelector(bytes4(keccak256("referralCode()")));
         
-        (bool success, bytes memory returnedData) = getImplementation().staticcall(data);
-        (bool success1, bytes memory returnedData1) = getImplementation().staticcall(data1);
-        (bool success2, bytes memory returnedData2) = getImplementation().staticcall(data2);
+        (, bytes memory returnedData) = getImplementation().staticcall(data);
+        (, bytes memory returnedData1) = getImplementation().staticcall(data1);
+        (, bytes memory returnedData2) = getImplementation().staticcall(data2);
 
         address pAddr = abi.decode(returnedData1, (address));
         address rAddr = abi.decode(returnedData, (address));

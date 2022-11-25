@@ -119,6 +119,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong
         );
 
+        require(true==false, "loop getPositions");
+
+
+
+
         //https://docs.metavault.trade/contracts#positions-list
 
         int256 totalExposure = 0;
@@ -155,7 +160,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         opt,
                         _uncovered[i].sub(_holding[i])
                     ).mul(-1);
-                } else {
+                }  
+
+
+                if (_holding[i] > 0){
                     // net long thus does not need to be modified
                     delta = ICollateralManager(
                         settings.getUdlCollateralManager(opt.udlFeed)
@@ -177,25 +185,41 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr());
         return exposure.div(udlPrice);
     }
+
+    function toAsciiString(address x) internal pure returns (string memory) {
+        bytes memory s = new bytes(40);
+        for (uint i = 0; i < 20; i++) {
+            bytes1 b = bytes1(uint8(uint(uint160(x)) / (2**(8*(19 - i)))));
+            bytes1 hi = bytes1(uint8(b) / 16);
+            bytes1 lo = bytes1(uint8(b) - 16 * uint8(hi));
+            s[2*i] = char(hi);
+            s[2*i+1] = char(lo);            
+        }
+        return string(s);
+    }
+
+    function char(bytes1 b) internal pure returns (bytes1 c) {
+        if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
+        else return bytes1(uint8(b) + 0x57);
+    }
     
     function balanceExposure(address udlFeedAddr) override external returns (bool) {
         ExposureData memory exData;
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        exData.ideal = idealHedgeExposure(exData.underlying);
-        exData.real = realHedgeExposure(exData.underlying);
-        exData.diff = exData.ideal - exData.real;
-        exData.allowedTokens = settings.getAllowedTokens();
-        exData.totalStables = creditProvider.totalTokenStock();
-
-        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
-
-
-        require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
-
-        exData.totalHedgingStables = totalTokenStock();
-
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
+        exData.allowedTokens = settings.getAllowedTokens();
+        exData.totalStables = creditProvider.totalTokenStock();
+        exData.totalHedgingStables = totalTokenStock();
+        exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
+        require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
+        exData.ideal = idealHedgeExposure(exData.underlying);
+        //require(true == false, "before realHedgeExposure");
+        exData.real = getHedgeExposure(exData.underlying).div(udlPrice);
+        exData.diff = exData.ideal.sub(exData.real);
+        
+
+        require(true == false, "before get pos size");
         exData.openPos = getPosSize(exData.underlying, true);
 
         if (exData.ideal >= 0) {
@@ -271,7 +295,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
+                                
 
+                                //require(true == false, "before short hedge");
+                                
+                                IPositionManager(positionManagerAddr).increasePosition(
+                                    exData.at,//address[] memory _path,
+                                    exData.underlying,//address _indexToken,
+                                    v,//uint256 _amountIn, TOKEN DECIMALS
+                                    0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                    false,// bool _isLong
+                                    convertPriceAndApplySlippage(exData.udlPrice, false)//uint256 _price USD 1e30 mult
+                                );
+                                
+                                /*
                                 IPositionManager(positionManagerAddr).increasePosition(
                                     exData.at,//address[] memory _path,
                                     exData.underlying,//address _indexToken,
@@ -282,6 +320,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     convertPriceAndApplySlippage(exData.udlPrice, false),//uint256 _price, USD 1e30 mult
                                     referralCode//bytes32 _referralCode
                                 );
+                                */
 
                                 //back to exchange decimals
                                 exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
@@ -292,6 +331,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         }
                     }
                 }
+
+                return true;
             }
         } else if (exData.ideal < 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
@@ -361,6 +402,20 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
+
+                                //require(true == false, "before long hedge");
+
+                                IPositionManager(positionManagerAddr).increasePosition(
+                                    at_s,//address[] memory _path,
+                                    exData.underlying,//address _indexToken,
+                                    v,//uint256 _amountIn, TOKEN DECIMALS
+                                    Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                    true,// bool _isLong
+                                    convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price, USD 1e30 mult
+                                );
+
+                                /*
                                 IPositionManager(positionManagerAddr).increasePosition(
                                     at_s,//address[] memory _path,
                                     exData.underlying,//address _indexToken,
@@ -371,6 +426,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price, USD 1e30 mult
                                     referralCode//bytes32 _referralCode
                                 );
+                                */
 
                                 //back to exchange decimals
                                 exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
@@ -380,8 +436,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         }
                     }
                 }
+
+                return true;
             }
         }
+
+        return false;
     }
 
     function totalTokenStock() override public view returns (uint v) {

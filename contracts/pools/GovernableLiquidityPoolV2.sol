@@ -345,7 +345,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         //trigger hedge, may need to factor in costs and charge it to msg.sender
         if (_hedgingManagerAddress != address(0)) {
             IBaseHedgingManager(_hedgingManagerAddress).balanceExposure(
-                UnderlyingFeed(param.udlFeed).getUnderlyingAddr()
+                param.udlFeed
             );
         }
     }
