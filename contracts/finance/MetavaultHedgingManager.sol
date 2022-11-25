@@ -8,6 +8,7 @@ import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/metavault/IPositionManager.sol";
 import "../interfaces/external/metavault/IReader.sol";
 import "../interfaces/external/metavault/IRouter.sol";
+import "../interfaces/external/metavault/IVault.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IMetavaultHedgingManagerFactory.sol";
 import "../utils/Convert.sol";
@@ -16,6 +17,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     address private positionManagerAddr;
     address private readerAddr;
     address private mvxRouter;
+    address private mvxVaultAddr;
     address private metavaultHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
@@ -60,24 +62,51 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         require(positionManagerAddr != address(0), "bad position manager");
         require(readerAddr != address(0), "bad reader");
         mvxRouter = IPositionManager(positionManagerAddr).router();
+        mvxVaultAddr = IPositionManager(positionManagerAddr).vault();
         IRouter(mvxRouter).approvePlugin(positionManagerAddr);
+    }
 
+    function getAllowedStables() internal view returns (address[] memory) {
+        //    function allWhitelistedTokensLength() external view returns (uint256);
+        ///    function allWhitelistedTokens(uint256) external view returns (address);
+        address[] memory allowedTokens = settings.getAllowedTokens();
+        uint mvxAllowedTokensLen = IVault(mvxVaultAddr).allWhitelistedTokensLength();
+        address[] memory outTokens = new address[](allowedTokens.length);
+
+        uint foundCount  = 0;
+        for (uint i=0;i<allowedTokens.length;i++){
+            for (uint j=0;j<mvxAllowedTokensLen;j++){
+                address mvxAllowedToken = IVault(mvxVaultAddr).allWhitelistedTokens(j);
+                if (allowedTokens[i] == mvxAllowedToken) {
+                    outTokens[i] = allowedTokens[i];
+                    foundCount++;
+                    continue;
+                }
+            }
+        }
+
+        address[] memory outTokensReal = new address[](foundCount);
+
+
+        uint rIdx = 0;
+        for (uint i=0; i<allowedTokens.length; i++) {
+            if (outTokens[i] != address(0)) {
+                outTokensReal[rIdx] = outTokens[i];
+                rIdx++;
+            }
+        }
+
+        return outTokensReal;
     }
 
     function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
-        address[] memory allowedTokens = settings.getAllowedTokens();
+        address[] memory allowedTokens = getAllowedStables();
         address[] memory _collateralTokens = new address[](allowedTokens.length);
         address[] memory _indexTokens = new address[](allowedTokens.length);
         bool[] memory _isLong = new bool[](allowedTokens.length);
 
-        for (uint i=0; i<allowedTokens.length; i++) {
-            _collateralTokens[i] = allowedTokens[i];
-            _indexTokens[i] = underlying;
-            _isLong[i] = isLong;
-        }
-
         uint256[] memory posData = IReader(readerAddr).getPositions(
-            IPositionManager(positionManagerAddr).vault(),
+            mvxVaultAddr,
             poolAddr,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
@@ -94,7 +123,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
 
     function getHedgeExposure(address underlying) override public view returns (int256) {
-        address[] memory allowedTokens = settings.getAllowedTokens();
+        address[] memory allowedTokens = getAllowedStables();
         address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
         address[] memory _indexTokens = new address[](allowedTokens.length * 2);
         bool[] memory _isLong = new bool[](allowedTokens.length * 2);
@@ -111,8 +140,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong[i] = false;
         }
 
+
+
         uint256[] memory posData = IReader(readerAddr).getPositions(
-            IPositionManager(positionManagerAddr).vault(),
+            mvxVaultAddr,
             poolAddr,
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
@@ -208,7 +239,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
-        exData.allowedTokens = settings.getAllowedTokens();
+        exData.allowedTokens = getAllowedStables();
         exData.totalStables = creditProvider.totalTokenStock();
         exData.totalHedgingStables = totalTokenStock();
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
@@ -446,7 +477,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
     function totalTokenStock() override public view returns (uint v) {
 
-        address[] memory tokens = settings.getAllowedTokens();
+        address[] memory tokens = getAllowedStables();
         for (uint i = 0; i < tokens.length; i++) {
             (uint r, uint b) = settings.getTokenRate(tokens[i]);
             uint value = IERC20_2(tokens[i]).balanceOf(address(this));
