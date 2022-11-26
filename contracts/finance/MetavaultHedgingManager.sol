@@ -66,17 +66,22 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         IRouter(mvxRouter).approvePlugin(positionManagerAddr);
     }
 
-    function getAllowedStables() internal view returns (address[] memory) {
+    function getAllowedStables() public view returns (address[] memory) {
         //    function allWhitelistedTokensLength() external view returns (uint256);
         ///    function allWhitelistedTokens(uint256) external view returns (address);
         address[] memory allowedTokens = settings.getAllowedTokens();
-        uint mvxAllowedTokensLen = IVault(mvxVaultAddr).allWhitelistedTokensLength();
+        IVault mvxVault = IVault(mvxVaultAddr);
+        //TODO: NOTWORKING allWhitelistedTokensLength
+        uint256 mvxAllowedTokensLen = mvxVault.allWhitelistedTokensLength();
+        //require(true == false, "after get mvxAllowedTokensLen");
         address[] memory outTokens = new address[](allowedTokens.length);
 
-        uint foundCount  = 0;
-        for (uint i=0;i<allowedTokens.length;i++){
+        //require(true == false, "after get mvxAllowedTokensLen");
+
+        uint256 foundCount  = 0;
+        for (uint256 i=0;i<allowedTokens.length;i++){
             for (uint j=0;j<mvxAllowedTokensLen;j++){
-                address mvxAllowedToken = IVault(mvxVaultAddr).allWhitelistedTokens(j);
+                address mvxAllowedToken = mvxVault.allWhitelistedTokens(j);
                 if (allowedTokens[i] == mvxAllowedToken) {
                     outTokens[i] = allowedTokens[i];
                     foundCount++;
@@ -150,7 +155,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _isLong
         );
 
-        require(true==false, "loop getPositions");
+        //require(true==false, "loop getPositions");
 
 
 
@@ -183,7 +188,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             if (_underlying[i] == underlying){
                 int256 delta;
 
-                if (_uncovered[i].sub(_holding[i]) > 0) {
+                if ((_uncovered[i] > 0) && (_uncovered[i] > _holding[i])) {
                     // net short this option, thus mult by -1
                     delta = ICollateralManager(
                         settings.getUdlCollateralManager(opt.udlFeed)
@@ -250,7 +255,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         exData.diff = exData.ideal.sub(exData.real);
         
 
-        require(true == false, "before get pos size");
+        //require(true == false, "before get pos size");
         exData.openPos = getPosSize(exData.underlying, true);
 
         if (exData.ideal >= 0) {
@@ -273,9 +278,20 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         true,//bool _isLong,
                         address(creditProvider),//address _receiver,
                         convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                        referralCode//bytes32 _referralCode
+                        0//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
                     );
+
+                    /*IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+                        exData._pathDecLong, //address[] memory _path
+                        exData.underlying,//address _indexToken,
+                        0,//uint256 _collateralDelta, USD 1e30 mult
+                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                        true,//bool _isLong,
+                        address(creditProvider),//address _receiver,
+                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                        0,//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                        referralCode//bytes32 _referralCode
+                    );*/
                 }
                 
                 exData.pos_size = uint256(exData.ideal);
@@ -354,7 +370,13 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 */
 
                                 //back to exchange decimals
-                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+
+                                if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
+                                    exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+
+                                } else {
+                                    exData.totalPosValueToTransfer = 0;
+                                }
 
                                 exData.r = 0;
                                 exData.b = 0;
@@ -372,7 +394,18 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)                
                 for(uint i=0; i< exData.openPos.length; i++){
                     //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
+
                     IPositionManager(positionManagerAddr).decreasePosition(
+                        exData.allowedTokens[i],//address _collateralToken,
+                        exData.underlying,//address _indexToken,
+                        0,//uint256 _collateralDelta,
+                        exData.openPos[i],//uint256 _sizeDelta,
+                        false,//bool _isLong,
+                        address(creditProvider),//address _receiver,
+                        convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price,
+                    );
+
+                    /*IPositionManager(positionManagerAddr).decreasePosition(
                         exData.allowedTokens[i],//address _collateralToken,
                         exData.underlying,//address _indexToken,
                         0,//uint256 _collateralDelta,
@@ -381,7 +414,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         address(creditProvider),//address _receiver,
                         convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
                         referralCode//bytes32 _referralCode
-                    );
+                    );*/
                 }
 
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
@@ -440,7 +473,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     at_s,//address[] memory _path,
                                     exData.underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
-                                    Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
                                     convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
                                     true,// bool _isLong
                                     convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price, USD 1e30 mult
@@ -451,7 +484,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                     at_s,//address[] memory _path,
                                     exData.underlying,//address _indexToken,
                                     v,//uint256 _amountIn, TOKEN DECIMALS
-                                    Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                    0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
                                     convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
                                     true,// bool _isLong
                                     convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price, USD 1e30 mult
@@ -460,7 +493,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 */
 
                                 //back to exchange decimals
-                                exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+                                if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
+                                    exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
+
+                                } else {
+                                    exData.totalPosValueToTransfer = 0;
+                                }
                                 exData.r = 0;
                                 exData.b = 0;
                             }                             

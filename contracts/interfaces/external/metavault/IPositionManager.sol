@@ -50,6 +50,16 @@ interface IPositionManager {
         bytes32 _referralCode
     ) external;
 
+    function decreasePosition(
+        address _collateralToken,
+        address _indexToken,
+        uint256 _collateralDelta,
+        uint256 _sizeDelta,
+        bool _isLong,
+        address _receiver,
+        uint256 _price
+    ) external;
+
     function decreasePositionETH(
         address _collateralToken,
         address _indexToken,

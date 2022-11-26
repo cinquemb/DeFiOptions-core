@@ -48,6 +48,7 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
     }
 
     function create(address _poolAddr) external returns (address) {
+        //cant use proxies unless all extenral addrs store here
         require(deployerAddress != address(0), "bad deployer addr");
         address hdgMngr = address(
             new MetavaultHedgingManager(
@@ -55,15 +56,15 @@ contract MetavaultHedgingManagerFactory is ManagedContract {
                 _poolAddr
             )
         );
-
+        /*
         address proxyAddr = address(
             new Proxy(
                 getOwner(),
                 hdgMngr
             )
         );
-        ManagedContract(proxyAddr).initializeAndLock(Deployer(deployerAddress));
-        emit NewHedgingManager(proxyAddr, _poolAddr);
-        return proxyAddr;
+        ManagedContract(proxyAddr).initializeAndLock(Deployer(deployerAddress));*/
+        emit NewHedgingManager(hdgMngr, _poolAddr);
+        return hdgMngr;
     }
 }
