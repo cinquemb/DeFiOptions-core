@@ -104,9 +104,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         address[] memory _indexTokens = new address[](allowedTokens.length);
         bool[] memory _isLong = new bool[](allowedTokens.length);
 
+        for (uint i=0; i<allowedTokens.length; i++) {
+            
+             _collateralTokens[i * 2] = allowedTokens[i];
+            _collateralTokens[((i+1) * 2) - 1] = allowedTokens[i];
+            
+            _indexTokens[i * 2] = underlying;
+            _indexTokens[((i+1) * 2) - 1] = underlying;
+            
+            _isLong[i * 2] = true;
+            _isLong[((i+1) * 2) - 1] = false;
+        }
+
         uint256[] memory posData = IReader(readerAddr).getPositions(
             mvxVaultAddr,
-            poolAddr,
+            address(this),
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
             _isLong
@@ -114,7 +126,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         uint[] memory posSize = new uint[](allowedTokens.length);
 
-        for (uint i=0; i<(allowedTokens.length); i++) {
+        for (uint i=0; i<(allowedTokens.length*2); i++) {
             posSize[i] = posData[i*9];
         }
 
@@ -129,21 +141,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
-            _collateralTokens[i] = allowedTokens[i];
-            _collateralTokens[i] = allowedTokens[i];
+            _collateralTokens[i * 2] = allowedTokens[i];
+            _collateralTokens[((i+1) * 2) - 1] = allowedTokens[i];
             
-            _indexTokens[i] = underlying;
-            _indexTokens[i] = underlying;
+            _indexTokens[i * 2] = underlying;
+            _indexTokens[((i+1) * 2) - 1] = underlying;
             
-            _isLong[i] = true;
-            _isLong[i] = false;
+            _isLong[i * 2] = true;
+            _isLong[((i+1) * 2) - 1] = false;
         }
 
 
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
             mvxVaultAddr,
-            poolAddr,
+            address(this),
             _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
             _indexTokens,
             _isLong
@@ -251,34 +263,36 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 //need to close long position first
                 //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
                 for(uint i=0; i< exData.openPos.length; i++){
-                    exData.t = IERC20_2(exData.allowedTokens[i]);
-                    exData._pathDecLong = new address[](2);
-                    exData._pathDecLong[0] = exData.underlying;
-                    exData._pathDecLong[1] = exData.allowedTokens[i];
+                    if (exData.openPos[i] > 0) {
+                        exData.t = IERC20_2(exData.allowedTokens[i / 2]);
+                        exData._pathDecLong = new address[](2);
+                        exData._pathDecLong[0] = exData.underlying;
+                        exData._pathDecLong[1] = exData.allowedTokens[i / 2];
 
-                    //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
-                    IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        exData._pathDecLong, //address[] memory _path
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta, USD 1e30 mult
-                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
-                        true,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        0//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                    );
+                        //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
+                        IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+                            exData._pathDecLong, //address[] memory _path
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta, USD 1e30 mult
+                            exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                            true,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                            0//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                        );
 
-                    /*IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        exData._pathDecLong, //address[] memory _path
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta, USD 1e30 mult
-                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
-                        true,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        0,//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                        referralCode//bytes32 _referralCode
-                    );*/
+                        /*IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+                            exData._pathDecLong, //address[] memory _path
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta, USD 1e30 mult
+                            exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                            true,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                            0,//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                            referralCode//bytes32 _referralCode
+                        );*/
+                    }
                 }
                 
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
@@ -379,26 +393,28 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 for(uint i=0; i< exData.openPos.length; i++){
                     //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
 
-                    IPositionManager(positionManagerAddr).decreasePosition(
-                        exData.allowedTokens[i],//address _collateralToken,
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta,
-                        exData.openPos[i],//uint256 _sizeDelta,
-                        false,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price,
-                    );
+                    if (exData.openPos[i] > 0) {
+                        IPositionManager(positionManagerAddr).decreasePosition(
+                            exData.allowedTokens[i / 2],//address _collateralToken,
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta,
+                            exData.openPos[i],//uint256 _sizeDelta,
+                            false,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price,
+                        );
 
-                    /*IPositionManager(positionManagerAddr).decreasePosition(
-                        exData.allowedTokens[i],//address _collateralToken,
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta,
-                        exData.openPos[i],//uint256 _sizeDelta,
-                        false,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
-                        referralCode//bytes32 _referralCode
-                    );*/
+                        /*IPositionManager(positionManagerAddr).decreasePosition(
+                            exData.allowedTokens[i / 2],//address _collateralToken,
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta,
+                            exData.openPos[i],//uint256 _sizeDelta,
+                            false,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
+                            referralCode//bytes32 _referralCode
+                        );*/ 
+                    }
                 }
 
                 exData.pos_size = uint256(exData.ideal);
