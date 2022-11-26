@@ -280,17 +280,19 @@ contract CollateralManager is BaseCollateralManager {
         */
 
         int256 delta;
+
+        uint256 one_year = 60 * 60 * 24 * 365;
         
         // using exchange 90 day window
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod());
-        int256 price_div_strike = int256(getUdlPrice(opt)).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
-        uint256 dt = uint256(opt.maturity).sub(settings.exchangeTime());
+        uint256 price = uint256(getUdlPrice(opt));
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod()).div(price); //vol relative to price
+        int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
+        uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
-
-        int256 d1 = ln_price_div_strike.add(
-            int256(((MoreMath.pow(sigma, 2)).div(2)).mul(dt))
-        ).div(
+        int256 d1 = (ln_price_div_strike.add(
+            int256(((MoreMath.pow(sigma, 2)).mul(dt).div(2)))
+        )).div(
             int256(sigma.mul(MoreMath.sqrt(dt)))
         );
 
@@ -305,7 +307,7 @@ contract CollateralManager is BaseCollateralManager {
 
         require((-1e18 <= delta) && (delta <= 1e18), "delta out of range");
 
-        return delta.mul(100).mul(int256(volume));
+        return delta.mul(100).mul(int256(volume)).div(int(_volumeBase));
     }
 
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {

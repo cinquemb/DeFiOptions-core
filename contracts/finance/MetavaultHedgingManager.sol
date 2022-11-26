@@ -67,17 +67,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     }
 
     function getAllowedStables() public view returns (address[] memory) {
-        //    function allWhitelistedTokensLength() external view returns (uint256);
-        ///    function allWhitelistedTokens(uint256) external view returns (address);
         address[] memory allowedTokens = settings.getAllowedTokens();
         IVault mvxVault = IVault(mvxVaultAddr);
-        //TODO: NOTWORKING allWhitelistedTokensLength
         uint256 mvxAllowedTokensLen = mvxVault.allWhitelistedTokensLength();
-        //require(true == false, "after get mvxAllowedTokensLen");
         address[] memory outTokens = new address[](allowedTokens.length);
-
-        //require(true == false, "after get mvxAllowedTokensLen");
-
         uint256 foundCount  = 0;
         for (uint256 i=0;i<allowedTokens.length;i++){
             for (uint j=0;j<mvxAllowedTokensLen;j++){
@@ -154,11 +147,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             _indexTokens,
             _isLong
         );
-
-        //require(true==false, "loop getPositions");
-
-
-
 
         //https://docs.metavault.trade/contracts#positions-list
 
@@ -250,12 +238,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
         exData.ideal = idealHedgeExposure(exData.underlying);
-        //require(true == false, "before realHedgeExposure");
         exData.real = getHedgeExposure(exData.underlying).div(udlPrice);
         exData.diff = exData.ideal.sub(exData.real);
         
 
-        //require(true == false, "before get pos size");
         exData.openPos = getPosSize(exData.underlying, true);
 
         if (exData.ideal >= 0) {
@@ -342,10 +328,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
-                                
-
-                                //require(true == false, "before short hedge");
-                                
+                                                                
                                 IPositionManager(positionManagerAddr).increasePosition(
                                     exData.at,//address[] memory _path,
                                     exData.underlying,//address _indexToken,
@@ -465,9 +448,6 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
-
-
-                                //require(true == false, "before long hedge");
 
                                 IPositionManager(positionManagerAddr).increasePosition(
                                     at_s,//address[] memory _path,
