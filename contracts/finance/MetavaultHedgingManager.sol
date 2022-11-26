@@ -22,6 +22,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
+    uint constant _volumeBase = 1e18;
 
     bytes32 private referralCode;
 
@@ -177,24 +178,24 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 int256 delta;
 
                 if ((_uncovered[i] > 0) && (_uncovered[i] > _holding[i])) {
-                    // net short this option, thus mult by -1
+                    // net short this option, thus does not need to be modified
                     delta = ICollateralManager(
                         settings.getUdlCollateralManager(opt.udlFeed)
                     ).calcDelta(
                         opt,
                         _uncovered[i].sub(_holding[i])
-                    ).mul(-1);
+                    );
                 }  
 
 
                 if (_holding[i] > 0){
-                    // net long thus does not need to be modified
+                    // net long thus needs to multiply by -1
                     delta = ICollateralManager(
                         settings.getUdlCollateralManager(opt.udlFeed)
                     ).calcDelta(
                         opt,
                         _holding[i]
-                    );
+                    ).mul(-1);
                 }
 
                 totalDelta = totalDelta.add(delta);
@@ -244,7 +245,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         exData.openPos = getPosSize(exData.underlying, true);
 
-        if (exData.ideal >= 0) {
+        if (exData.ideal <= 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
             if (exData.real > 0) {
                 //need to close long position first
@@ -280,12 +281,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     );*/
                 }
                 
-                exData.pos_size = uint256(exData.ideal);
+                exData.pos_size = uint256(MoreMath.abs(exData.ideal));
             }
             
             // increase short position by pos_size
             if (exData.pos_size != 0) {
-                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
                 // hedging should fail if not enough stables in exchange
@@ -370,7 +371,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                 return true;
             }
-        } else if (exData.ideal < 0) {
+        } else if (exData.ideal > 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
             if (exData.real < 0) {
                 // need to close short position first
@@ -400,12 +401,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     );*/
                 }
 
-                exData.pos_size = uint256(MoreMath.abs(exData.ideal));
+                exData.pos_size = uint256(exData.ideal);
             }
 
             // increase long position by pos_size
             if (exData.pos_size != 0) {
-                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice);
+                exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
                 // hedging should fail if not enough stables in exchange
