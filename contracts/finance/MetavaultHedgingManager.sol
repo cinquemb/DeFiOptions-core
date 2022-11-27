@@ -106,14 +106,9 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
-             _collateralTokens[i * 2] = allowedTokens[i];
-            _collateralTokens[((i+1) * 2) - 1] = allowedTokens[i];
-            
-            _indexTokens[i * 2] = underlying;
-            _indexTokens[((i+1) * 2) - 1] = underlying;
-            
-            _isLong[i * 2] = true;
-            _isLong[((i+1) * 2) - 1] = false;
+             _collateralTokens[i] = allowedTokens[i];
+            _indexTokens[i] = underlying;
+            _isLong[i] = isLong;
         }
 
         uint256[] memory posData = IReader(readerAddr).getPositions(
@@ -126,7 +121,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
         uint[] memory posSize = new uint[](allowedTokens.length);
 
-        for (uint i=0; i<(allowedTokens.length*2); i++) {
+        for (uint i=0; i<allowedTokens.length; i++) {
             posSize[i] = posData[i*9];
         }
 
@@ -220,7 +215,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         // look at metavault exposure for underlying, and divide by asset price
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         int256 exposure = getHedgeExposure(UnderlyingFeed(udlFeedAddr).getUnderlyingAddr());
-        return exposure.div(udlPrice);
+        return exposure.mul(int(_volumeBase)).div(udlPrice);
     }
 
     function toAsciiString(address x) internal pure returns (string memory) {
@@ -251,23 +246,21 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
         exData.ideal = idealHedgeExposure(exData.underlying);
-        exData.real = getHedgeExposure(exData.underlying).div(udlPrice);
+        exData.real = getHedgeExposure(exData.underlying).mul(int(_volumeBase)).div(udlPrice);
         exData.diff = exData.ideal.sub(exData.real);
-        
-
-        exData.openPos = getPosSize(exData.underlying, true);
 
         if (exData.ideal <= 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
             if (exData.real > 0) {
                 //need to close long position first
                 //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+                exData.openPos = getPosSize(exData.underlying, true);
                 for(uint i=0; i< exData.openPos.length; i++){
                     if (exData.openPos[i] > 0) {
-                        exData.t = IERC20_2(exData.allowedTokens[i / 2]);
+                        exData.t = IERC20_2(exData.allowedTokens[i]);
                         exData._pathDecLong = new address[](2);
                         exData._pathDecLong[0] = exData.underlying;
-                        exData._pathDecLong[1] = exData.allowedTokens[i / 2];
+                        exData._pathDecLong[1] = exData.allowedTokens[i];
 
                         //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
                         IPositionManager(positionManagerAddr).decreasePositionAndSwap(
@@ -389,13 +382,15 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
             if (exData.real < 0) {
                 // need to close short position first
-                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)                
+                // need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
+                exData.openPos = getPosSize(exData.underlying, false);             
                 for(uint i=0; i< exData.openPos.length; i++){
                     //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
 
                     if (exData.openPos[i] > 0) {
+
                         IPositionManager(positionManagerAddr).decreasePosition(
-                            exData.allowedTokens[i / 2],//address _collateralToken,
+                            exData.allowedTokens[i],//address _collateralToken,
                             exData.underlying,//address _indexToken,
                             0,//uint256 _collateralDelta,
                             exData.openPos[i],//uint256 _sizeDelta,
@@ -405,7 +400,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                         );
 
                         /*IPositionManager(positionManagerAddr).decreasePosition(
-                            exData.allowedTokens[i / 2],//address _collateralToken,
+                            exData.allowedTokens[i],//address _collateralToken,
                             exData.underlying,//address _indexToken,
                             0,//uint256 _collateralDelta,
                             exData.openPos[i],//uint256 _sizeDelta,
