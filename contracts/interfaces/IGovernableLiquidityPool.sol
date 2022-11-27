@@ -64,4 +64,5 @@ interface IGovernableLiquidityPool {
 
     function getHedgingManager() external view returns (address manager);
     function getLeverage() external view returns (uint leverage);
+    function getHedgeNotionalThreshold() external view returns (uint threshold);
 }

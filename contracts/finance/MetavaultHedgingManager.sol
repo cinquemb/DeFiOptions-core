@@ -249,6 +249,12 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         exData.real = getHedgeExposure(exData.underlying).mul(int(_volumeBase)).div(udlPrice);
         exData.diff = exData.ideal.sub(exData.real);
 
+        //dont bother to hedge if delta is below $ val threshold
+        if (uint256(MoreMath.abs(exData.diff)).mul(exData.udlPrice).div(_volumeBase) < IGovernableLiquidityPool(poolAddr).getHedgeNotionalThreshold()) {
+            return false;
+        }
+        
+
         if (exData.ideal <= 0) {
             exData.pos_size = uint256(MoreMath.abs(exData.diff));
             if (exData.real > 0) {
