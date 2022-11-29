@@ -62,8 +62,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     event CreateSymbol(address indexed token, address indexed sender);
     event CreateDexFeed(address indexed feed, address indexed sender);
 
-    event Approval(address indexed owner, address indexed spender, uint value);
-
     event WriteOptions(
         address indexed token,
         address indexed issuer,
@@ -163,13 +161,6 @@ contract OptionsExchange is ERC20, ManagedContract {
 
         return vault.balanceOf(owner, _tk);
     }
-    /*
-    function withdrawTokens(uint value) external {
-        
-        require(value <= calcSurplus(msg.sender), "insufficient surplus");
-        creditProvider.withdrawTokens(msg.sender, value);
-        emit WithdrawTokens(msg.sender, value);
-    }*/
 
     function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
 
@@ -481,24 +472,15 @@ contract OptionsExchange is ERC20, ManagedContract {
         return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
     }
 
-    function getUnderlyingPrice(string calldata symbol) external view returns (int answer) {
-        
-        address _ts = tokenAddress[symbol];
-        require(_ts != address(0), "token not found");
-        UnderlyingFeed udlFeed = UnderlyingFeed(options[_ts].udlFeed);
-
-        if (options[_ts].maturity > settings.exchangeTime()) {
-            (,answer) = udlFeed.getLatestPrice();
-        } else {
-            (,answer) = udlFeed.getPrice(options[_ts].maturity);
-        }
-    }
-
     function resolveToken(string calldata symbol) external view returns (address) {
         
         address addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
         return addr;
+    }
+
+    function burn(address owner, uint value, address _tk) external {
+        IOptionToken(_tk).burn(owner, value);
     }
 
     function getExchangeFeeds(address udlFeed) external view returns (IOptionsExchange.FeedData memory) {

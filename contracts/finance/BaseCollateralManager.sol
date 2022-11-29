@@ -311,7 +311,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         vault.release(owner, address(tk), feed, uint(-1));
 
         if (written > 0) {
-            tk.burn(owner, written);
+            exchange.burn(owner, written, address(tk));
         }
     }
 
@@ -352,7 +352,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         }
 
         if (volume > 0) {
-            tk.burn(owner, volume);
+            exchange.burn(owner, volume, address(tk));
         }
 
         emit LiquidateEarly(tkAddr, msg.sender, owner, volume);

@@ -73,6 +73,23 @@ contract CreditProvider is ManagedContract {
         primeCallers[incentiveAddr] = 1;
     }
 
+    function setup(Deployer deployer) external {
+
+        creditToken = ICreditToken(deployer.getContractAddress("CreditToken"));
+        settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        exchangeAddr = deployer.getContractAddress("OptionsExchange");
+        address vaultAddr = deployer.getContractAddress("UnderlyingVault");
+        address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
+        address incentiveAddr = deployer.getContractAddress("Incentivized");
+
+        primeCallers[exchangeAddr] = 1;
+        primeCallers[address(settings)] = 1;
+        primeCallers[address(creditToken)] = 1;
+        primeCallers[vaultAddr] = 1;
+        primeCallers[collateralManagerAddr] = 1;
+        primeCallers[incentiveAddr] = 1;
+    }
+
     function totalTokenStock() external view returns (uint v) {
 
         address[] memory tokens = settings.getAllowedTokens();

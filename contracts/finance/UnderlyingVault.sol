@@ -38,6 +38,20 @@ contract UnderlyingVault is ManagedContract {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         
         callers[deployer.getContractAddress("OptionsExchange")] = 1;
+        callers[deployer.getContractAddress("CollateralManager")] = 1;
+        callers[deployer.getContractAddress("Incentivized")] = 1;
+    }
+
+
+    function setup(Deployer deployer) public {
+
+        time = TimeProvider(deployer.getContractAddress("TimeProvider"));
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
+        
+        callers[deployer.getContractAddress("OptionsExchange")] = 1;
+        callers[deployer.getContractAddress("CollateralManager")] = 1;
+        callers[deployer.getContractAddress("Incentivized")] = 1;
     }
 
     function balanceOf(address owner, address token) public view returns (uint) {
@@ -194,6 +208,6 @@ contract UnderlyingVault is ManagedContract {
 
     function ensureCaller() private view {
         
-        require(callers[msg.sender] == 1, "unauthorized caller");
+        require(callers[msg.sender] == 1, "Vault: unauthorized caller");
     }
 }
