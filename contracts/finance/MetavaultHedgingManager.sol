@@ -23,6 +23,7 @@ contract MetavaultHedgingManager is BaseHedgingManager {
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
     uint constant _volumeBase = 1e18;
+    bool constant _isTestNet = true;
 
     bytes32 private referralCode;
 
@@ -265,29 +266,31 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                     exData._pathDecLong[0] = exData.underlying;
                     exData._pathDecLong[1] = exData.allowedTokens[i];
 
-                    //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
-                    IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        exData._pathDecLong, //address[] memory _path
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta, USD 1e30 mult
-                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
-                        true,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        0//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                    );
-
-                    /*IPositionManager(positionManagerAddr).decreasePositionAndSwap(
-                        exData._pathDecLong, //address[] memory _path
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta, USD 1e30 mult
-                        exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
-                        true,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
-                        0,//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
-                        referralCode//bytes32 _referralCode
-                    );*/
+                    if (_isTestNet == true) {
+                        //NOTE: THIS IS NOT ATOMIC, WILL NEED TO MANUALLY TRANSFER ANY RECIEVING STABLECOIN TO CREDIT PROVIDER AND MANUALLY CREDIT POOL BAL IN ANOTHER TX
+                        IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+                            exData._pathDecLong, //address[] memory _path
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta, USD 1e30 mult
+                            exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                            true,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                            0//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                        );
+                    } else {
+                        IPositionManager(positionManagerAddr).decreasePositionAndSwap(
+                            exData._pathDecLong, //address[] memory _path
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta, USD 1e30 mult
+                            exData.openPos[i],//uint256 _sizeDelta, USD 1e30 mult
+                            true,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, false), //uint256 _price, use current price of underlying, 5/1000 slippage? is this needed?, USD 1e30 mult
+                            0,//uint256(Convert.formatValue(exData.openPos[i], 18, 30)),//uint256 _minOut, TOKEN DECIMALS
+                            referralCode//bytes32 _referralCode
+                        );
+                    }
                 }
             }
             
@@ -303,26 +306,29 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                 if (exData.openPos[i] > 0) {
 
-                    IPositionManager(positionManagerAddr).decreasePosition(
-                        exData.allowedTokens[i],//address _collateralToken,
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta,
-                        exData.openPos[i],//uint256 _sizeDelta,
-                        false,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price,
-                    );
+                    if (_isTestNet) {
+                        IPositionManager(positionManagerAddr).decreasePosition(
+                            exData.allowedTokens[i],//address _collateralToken,
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta,
+                            exData.openPos[i],//uint256 _sizeDelta,
+                            false,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price,
+                        );
 
-                    /*IPositionManager(positionManagerAddr).decreasePosition(
-                        exData.allowedTokens[i],//address _collateralToken,
-                        exData.underlying,//address _indexToken,
-                        0,//uint256 _collateralDelta,
-                        exData.openPos[i],//uint256 _sizeDelta,
-                        false,//bool _isLong,
-                        address(creditProvider),//address _receiver,
-                        convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
-                        referralCode//bytes32 _referralCode
-                    );*/ 
+                    } else {
+                        IPositionManager(positionManagerAddr).decreasePosition(
+                            exData.allowedTokens[i],//address _collateralToken,
+                            exData.underlying,//address _indexToken,
+                            0,//uint256 _collateralDelta,
+                            exData.openPos[i],//uint256 _sizeDelta,
+                            false,//bool _isLong,
+                            address(creditProvider),//address _receiver,
+                            convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price,
+                            referralCode//bytes32 _referralCode
+                        );
+                    }
                 }
             }
 
@@ -376,29 +382,29 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                                 }
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
-                                                                
-                                IPositionManager(positionManagerAddr).increasePosition(
-                                    exData.at,//address[] memory _path,
-                                    exData.underlying,//address _indexToken,
-                                    v,//uint256 _amountIn, TOKEN DECIMALS
-                                    0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
-                                    false,// bool _isLong
-                                    convertPriceAndApplySlippage(exData.udlPrice, false)//uint256 _price USD 1e30 mult
-                                );
-                                
-                                /*
-                                IPositionManager(positionManagerAddr).increasePosition(
-                                    exData.at,//address[] memory _path,
-                                    exData.underlying,//address _indexToken,
-                                    v,//uint256 _amountIn, TOKEN DECIMALS
-                                    0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
-                                    false,// bool _isLong
-                                    convertPriceAndApplySlippage(exData.udlPrice, false),//uint256 _price, USD 1e30 mult
-                                    referralCode//bytes32 _referralCode
-                                );
-                                */
+
+                                if (_isTestNet) {                     
+                                    IPositionManager(positionManagerAddr).increasePosition(
+                                        exData.at,//address[] memory _path,
+                                        exData.underlying,//address _indexToken,
+                                        v,//uint256 _amountIn, TOKEN DECIMALS
+                                        0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                        convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                        false,// bool _isLong
+                                        convertPriceAndApplySlippage(exData.udlPrice, false)//uint256 _price USD 1e30 mult
+                                    );
+                                } else {
+                                    IPositionManager(positionManagerAddr).increasePosition(
+                                        exData.at,//address[] memory _path,
+                                        exData.underlying,//address _indexToken,
+                                        v,//uint256 _amountIn, TOKEN DECIMALS
+                                        0,//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                        convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                        false,// bool _isLong
+                                        convertPriceAndApplySlippage(exData.udlPrice, false),//uint256 _price, USD 1e30 mult
+                                        referralCode//bytes32 _referralCode
+                                    );
+                                }
 
                                 //back to exchange decimals
 
@@ -466,28 +472,29 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-                                IPositionManager(positionManagerAddr).increasePosition(
-                                    at_s,//address[] memory _path,
-                                    exData.underlying,//address _indexToken,
-                                    v,//uint256 _amountIn, TOKEN DECIMALS
-                                    0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
-                                    true,// bool _isLong
-                                    convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price, USD 1e30 mult
-                                );
 
-                                /*
-                                IPositionManager(positionManagerAddr).increasePosition(
-                                    at_s,//address[] memory _path,
-                                    exData.underlying,//address _indexToken,
-                                    v,//uint256 _amountIn, TOKEN DECIMALS
-                                    0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
-                                    convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
-                                    true,// bool _isLong
-                                    convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price, USD 1e30 mult
-                                    referralCode//bytes32 _referralCode
-                                );
-                                */
+                                if (_isTestNet) {  
+                                    IPositionManager(positionManagerAddr).increasePosition(
+                                        at_s,//address[] memory _path,
+                                        exData.underlying,//address _indexToken,
+                                        v,//uint256 _amountIn, TOKEN DECIMALS
+                                        0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                        convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                        true,// bool _isLong
+                                        convertPriceAndApplySlippage(exData.udlPrice, true)//uint256 _price, USD 1e30 mult
+                                    );
+                                } else {
+                                    IPositionManager(positionManagerAddr).increasePosition(
+                                        at_s,//address[] memory _path,
+                                        exData.underlying,//address _indexToken,
+                                        v,//uint256 _amountIn, TOKEN DECIMALS
+                                        0,//Convert.formatValue(v.div(exData.udlPrice).mul(exData.b).div(exData.r), 30, 18),//uint256 _minOut, //_minOut can be zero if no swap is required , TOKEN DECIMALS
+                                        convertNotitionalValue(v, exData.poolLeverage, exData.b, exData.r),//uint256 _sizeDelta, USD 1e30 mult
+                                        true,// bool _isLong
+                                        convertPriceAndApplySlippage(exData.udlPrice, true),//uint256 _price, USD 1e30 mult
+                                        referralCode//bytes32 _referralCode
+                                    );
+                                }
 
                                 //back to exchange decimals
                                 if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {

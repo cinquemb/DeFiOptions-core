@@ -85,16 +85,16 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
 
         if (op == Operation.BUY) {
             volume = coll <= price ? uint(-1) :
-                //calcFreeTradableBalance().mul(volumeBase).div(
-                calcFreeBalance().mul(volumeBase).div(
+                calcFreeTradableBalance().mul(volumeBase).div(
+                //calcFreeBalance().mul(volumeBase).div(
                     coll.sub(price.mul(r).div(fractionBase))
-                );//.add(poolPos);
+                ).add(poolPos);
 
                 //balance in pool / (collateral per 1 option - premium recived per option)
 
         } else {
 
-            uint bal = calcFreeBalance();//calcFreeTradableBalance();
+            uint bal = calcFreeTradableBalance();
 
             uint poolColl = exchange.collateral(address(this));
 
@@ -114,7 +114,7 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
             volume = price <= iv ? uint(-1) :
                 bal.sub(poolColl.mul(fractionBase).div(r)).mul(volumeBase).div(
                     price.sub(iv)
-                );//.add(poolPos);
+                ).add(poolPos);
 
             uint balMulDiv = bal.mul(volumeBase).div(price);
 
