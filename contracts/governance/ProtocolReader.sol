@@ -38,6 +38,12 @@ contract ProtocolReader is ManagedContract {
       uint[] poolSellPriceVolume;
     }
 
+    struct poolOptions {
+      string[] poolSymbols;
+      address[] poolAddrs;
+      string[] poolOptionsRaw;
+    }
+
     struct proposalData {
       address[] addr;
       address[] wrapperAddr;
@@ -95,6 +101,27 @@ contract ProtocolReader is ManagedContract {
       }
 
       return pd;
+    }
+
+    function listPoolOptions() external view returns (poolOptions memory) {
+      uint poolSymbolsMaxLen = exchange.totalPoolSymbols();
+
+      poolOptions memory po;
+      po.poolOptionsRaw = new string[](poolSymbolsMaxLen);
+      po.poolSymbols = new string[](poolSymbolsMaxLen);
+      po.poolAddrs = new address[](poolSymbolsMaxLen);
+
+
+      for(uint i=0; i< poolSymbolsMaxLen; i++) {
+        string memory pSym = exchange.poolSymbols(i);
+        po.poolSymbols[i] = pSym;
+        address poolAddr = exchange.getPoolAddress(pSym);
+        po.poolAddrs[i] = poolAddr;
+        po.poolOptionsRaw[i] = IGovernableLiquidityPool(poolAddr).listSymbols();
+
+      }
+
+      return po;
     }
 
     function listPoolsPrices(string calldata optionSymbol, address[] calldata poolAddressList) external view returns (poolPricesData memory){

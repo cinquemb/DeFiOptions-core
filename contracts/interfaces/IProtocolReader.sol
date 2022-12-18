@@ -25,6 +25,11 @@ interface IProtocolReader {
       bool[] isActive;
 
     }
+    struct poolOptions {
+      string[] poolSymbols;
+      address[] poolAddrs;
+      string[] poolOptionsRaw;
+    }
     struct poolPricesData {
       //address[] poolAddrs;
       uint[] poolBuyPrice;
@@ -34,5 +39,6 @@ interface IProtocolReader {
     }
     function listPoolsData(address account) external view returns (poolData memory);
     function listProposals() external view returns (proposalData memory);
+    function listPoolOptions() external view returns (poolOptions memory);
     function listPoolsPrices(string calldata optionSymbol, address[] calldata poolAddressList) external view returns (poolPricesData memory);
 }
