@@ -25,24 +25,36 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
         internal
         override
     {
-        address poolAddr = address(this);
-        require(IOptionToken(_tk).writtenVolume(poolAddr).add(volume) <= param.bsStockSpread[0].toUint120(), "2 high volume");
-        require(calcFreeTradableBalance() > 0, "pool bal low");
-        
-        IOptionsExchange.OpenExposureInputs memory oEi;
-        
-        oEi.symbols[0] = IOptionToken(_tk).symbol();
-        oEi.volume[0] = volume;
-        oEi.isShort[0] = true;
-        //oEi.isCovered[0] = false; //expoliting default to save gas
-        oEi.poolAddrs[0] = poolAddr;
-        //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
+        {
+            address poolAddr = address(this);
+            require(IOptionToken(_tk).writtenVolume(poolAddr).add(volume) <= param.bsStockSpread[0].toUint120(), "2 high vol");
+            
+            IOptionsExchange.OpenExposureInputs memory oEi;
 
-        exchange.openExposure(
-            oEi,
-            to
-        );
+            oEi.symbols = new string[](1);
+            oEi.volume = new uint[](1);
+            oEi.isShort = new bool[](1);
+            oEi.isCovered = new bool[](1);
+            oEi.poolAddrs = new address[](1);
+            oEi.paymentTokens = new address[](1);
+
+
+            oEi.symbols[0] = IOptionToken(_tk).symbol();
+            oEi.volume[0] = volume;
+            oEi.isShort[0] = true;
+            oEi.poolAddrs[0] = poolAddr;
+            //oEi.isCovered[0] = false; //expoliting default to save gas
+            //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
+
+
+            exchange.openExposure(
+                oEi,
+                to
+            );
+        }
         
+        require(calcFreeTradableBalance() > 0, "bal low");
+
     }
 
     function calcOptPrice(PricingParameters memory p, Operation op)

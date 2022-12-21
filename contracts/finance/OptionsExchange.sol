@@ -292,11 +292,15 @@ contract OptionsExchange is ERC20, ManagedContract {
                 //sell options
                 if (oEx.vol > 0) {
                     openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
-                    (_price,) = pool.queryBuy(oEx.symbol, false);
-
-                    IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
-                    //this will credit exchange addr that needs to be transfered to the s
-                    pool.sell(oEx.symbol, _price, oEx.vol);
+                    if (msg.sender == oEx.poolAddr){
+                        //if the pool is the one writing the option to a user, transfer from exchange to user
+                        IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
+                    } else {
+                        //this will credit exchange addr that needs to be transfered the seller
+                        (_price,) = pool.queryBuy(oEx.symbol, false);
+                        IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
+                        pool.sell(oEx.symbol, _price, oEx.vol);
+                    }
                     //if not covered option
                     if (oEx.isCovered == false) {
                         oEx._uncovered[i] = oEx.vol;
@@ -312,11 +316,17 @@ contract OptionsExchange is ERC20, ManagedContract {
                     oEx._holding[i] = oEx.vol;
                 }
             }
-            creditProvider.transferBalance(
-                address(this),
-                (oEi.isShort[i] == true) ? msg.sender : oEx.poolAddr, 
-                _price.mul(oEx.vol).div(_volumeBase)
-            );
+
+            if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
+                //this is handled by pool contract
+            } else {
+                creditProvider.transferBalance(
+                    address(this),
+                    (oEi.isShort[i] == true) ? msg.sender : oEx.poolAddr, 
+                    _price.mul(oEx.vol).div(_volumeBase)
+                );
+            }
+            
         }
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
         collateral[msg.sender] = collateral[msg.sender].add(
@@ -349,7 +359,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
-        //mint to exchange, then send pool
+        //mint to exchange, then send pool (or send to user)
         tk.issue(msg.sender, address(this), volume);
         if (isCovered == true) {
             //write covered

@@ -147,9 +147,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         emit AddSymbol(optSymbol);
     }
 
-    function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
+    /*function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
         return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
-    }
+    }*/
 
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
         ensureCaller();
@@ -290,7 +290,10 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
 
         if (volume > IOptionToken(_tk).balanceOf(address(this))) {
             // only credit the amount excess what is already available
-            creditProvider.borrowBuyLiquidity(address(this), value.sub(calcFreeBalance()), _tk);
+            uint freeBal = calcFreeBalance();
+            if (value > freeBal){
+                creditProvider.borrowBuyLiquidity(address(this), value.sub(freeBal), _tk);
+            }
             writeOptions(_tk, param, volume, msg.sender);
         } else {
             IOptionToken(_tk).transfer(msg.sender, volume);
