@@ -147,10 +147,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         emit AddSymbol(optSymbol);
     }
 
-    /*function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
-        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
-    }*/
-
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
         ensureCaller();
         ranges[optSymbol][uint(op)] = Range(start.toUint120(), end.toUint120());
@@ -190,14 +186,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         uint val = valueOf(msg.sender).mul(amount).div(bal);
         uint discountedValue = val.mul(fractionBase.sub(withdrawFee)).div(fractionBase);
         uint freeBal = calcFreeBalance();
-        
-        if (discountedValue > freeBal) {
-            //issue them credit tokens in excess of free balance
-            creditProvider.processEarlyLpWithdrawal(
-                msg.sender,
-                discountedValue.sub(freeBal)
-            );
-        }
 
         if (freeBal > 0) {
             (uint b0, int po) = getBalanceAndPayout();
@@ -258,7 +246,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         address _tk = exchange.resolveToken(optSymbol);
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
         uint optBalInv = (op == Operation.SELL) ? IOptionToken(_tk).writtenVolume(address(this)) : IOptionToken(_tk).balanceOf(address(this));
-        //uint optBalInv = poolOptBal(_tk, op, (op == Operation.SELL) ? true : false);
         volume = MoreMath.min(
             calcVolume(optSymbol, param, price, op, optBalInv),
             (op == Operation.SELL) ? (
@@ -346,10 +333,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         bal = exchange.balanceOf(address(this));
         pOut = exchange.calcExpectedPayout(address(this));
     }
-
-    /*function poolOptBal(address _tk, Operation op, bool invert) private view returns (uint) {
-        return (op == ((invert == false) ? Operation.SELL : Operation.BUY)) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
-    }*/
 
     function hedge(PricingParameters memory param) private {
         //trigger hedge, may need to factor in costs and charge it to msg.sender
