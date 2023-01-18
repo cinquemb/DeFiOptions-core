@@ -282,10 +282,12 @@ contract CollateralManager is BaseCollateralManager {
         int256 delta;
 
         uint256 one_year = 60 * 60 * 24 * 365;
+
+        uint256 volPeriod = settings.getVolatilityPeriod();
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(settings.getVolatilityPeriod()).div(price); //vol relative to price
+        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(100); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
@@ -294,20 +296,58 @@ contract CollateralManager is BaseCollateralManager {
             int256(((MoreMath.pow(sigma, 2)).mul(dt).div(2)))
         )).div(
             int256(sigma.mul(MoreMath.sqrt(dt)))
-        );
+        ).div(int256(_volumeBase));
 
         if (opt._type == IOptionsExchange.OptionType.PUT) {
             // -1 * norm_cdf(-d1) == put_delta
-            delta = MoreMath.cumulativeDistributionFunction(d1.mul(-1)).mul(-1);
+            delta = MoreMath.cdf(d1.mul(-1)).mul(-1);
         
         } else {
             // norm_cdf(d1) == call_delta
-            delta = MoreMath.cumulativeDistributionFunction(d1);
+            delta = MoreMath.cdf(d1);
         }
 
         require((-1e18 <= delta) && (delta <= 1e18), "delta out of range");
 
-        return delta.mul(100).mul(int256(volume)).div(int(_volumeBase));
+        return delta.mul(100).mul(int256(volume)).div(int(MoreMath.pow(_volumeBase, 2)));
+    }
+
+    function calcGamma(
+        IOptionsExchange.OptionData memory opt,
+        uint volume
+    ) public view returns (int256){
+        /* 
+            - rfr == 0% assumption
+            - (1 / (sigma * sqrt(T - t))) * (ln(S/k) + (((sigma**2) / 2) * ((T-t)))) == d1
+                - underlying price S
+                - strike price K
+        */
+
+
+        uint256 one_year = 60 * 60 * 24 * 365;
+        
+        uint256 volPeriod = settings.getVolatilityPeriod();
+        
+        // using exchange 90 day window
+        uint256 price = uint256(getUdlPrice(opt));
+        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(100); //vol
+        int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
+        uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
+        int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
+
+        int256 d1 = (ln_price_div_strike.add(
+            int256(((MoreMath.pow(sigma, 2)).mul(dt).div(2)))
+        )).div(
+            int256(sigma.mul(MoreMath.sqrt(dt)))
+        ).div(int256(_volumeBase));
+
+        int256 gamma = MoreMath.pdf(d1).div(
+            int256(price.mul(sigma.mul(MoreMath.sqrt(dt)))).div(int(_volumeBase))
+        );
+
+        //require((-1e18 <= gamma) && (gamma <= 1e18), "gamma out of range");
+
+        return gamma.mul(100).mul(int256(volume)).div(int(MoreMath.pow(_volumeBase, 2)));
     }
 
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {

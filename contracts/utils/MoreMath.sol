@@ -2,11 +2,44 @@ pragma solidity >=0.6.0;
 
 import "./SafeMath.sol";
 import "./SignedSafeMath.sol";
+import "./FixedPointMathLib.sol";
 
 library MoreMath {
 
     using SafeMath for uint;
     using SignedSafeMath for int;
+
+    using FixedPointMathLib for int256;
+    using FixedPointMathLib for uint256;
+
+    uint256 internal constant HALF_WAD = 0.5 ether;
+    uint256 internal constant PI = 3_141592653589793238;
+    int256 internal constant SQRT_2PI = 2_506628274631000502;
+    int256 internal constant SIGN = -1;
+    int256 internal constant SCALAR = 1e18;
+    int256 internal constant HALF_SCALAR = 1e9;
+    int256 internal constant SCALAR_SQRD = 1e36;
+    int256 internal constant HALF = 5e17;
+    int256 internal constant ONE = 1e18;
+    int256 internal constant TWO = 2e18;
+    int256 internal constant NEGATIVE_TWO = -2e18;
+    int256 internal constant SQRT2 = 1_414213562373095048; // √2 with 18 decimals of precision.
+    int256 internal constant ERFC_A = 1_265512230000000000;
+    int256 internal constant ERFC_B = 1_000023680000000000;
+    int256 internal constant ERFC_C = 374091960000000000; // 1e-1
+    int256 internal constant ERFC_D = 96784180000000000; // 1e-2
+    int256 internal constant ERFC_E = -186288060000000000; // 1e-1
+    int256 internal constant ERFC_F = 278868070000000000; // 1e-1
+    int256 internal constant ERFC_G = -1_135203980000000000;
+    int256 internal constant ERFC_H = 1_488515870000000000;
+    int256 internal constant ERFC_I = -822152230000000000; // 1e-1
+    int256 internal constant ERFC_J = 170872770000000000; // 1e-1
+    int256 internal constant IERFC_A = -707110000000000000; // 1e-1
+    int256 internal constant IERFC_B = 2_307530000000000000;
+    int256 internal constant IERFC_C = 270610000000000000; // 1e-1
+    int256 internal constant IERFC_D = 992290000000000000; // 1e-1
+    int256 internal constant IERFC_E = 44810000000000000; // 1e-2
+    int256 internal constant IERFC_F = 1_128379167095512570;
 
     //see: https://ethereum.stackexchange.com/questions/8086/logarithm-math-operation-in-solidity
 
@@ -17,6 +50,8 @@ library MoreMath {
     int256 internal constant HALF_SCALE = 5e17;
 
     int256 internal constant SCALE = 1e18;
+
+    int256 internal constant OLD_PI = 3_141592653589793238;
 
     /// @notice Finds the zero-based index of the first one in the binary representation of x.
     /// @dev See the note on msb in the "Find First Set" Wikipedia article https://en.wikipedia.org/wiki/Find_first_set
@@ -69,7 +104,7 @@ library MoreMath {
     ///
     /// @param x The signed 59.18-decimal fixed-point number for which to calculate the binary logarithm.
     /// @return result The binary logarithm as a signed 59.18-decimal fixed-point number.
-    function log2(int256 x) internal pure returns (int256 result) {
+    function old_log2(int256 x) internal pure returns (int256 result) {
         require(x > 0);
         // This works because log2(x) = -log2(1/x).
         int256 sign;
@@ -131,114 +166,142 @@ library MoreMath {
     function ln(int256 x) internal pure returns (int256 result) {
         // Do the fixed-point multiplication inline to save gas. This is overflow-safe because the maximum value that log2(x)
         // can return is 195205294292027477728.
-        result = (log2(x) * SCALE) / LOG2_E;
-    }
-
-
-    //see: https://ethereum.stackexchange.com/questions/8086/logarithm-math-operation-in-solidity
-
-    function cumulativeDistributionFunction(int256 x) internal pure returns (int256) {
-        /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */
-
-        // where p = 0.3275911,
-        // a1 = 0.254829592, a2 = −0.284496736, a3 = 1.421413741, a4 = −1.453152027, a5 = 1.061405429
-        // using 18 decimals
-        int256 p = 3275911e11;//0x53dd02a4f5ee2e46;
-        int256 one = 1e18;//ABDKMath64x64.fromUInt(1);
-        int256 two = 2e18;//ABDKMath64x64.fromUInt(2);
-        int256 a3 = 1421413741e9;//0x16a09e667f3bcc908;
-        int256 z = x.div(a3);
-        int256 t = one.div(one.add(p.mul(int256(abs(z)))));
-        int256 erf = getErrorFunction(z, t);
-        if (z < 0) {
-            erf = one.sub(erf);
-        }
-        int256 result = (one.div(two)).mul(one.add(erf));
-        return result;
-    }
-
-    function getErrorFunction(int256 z, int256 t) internal pure returns (int256) {
-        /* inspired by https://github.com/Alexangelj/option-elasticity/blob/8dc10b9555c2b7885423c05c4a49e5bcf53a172b/contracts/libraries/Pricing.sol */
-
-        // where a1 = 0.254829592, a2 = −0.284496736, a3 = 1.421413741, a4 = −1.453152027, a5 = 1.061405429
-        // using 18 decimals
-        int256 step1;
-        {
-            int256 a3 = 1421413741e9;//0x16a09e667f3bcc908;
-            int256 a4 = -1453152027e9;//-0x17401c57014c38f14;
-            int256 a5 = 1061405429e9;//0x10fb844255a12d72e;
-            step1 = t.mul(a3.add(t.mul(a4.add(t.mul(a5)))));
-        }
-
-        int256 result;
-        {
-            int256 one = 1e18;//ABDKMath64x64.fromUInt(1);
-            int256 a1 = 254829592e9;//0x413c831bb169f874;
-            int256 a2 = -284496736e9;//-0x48d4c730f051a5fe;
-            int256 step2 = a1.add(t.mul(a2.add(step1)));
-            result = one.sub(
-                t.mul(
-                    step2.mul(
-                        int256(optimalExp(pow(uint256(one.sub((z))), 2)))
-                    )
-                )
-            );
-        }
-        return result;
+        result = (old_log2(x) * SCALE) / LOG2_E;
     }
 
     /*
-      * @dev computes e ^ (x / FIXED_1) * FIXED_1
-      * input range: 0 <= x <= OPT_EXP_MAX_VAL - 1
-      * auto-generated via 'PrintFunctionOptimalExp.py'
-      * Detailed description:
-      * - Rewrite the input as a sum of binary exponents and a single residual r, as small as possible
-      * - The exponentiation of each binary exponent is given (pre-calculated)
-      * - The exponentiation of r is calculated via Taylor series for e^x, where x = r
-      * - The exponentiation of the input is calculated by multiplying the intermediate results above
-      * - For example: e^5.521692859 = e^(4 + 1 + 0.5 + 0.021692859) = e^4 * e^1 * e^0.5 * e^0.021692859
-      * - https://forum.openzeppelin.com/t/any-good-advanced-math-libraries-looking-for-square-root-ln-cumulative-distributions/2911
-    */
-    
-    function optimalExp(uint256 x) internal pure returns (uint256) {
-        uint256 FIXED_1 = 0x080000000000000000000000000000000;
-        uint256 res = 0;
+     * notice Approximation of the Complimentary Error Function.
+     * Related to the Error Function: `erfc(x) = 1 - erf(x)`.
+     * Both cumulative distribution and error functions are integrals
+     * which cannot be expressed in elementary terms. They are called special functions.
+     * The error and complimentary error functions have numerical approximations
+     * which is what is used in this library to compute the cumulative distribution function.
+     *
+     *  dev This is a special function with its own identities.
+     * Identity: `erfc(-x) = 2 - erfc(x)`.
+     * Special Values:
+     * erfc(-infinity)  =   2
+     * erfc(0)          =   1
+     * erfc(infinity)   =   0
+     *
+     * custom:epsilon Fractional error less than 1.2e-7.
+     * custom:source Numerical Recipes in C 2e p221.
+     * custom:source https://mathworld.wolfram.com/Erfc.html.
+     */
+    function erfc(int256 input) internal pure returns (int256 output) {
+        uint256 z = abs(input);
+        int256 t;
+        int256 step;
+        int256 k;
+        assembly {
+            let quo := sdiv(mul(z, ONE), TWO) // 1 / (1 + z / 2).
+            let den := add(ONE, quo)
+            t := sdiv(SCALAR_SQRD, den)
 
-        uint256 y;
-        uint256 z;
+            function muli(pxn, pxd) -> res {
+                res := sdiv(mul(pxn, pxd), ONE)
+            }
 
-        z = y = x % 0x10000000000000000000000000000000; // get the input modulo 2^(-3)
-        z = z * y / FIXED_1; res += z * 0x10e1b3be415a0000; // add y^02 * (20! / 02!)
-        z = z * y / FIXED_1; res += z * 0x05a0913f6b1e0000; // add y^03 * (20! / 03!)
-        z = z * y / FIXED_1; res += z * 0x0168244fdac78000; // add y^04 * (20! / 04!)
-        z = z * y / FIXED_1; res += z * 0x004807432bc18000; // add y^05 * (20! / 05!)
-        z = z * y / FIXED_1; res += z * 0x000c0135dca04000; // add y^06 * (20! / 06!)
-        z = z * y / FIXED_1; res += z * 0x0001b707b1cdc000; // add y^07 * (20! / 07!)
-        z = z * y / FIXED_1; res += z * 0x000036e0f639b800; // add y^08 * (20! / 08!)
-        z = z * y / FIXED_1; res += z * 0x00000618fee9f800; // add y^09 * (20! / 09!)
-        z = z * y / FIXED_1; res += z * 0x0000009c197dcc00; // add y^10 * (20! / 10!)
-        z = z * y / FIXED_1; res += z * 0x0000000e30dce400; // add y^11 * (20! / 11!)
-        z = z * y / FIXED_1; res += z * 0x000000012ebd1300; // add y^12 * (20! / 12!)
-        z = z * y / FIXED_1; res += z * 0x0000000017499f00; // add y^13 * (20! / 13!)
-        z = z * y / FIXED_1; res += z * 0x0000000001a9d480; // add y^14 * (20! / 14!)
-        z = z * y / FIXED_1; res += z * 0x00000000001c6380; // add y^15 * (20! / 15!)
-        z = z * y / FIXED_1; res += z * 0x000000000001c638; // add y^16 * (20! / 16!)
-        z = z * y / FIXED_1; res += z * 0x0000000000001ab8; // add y^17 * (20! / 17!)
-        z = z * y / FIXED_1; res += z * 0x000000000000017c; // add y^18 * (20! / 18!)
-        z = z * y / FIXED_1; res += z * 0x0000000000000014; // add y^19 * (20! / 19!)
-        z = z * y / FIXED_1; res += z * 0x0000000000000001; // add y^20 * (20! / 20!)
-        res = res / 0x21c3677c82b40000 + y + FIXED_1; // divide by 20! and then add y^1 / 1! + y^0 / 0!
+            {
+                step := add(
+                    ERFC_F,
+                    muli(
+                        t,
+                        add(
+                            ERFC_G,
+                            muli(
+                                t,
+                                add(
+                                    ERFC_H,
+                                    muli(t, add(ERFC_I, muli(t, ERFC_J)))
+                                )
+                            )
+                        )
+                    )
+                )
+            }
+            {
+                step := muli(
+                    t,
+                    add(
+                        ERFC_B,
+                        muli(
+                            t,
+                            add(
+                                ERFC_C,
+                                muli(
+                                    t,
+                                    add(
+                                        ERFC_D,
+                                        muli(t, add(ERFC_E, muli(t, step)))
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            }
 
-        if ((x & 0x010000000000000000000000000000000) != 0) res = res * 0x1c3d6a24ed82218787d624d3e5eba95f9 / 0x18ebef9eac820ae8682b9793ac6d1e776; // multiply by e^2^(-3)
-        if ((x & 0x020000000000000000000000000000000) != 0) res = res * 0x18ebef9eac820ae8682b9793ac6d1e778 / 0x1368b2fc6f9609fe7aceb46aa619baed4; // multiply by e^2^(-2)
-        if ((x & 0x040000000000000000000000000000000) != 0) res = res * 0x1368b2fc6f9609fe7aceb46aa619baed5 / 0x0bc5ab1b16779be3575bd8f0520a9f21f; // multiply by e^2^(-1)
-        if ((x & 0x080000000000000000000000000000000) != 0) res = res * 0x0bc5ab1b16779be3575bd8f0520a9f21e / 0x0454aaa8efe072e7f6ddbab84b40a55c9; // multiply by e^2^(+0)
-        if ((x & 0x100000000000000000000000000000000) != 0) res = res * 0x0454aaa8efe072e7f6ddbab84b40a55c5 / 0x00960aadc109e7a3bf4578099615711ea; // multiply by e^2^(+1)
-        if ((x & 0x200000000000000000000000000000000) != 0) res = res * 0x00960aadc109e7a3bf4578099615711d7 / 0x0002bf84208204f5977f9a8cf01fdce3d; // multiply by e^2^(+2)
-        if ((x & 0x400000000000000000000000000000000) != 0) res = res * 0x0002bf84208204f5977f9a8cf01fdc307 / 0x0000003c6ab775dd0b95b4cbee7e65d11; // multiply by e^2^(+3)
+            k := add(sub(mul(SIGN, muli(z, z)), ERFC_A), step)
+        }
 
-        return res;
+        int256 expWad = FixedPointMathLib.expWad(k);
+        int256 r;
+        assembly {
+            r := sdiv(mul(t, expWad), ONE)
+            switch iszero(slt(input, 0))
+            case 0 {
+                output := sub(TWO, r)
+            }
+            case 1 {
+                output := r
+            }
+        }
     }
+
+    /**
+     * notice Approximation of the Cumulative Distribution Function.
+     *
+     * dev Equal to `D(x) = 0.5[ 1 + erf((x - µ) / σ√2)]`.
+     * Only computes cdf of a distribution with µ = 0 and σ = 1.
+     *
+     * custom:error Maximum error of 1.2e-7.
+     * custom:source https://mathworld.wolfram.com/NormalDistribution.html.
+     */
+    function cdf(int256 x) internal pure returns (int256 z) {
+        int256 negated;
+        assembly {
+            let res := sdiv(mul(x, ONE), SQRT2)
+            negated := add(not(res), 1)
+        }
+
+        int256 _erfc = erfc(negated);
+        assembly {
+            z := sdiv(mul(ONE, _erfc), TWO)
+        }
+    }
+
+    /*
+     * notice Approximation of the Probability Density Function.
+     *
+     * dev Equal to `Z(x) = (1 / σ√2π)e^( (-(x - µ)^2) / 2σ^2 )`.
+     * Only computes pdf of a distribution with µ = 0 and σ = 1.
+     *
+     * custom:error Maximum error of 1.2e-7.
+     * custom:source https://mathworld.wolfram.com/ProbabilityDensityFunction.html.
+     */
+    function pdf(int256 x) internal pure returns (int256 z) {
+        int256 e;
+        assembly {
+            e := sdiv(mul(add(not(x), 1), x), TWO) // (-x * x) / 2.
+        }
+        e = FixedPointMathLib.expWad(e);
+
+        assembly {
+            z := sdiv(mul(e, ONE), SQRT_2PI)
+        }
+    }
+
 
     // rounds "v" considering a base "b"
     function round(uint v, uint b) internal pure returns (uint) {
