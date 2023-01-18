@@ -309,7 +309,7 @@ contract CollateralManager is BaseCollateralManager {
 
         require((-1e18 <= delta) && (delta <= 1e18), "delta out of range");
 
-        return delta.mul(100).mul(int256(volume)).div(int(MoreMath.pow(_volumeBase, 2)));
+        return delta.mul(int256(volume)).div(int256(_volumeBase));
     }
 
     function calcGamma(
@@ -347,7 +347,7 @@ contract CollateralManager is BaseCollateralManager {
 
         //require((-1e18 <= gamma) && (gamma <= 1e18), "gamma out of range");
 
-        return gamma.mul(100).mul(int256(volume)).div(int(MoreMath.pow(_volumeBase, 2)));
+        return gamma.mul(int256(volume)).div(int256(_volumeBase));
     }
 
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
