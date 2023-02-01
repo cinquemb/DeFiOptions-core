@@ -123,7 +123,7 @@ contract CollateralManager is BaseCollateralManager {
                             exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
                             _uncovered[i],
                             cData.options[i]
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i]).div(1e10)
                     )
                 );
             }
@@ -146,7 +146,6 @@ contract CollateralManager is BaseCollateralManager {
         cData.posDeltaNum = new uint[](_tokens.length);
         cData.posDeltaDenom = new uint[](_tokens.length);
         cData.hmngr = (settings.checkPoolSellCreditTradable(owner)) ? IGovernableLiquidityPool(owner).getHedgingManager() : address(0); //HACK: checks if owner is a pool that can sell options with borrowed liquidity
-
         
         //for each underlying calculate the delta of their sub portfolio
         for (uint i = 0; i < _underlying.length; i++) {
@@ -194,7 +193,6 @@ contract CollateralManager is BaseCollateralManager {
                         cData.totalAbsDelta = cData.totalAbsDelta.add(absDelta);
                     }
                 }
-
                 cData.underlyings[i] = cData.udlAddr;
                 cData.posDeltaNum[i] = MoreMath.abs(cData.totalDelta.sub(cData.hedgedDelta));
                 cData.posDeltaDenom[i] = cData.totalAbsDelta;
@@ -228,7 +226,7 @@ contract CollateralManager is BaseCollateralManager {
                             exchange.getExchangeFeeds(opt.udlFeed).upperVol,
                             _uncovered[i],
                             opt
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i]).div(1e10)
                     )
                 );
             }
@@ -287,9 +285,15 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e9).div(10); //vol
+        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e10); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
+
+        //giv expired options no delta
+        if (uint256(opt.maturity) < settings.exchangeTime()){
+            return 0;
+        }
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
+
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
         int256 d1n = int256((MoreMath.pow(sigma, 2)).mul(dt).div(2e18));
@@ -333,7 +337,7 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e9).div(10); //vol
+        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e10); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
