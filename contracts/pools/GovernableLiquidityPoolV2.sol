@@ -242,10 +242,10 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         Operation op = (isBuy == true) ? Operation.BUY : Operation.SELL;
 
         PricingParameters memory param = parameters[optSymbol];
-        price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
         uint optBalInv = (op == Operation.SELL) ? IOptionToken(_tk).writtenVolume(address(this)) : IOptionToken(_tk).balanceOf(address(this));
+        price = calcOptPrice(param, op, IOptionToken(_tk).balanceOf(address(this)), IOptionToken(_tk).writtenVolume(address(this)));
         volume = MoreMath.min(
             calcVolume(optSymbol, param, price, op, optBalInv),
             (op == Operation.SELL) ? (
@@ -262,7 +262,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         returns (address _tk)
     {
         PricingParameters memory param;
-        (price, param)  = validateOrder(volume, price, optSymbol, Operation.BUY);
+        _tk = exchange.resolveToken(optSymbol);
+
+        (price, param)  = validateOrder(volume, price, optSymbol, Operation.BUY, _tk);
 
         uint value = price.mul(volume).div(volumeBase);
         if (token != address(exchange)) {
@@ -273,7 +275,6 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
             exchange.transferBalance(msg.sender, address(this), value);
         }
 
-        _tk = exchange.resolveToken(optSymbol);
 
         if (volume > IOptionToken(_tk).balanceOf(address(this))) {
             // only credit the amount excess what is already available
@@ -300,9 +301,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         public
     {
         PricingParameters memory param;
-        (price, param) = validateOrder(volume, price, optSymbol, Operation.SELL);
-
         address _tk = exchange.resolveToken(optSymbol);
+        (price, param) = validateOrder(volume, price, optSymbol, Operation.SELL, _tk);
+
         IOptionToken(_tk).transferFrom(msg.sender, address(this), volume);
         
         uint _written = IOptionToken(_tk).writtenVolume(address(this));
@@ -364,7 +365,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         uint volume,
         uint price, 
         string memory optSymbol, 
-        Operation op
+        Operation op,
+        address _tk
     ) 
         private
         view
@@ -372,7 +374,12 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     {
         param = parameters[optSymbol];
         require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad rng or vol");
-        p = calcOptPrice(param, op);
+        p = calcOptPrice(
+            param,
+            op,
+            IOptionToken(_tk).balanceOf(address(this)),
+            IOptionToken(_tk).writtenVolume(address(this))
+        );
         require(
             op == Operation.BUY ? price >= p : price <= p,
             "bad price"
@@ -394,7 +401,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         virtual
         internal;
 
-    function calcOptPrice(PricingParameters memory p, Operation op)
+    function calcOptPrice(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell)
         virtual
         internal
         view

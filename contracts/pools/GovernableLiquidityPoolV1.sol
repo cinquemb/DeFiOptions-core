@@ -211,10 +211,10 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
 
     function queryHelper(string memory optSymbol, Operation op) private view returns (uint price, uint volume) {
         PricingParameters memory param = parameters[optSymbol];
-        price = calcOptPrice(param, op);
         address _tk = exchange.resolveToken(optSymbol);
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
         uint optBalInv = (op == Operation.BUY) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
+        price = calcOptPrice(param, op, IOptionToken(_tk).balanceOf(address(this)), IOptionToken(_tk).writtenVolume(address(this)));
 
         volume = MoreMath.min(
             calcVolume(optSymbol, param, price, op, optBalInv),
@@ -230,9 +230,9 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         PricingParameters memory param = parameters[optSymbol];
         require(volume > 0 && isInRange(optSymbol, Operation.BUY, param.udlFeed), "out of range or invalid volume");
 
-        (uint price, uint value) = receivePayment(param, price, volume, token);
 
         _tk = exchange.resolveToken(optSymbol);
+        (uint price, uint value) = receivePayment(param, price, volume, token, _tk);
 
         if (volume > IOptionToken(_tk).balanceOf(address(this))) {
             writeOptions(_tk, param, volume, msg.sender);
@@ -253,10 +253,9 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
     {
         PricingParameters memory param = parameters[optSymbol];        
         require(volume > 0 && isInRange(optSymbol, Operation.SELL, param.udlFeed), "out of range or invalid volume");
-
-        price = validatePrice(price, param, Operation.SELL);
-
         address _tk = exchange.resolveToken(optSymbol);
+        price = validatePrice(price, param, Operation.SELL, _tk);
+
         IOptionToken tk = IOptionToken(_tk);
         tk.transferFrom(msg.sender, address(this), volume);
         
@@ -301,12 +300,13 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         PricingParameters memory param,
         uint price,
         uint volume,
-        address token
+        address token,
+        address option
     )
         private
         returns (uint, uint)
     {
-        price = validatePrice(price, param, Operation.BUY);
+        price = validatePrice(price, param, Operation.BUY, option);
         uint value = price.mul(volume).div(volumeBase);
 
         if (token != address(exchange)) {
@@ -323,13 +323,19 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
     function validatePrice(
         uint price, 
         PricingParameters memory param, 
-        Operation op
+        Operation op,
+        address _tk
     ) 
         private
         view
         returns (uint p) 
     {
-        p = calcOptPrice(param, op);
+        p = calcOptPrice(
+            param,
+            op,
+            IOptionToken(_tk).balanceOf(address(this)), 
+            IOptionToken(_tk).writtenVolume(address(this))
+        );
         require(
             op == Operation.BUY ? price >= p : price <= p,
             "insufficient price"
@@ -351,7 +357,7 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         virtual
         internal;
 
-    function calcOptPrice(PricingParameters memory p, Operation op)
+    function calcOptPrice(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell)
         virtual
         internal
         view

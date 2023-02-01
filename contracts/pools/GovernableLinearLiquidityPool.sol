@@ -57,20 +57,40 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
 
     }
 
-    function calcOptPrice(PricingParameters memory p, Operation op)
+    /*
+        TODO: 
+            - FACTOR IN IF USER WANTS TO FILL THE TOTAL VOLUME THAT IT WILL MEAN THAT IT WILL BE THE MID MARKET PRICE?
+    */
+
+    function calcOptPrice(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell)
         internal
         override
         view
         returns (uint price)
     {
+        uint skew = calcSkewSpread(p, op, poolPosBuy, poolPosSell);
+        uint spread = (op == Operation.BUY) ? p.bsStockSpread[2].add(fractionBase).sub(skew) : fractionBase.sub(p.bsStockSpread[2]).add(skew);
         price = interpolator.interpolate(
             getUdlPrice(p.udlFeed),
             p.t0,
             p.t1,
             p.x,
             p.y,
-            (op == Operation.BUY) ? p.bsStockSpread[2].add(fractionBase) : fractionBase.sub(p.bsStockSpread[2])
+            spread
         );
+    }
+
+    function calcSkewSpread(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell) private pure returns (uint) {
+        uint skewBuy = poolPosBuy.mul(p.bsStockSpread[2]).div(p.bsStockSpread[0]); //buy expo / max buy expo * spread
+        uint skewSell = poolPosSell.mul(p.bsStockSpread[2]).div(p.bsStockSpread[1]); //sell expo / max sell expo * spread
+
+        uint skew =  (op == Operation.BUY) ? (
+            (skewBuy > skewSell) ? 0 : skewSell //when pricing when someone wants to buy, if buy volume greater than sell volume, no discount, else discount back to mid
+        ) : (
+            (skewBuy > skewSell) ? skewBuy : 0 //when pricing when someone wants to sell, if buy volume greater than sell volume, discount back to mid, else no discount
+        );
+
+        return skew;
     }
 
     function calcVolume(

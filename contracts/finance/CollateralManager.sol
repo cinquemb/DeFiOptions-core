@@ -347,8 +347,8 @@ contract CollateralManager is BaseCollateralManager {
             d1d
         );
 
-        int256 gamma = MoreMath.pdf(d1).div(
-            int256(price.mul(sigma.mul(MoreMath.sqrt(dt)))).div(int(_volumeBase))
+        int256 gamma = MoreMath.pdf(d1).mul(int256(_volumeBase)).div(
+            int256(price.mul(uint256(d1d)).div(_volumeBase))
         );
 
         //require((-1e18 <= gamma) && (gamma <= 1e18), "gamma out of range");
