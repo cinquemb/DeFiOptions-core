@@ -337,7 +337,7 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e10); //vol
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).div(price).div(1e10); //vol norm price
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
