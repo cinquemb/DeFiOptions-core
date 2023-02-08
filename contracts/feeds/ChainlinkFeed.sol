@@ -109,7 +109,7 @@ contract ChainlinkFeed is UnderlyingFeed {
 
             require(
                 samples[0].timestamp <= position && samples[len - 1].timestamp >= position,
-                string(abi.encodePacked("invalid position: ", MoreMath.toString(position)))
+                string(abi.encodePacked("invalid position (prefetch needed) : ", MoreMath.toString(position)))
             );
 
             uint start = 0;
