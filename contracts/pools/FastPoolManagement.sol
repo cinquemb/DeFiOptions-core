@@ -41,6 +41,7 @@ contract FastPoolManagement {
 	        expiresAt
         );
 
+        //TODO: DOES NOT WORK IF TOKENS HAVE NOT BEEN TRANSFERED TO THIS CONTRACT, MAY NEED TO HAVE A WAY TO DELEGATE FOR POOL VOTES?
         if (isExecuteVote) {
         	//vote on proposal
 	        IProposalWrapper(proposalWrapperAddr).castVote(true);

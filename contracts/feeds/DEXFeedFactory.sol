@@ -5,7 +5,7 @@ import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../feeds/DEXOracleV1.sol";
 import "../feeds/DEXAggregatorV1.sol";
-import "../feeds/ChainlinkFeed.sol";
+import "../feeds/DEXFeed.sol";
 import "../interfaces/IERC20Details.sol";
 
 contract DEXFeedFactory is ManagedContract {
@@ -31,7 +31,7 @@ contract DEXFeedFactory is ManagedContract {
         uint[] memory times;
         int[] memory prices;
         address feedAddr = address(
-            new ChainlinkFeed(
+            new DEXFeed(
                 feedName,
                 underlying,
                 aggAddr,
