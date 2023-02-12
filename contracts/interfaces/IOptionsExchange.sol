@@ -38,6 +38,7 @@ interface IOptionsExchange {
     function volumeBase() external view returns (uint);
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
+    function createPool(string calldata nameSuffix, string calldata symbolSuffix) external returns (address pool);
     function resolveToken(string calldata symbol) external view returns (address);
     function getExchangeFeeds(address udlFeed) external view returns (FeedData memory);
     function getFeedData(address udlFeed) external view returns (FeedData memory fd);
