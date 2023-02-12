@@ -28,5 +28,6 @@ interface IProtocolSettings {
     function getMinShareForProposal() external view returns (uint v, uint b);
     function isAllowedHedgingManager(address hedgeMngr) external view returns (bool);
     function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool);
+    function transferTokenBalance(address to, address tokenAddr, uint256 value) external;
     function exchangeTime() external view returns (uint256);
 }

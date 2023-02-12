@@ -9,12 +9,14 @@ import "../interfaces/IGovToken.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
+import "../utils/SafeERC20.sol";
 import "./ProposalsManager.sol";
 import "./ProposalWrapper.sol";
 
 contract ProtocolSettings is ManagedContract {
 
     using SafeMath for uint;
+    using SafeERC20 for IERC20_2;
 
     struct Rate {
         uint value;
@@ -365,6 +367,13 @@ contract ProtocolSettings is ManagedContract {
             path = new address[](2);
             path[0] = from;
             path[1] = to;
+        }
+    }
+
+    function transferTokenBalance(address to, address tokenAddr, uint256 value) external {
+        ensureWritePrivilege(true);
+        if (value > 0) {
+            IERC20_2(tokenAddr).safeTransfer(to, value);
         }
     }
 

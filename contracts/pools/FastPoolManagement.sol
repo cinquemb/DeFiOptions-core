@@ -85,6 +85,10 @@ contract FastPoolManagement {
 		FPMLimitOrder memory fpmOrder
 	) public returns (address) {
 		/*
+			NOTE: MAY NOT WORK BECAUSE IT MAY USE TOO MUCH GAS
+				- POOL CREATION == HIGH GAS
+				- OPTION SYMBOL REGISTRATION == HIGH GAS
+				- PROPOSAL == HIGH GAS?
 			PROCESS:
 				- create pool (if pool does not exist for user)
 					- how to name params? default to addrs used for interaction?
