@@ -15,7 +15,7 @@ contract FastPoolManagement {
 		IProposalManager.VoteType voteType,
 		uint expiresAt,
 		bool isExecuteVote
-	) public {
+	) public returns (address) {
 		address pmpAddr;
 		bytes memory _pmpBytes = _code;
 		//deploy proposal manager
@@ -49,6 +49,8 @@ contract FastPoolManagement {
 	        //close proposal
 	        IProposalWrapper(proposalWrapperAddr).close();
         }
+
+        return proposalWrapperAddr;
      }
 
      function bulkRegisterSymbols(
