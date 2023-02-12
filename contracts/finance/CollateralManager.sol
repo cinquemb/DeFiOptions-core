@@ -263,7 +263,7 @@ contract CollateralManager is BaseCollateralManager {
             coll = MoreMath.min(coll, max);
         }
 
-        return coll > 0 ? uint(coll) : 0;
+        return coll.div(1e10) > 0 ? uint(coll.div(1e10)) : 0;
     }
 
     function calcDelta(
