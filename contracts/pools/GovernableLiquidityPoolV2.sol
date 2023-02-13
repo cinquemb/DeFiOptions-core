@@ -13,6 +13,8 @@ import "../interfaces/IProposalWrapper.sol";
 import "../interfaces/IProposalManager.sol";
 import "../interfaces/IInterpolator.sol";
 import "../interfaces/IBaseHedgingManager.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
+
 import "../finance/RedeemableToken.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
@@ -66,6 +68,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         tracker = IYieldTracker(Deployer(_deployAddr).getContractAddress("YieldTracker"));
         interpolator = IInterpolator(Deployer(_deployAddr).getContractAddress("Interpolator"));
         proposalManager = IProposalManager(Deployer(_deployAddr).getContractAddress("ProposalsManager"));
+
+        uint256 nftId = ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings));
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(nftId);
     }
 
     function setParameters(

@@ -7,6 +7,7 @@ import "../interfaces/TimeProvider.sol";
 import "../interfaces/IProposal.sol";
 import "../interfaces/IGovToken.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IERC721.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
@@ -367,6 +368,13 @@ contract ProtocolSettings is ManagedContract {
             path = new address[](2);
             path[0] = from;
             path[1] = to;
+        }
+    }
+
+    function transferNFT(address to, address tokenAddr, uint256 tokenId) external {
+        ensureWritePrivilege(true);
+        if (tokenId > 0) {
+            IERC721(tokenAddr).transferFrom(address(this), to, tokenId);
         }
     }
 

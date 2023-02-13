@@ -7,6 +7,8 @@ import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IBaseHedgingManager.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
+
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeCast.sol";
@@ -27,6 +29,9 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+
+        uint256 nftId = ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings));
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(nftId);
     }
 
     function getPosSize(address underlying, bool isLong) virtual override public view returns (uint[] memory);

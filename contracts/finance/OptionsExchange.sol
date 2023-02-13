@@ -14,6 +14,7 @@ import "../interfaces/IOptionToken.sol";
 import "../interfaces/ILinearLiquidityPoolFactory.sol";
 import "../interfaces/IDEXFeedFactory.sol";
 import "../interfaces/IOptionTokenFactory.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
 
 import "../utils/Arrays.sol";
 import "../utils/Convert.sol";
@@ -80,6 +81,9 @@ contract OptionsExchange is ERC20, ManagedContract {
         poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
+        
+        uint256 nftId = ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings));
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(nftId);
 
         _volumeBase = 1e18;
     }
