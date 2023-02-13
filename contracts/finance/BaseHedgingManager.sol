@@ -30,8 +30,9 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
 
-        uint256 nftId = ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings));
-        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(nftId);
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(
+            ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
+        );
     }
 
     function getPosSize(address underlying, bool isLong) virtual override public view returns (uint[] memory);

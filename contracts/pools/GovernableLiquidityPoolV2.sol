@@ -69,8 +69,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         interpolator = IInterpolator(Deployer(_deployAddr).getContractAddress("Interpolator"));
         proposalManager = IProposalManager(Deployer(_deployAddr).getContractAddress("ProposalsManager"));
 
-        uint256 nftId = ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings));
-        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(nftId);
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(
+            ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
+        );
     }
 
     function setParameters(

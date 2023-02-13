@@ -8,6 +8,7 @@ import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IOptionsExchange.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
 import "../feeds/DEXAggregatorV1.sol";
 
 
@@ -25,6 +26,10 @@ contract Incentivized is ManagedContract {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(
+            ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
+        );
     }
 
     function incrementRoundDexAgg(address dexAggAddr) external {
