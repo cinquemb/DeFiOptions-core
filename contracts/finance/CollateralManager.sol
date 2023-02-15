@@ -123,7 +123,21 @@ contract CollateralManager is BaseCollateralManager {
                             exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
                             _uncovered[i],
                             cData.options[i]
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i]).div(1e10)
+                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                    )
+                );
+            } else if ((_uncovered[i] > _holding[i])) {
+                cData.coll = cData.coll.add(
+                    cData._iv[i].mul(
+                        int(_uncovered[i]).sub(int(_holding[i]))
+                    )
+                ).add(
+                    int(
+                        calcCollateral(
+                            exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
+                            _uncovered[i],
+                            cData.options[i]
+                        )
                     )
                 );
             }
@@ -226,7 +240,21 @@ contract CollateralManager is BaseCollateralManager {
                             exchange.getExchangeFeeds(opt.udlFeed).upperVol,
                             _uncovered[i],
                             opt
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i]).div(1e10)
+                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                    )
+                );
+            } else if ((_uncovered[i] > _holding[i])) {
+                cData.coll = cData.coll.add(
+                    _iv[i].mul(
+                        int(_uncovered[i]).sub(int(_holding[i]))
+                    )
+                ).add(
+                    int(
+                        calcCollateral(
+                            exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                            _uncovered[i],
+                            opt
+                        )
                     )
                 );
             }
@@ -263,7 +291,7 @@ contract CollateralManager is BaseCollateralManager {
             coll = MoreMath.min(coll, max);
         }
 
-        return coll.div(1e10) > 0 ? uint(coll.div(1e10)) : 0;
+        return coll > 0 ? uint(coll) : 0;
     }
 
     function calcDelta(
@@ -285,7 +313,7 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = MoreMath.sqrt(UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(volPeriod)).div(1e10); //vol
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).div(price).mul(10); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
 
         //giv expired options no delta
@@ -301,7 +329,7 @@ contract CollateralManager is BaseCollateralManager {
 
         int256 d1 = (ln_price_div_strike.add(
             d1n
-        )).mul(int256(_volumeBase)).div(
+        )).div(
             d1d
         );
 
@@ -337,7 +365,7 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).div(price).div(1e10); //vol norm price
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).div(price).mul(10); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
@@ -347,7 +375,7 @@ contract CollateralManager is BaseCollateralManager {
 
         int256 d1 = (ln_price_div_strike.add(
             d1n
-        )).mul(int256(_volumeBase)).div(
+        )).div(
             d1d
         );
 
