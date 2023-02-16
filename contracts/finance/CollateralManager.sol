@@ -313,7 +313,7 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).div(price).mul(10); //vol
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).mul(10).div(price); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
 
         //giv expired options no delta
@@ -324,12 +324,12 @@ contract CollateralManager is BaseCollateralManager {
 
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
-        int256 d1n = int256((MoreMath.pow(sigma, 2)).mul(dt).div(2e18));
-        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)));
+        int256 d1n = int256((MoreMath.pow(sigma, 2).div(_volumeBase)).mul(dt).div(2).div(_volumeBase));
+        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)).mul(1e9).div(_volumeBase));//div(_sqrtBase)
 
         int256 d1 = (ln_price_div_strike.add(
             d1n
-        )).div(
+        )).mul(int256(_volumeBase)).div(
             d1d
         );
 
@@ -365,17 +365,23 @@ contract CollateralManager is BaseCollateralManager {
         
         // using exchange 90 day window
         uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).div(price).mul(10); //vol
+        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).mul(10).div(price); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
+
+        //giv expired options no delta
+        if (uint256(opt.maturity) < settings.exchangeTime()){
+            return 0;
+        }
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
+
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
-        int256 d1n = int256((MoreMath.pow(sigma, 2)).mul(dt).div(2e18));
-        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)));
+        int256 d1n = int256((MoreMath.pow(sigma, 2).div(_volumeBase)).mul(dt).div(2).div(_volumeBase));
+        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)).mul(1e9).div(_volumeBase));//div(_sqrtBase)
 
         int256 d1 = (ln_price_div_strike.add(
             d1n
-        )).div(
+        )).mul(int256(_volumeBase)).div(
             d1d
         );
 
