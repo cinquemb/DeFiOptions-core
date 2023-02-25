@@ -321,6 +321,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
                 //this is handled by pool contract
             } else {
+                //TODO: if msg.sender is pending order router, need to credit proper addr
                 creditProvider.transferBalance(
                     address(this),
                     (oEi.isShort[i] == true) ? msg.sender : oEx.poolAddr, 
@@ -329,6 +330,8 @@ contract OptionsExchange is ERC20, ManagedContract {
             }
             
         }
+
+        //TODO: if msg.sender is pending order router, need to check collateral from proper addr
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
         collateral[msg.sender] = collateral[msg.sender].add(
             collateralManager.calcNetCollateral(oEx._tokens, oEx._uncovered, oEx._holding, true)
@@ -353,13 +356,11 @@ contract OptionsExchange is ERC20, ManagedContract {
     ) private {
         address _tk = tokenAddress[symbol];
         IOptionToken tk = IOptionToken(_tk);
-        if (tk.writtenVolume(msg.sender) == 0 && tk.balanceOf(msg.sender) == 0) {
-            book[msg.sender].push(_tk);
-        }
-
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
+
+        //TODO: if msg.sender is pending order router, need to mint from proper addr
         //mint to exchange, then send pool (or send to user)
         tk.issue(msg.sender, address(this), volume);
         if (isCovered == true) {
@@ -372,6 +373,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)
             );
+            //TODO: if msg.sender is pending order router, need to lock proper addr
             vault.lock(msg.sender, _tk, volume);
         }
         emit WriteOptions(_tk, msg.sender, to, volume);

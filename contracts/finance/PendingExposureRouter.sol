@@ -72,8 +72,14 @@ contract PendingExposureRouter is ManagedContract {
         IOptionsExchange.OpenExposureInputs memory oEi,
         uint256 cancelAfter
     ) external {
-        //SAVE ORDER
-        //CHECK PROPER BALANCES OF ANY COLLATERAL SENT
+        /*
+            TODO:
+                - SAVE ORDER only if proper collateral has been sent
+                    - bal before/bal after
+
+        */
+
+
     };
 
     function getApprovals(address account, string[] memory symbols) private returns (uint, uint) {
