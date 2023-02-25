@@ -256,6 +256,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         ));
     }
 
+    //TODO: NEED TO ADD ARG FOR IF COMING FROM ROUTER
     function openExposure(
         IOptionsExchange.OpenExposureInputs memory oEi,
         address to

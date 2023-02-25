@@ -265,6 +265,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         _tk = exchange.resolveToken(optSymbol);
 
         (price, param)  = validateOrder(volume, price, optSymbol, Operation.BUY, _tk);
+        checkApproved(param.udlFeed);
 
         uint value = price.mul(volume).div(volumeBase);
         if (token != address(exchange)) {
@@ -303,6 +304,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         PricingParameters memory param;
         address _tk = exchange.resolveToken(optSymbol);
         (price, param) = validateOrder(volume, price, optSymbol, Operation.SELL, _tk);
+        checkApproved(param.udlFeed);
 
         IOptionToken(_tk).transferFrom(msg.sender, address(this), volume);
         
@@ -431,5 +433,12 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
 
     function ensureCaller() private view {
         require(proposalManager.isRegisteredProposal(msg.sender) && IProposalWrapper(proposalManager.resolve(msg.sender)).isPoolSettingsAllowed(), "ONG");
+    }
+
+    function checkApproved(address udlFeed) private view {
+        address ppk = UnderlyingFeed(udlFeed).getPrivledgedPublisherKeeper();
+        if (ppk != address(0)) {
+            require(ppk == tx.origin, "not approved");
+        }
     }
 }

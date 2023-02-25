@@ -29,6 +29,7 @@ contract ChainlinkFeed is UnderlyingFeed {
 
     string private _symbol;
     address private udlAddr;
+    address private privledgedPublisherKeeper;
     Sample[] private samples;
     uint private offset;
     int private priceN;
@@ -37,6 +38,7 @@ contract ChainlinkFeed is UnderlyingFeed {
     constructor(
         string memory _sb,
         address _udlAddr,
+        address _ppK,
         address _aggregator,
         address _time,
         uint _offset,
@@ -51,6 +53,7 @@ contract ChainlinkFeed is UnderlyingFeed {
         time = TimeProvider(_time);
         offset = _offset;
         initialize(_timestamps, _prices);
+        privledgedPublisherKeeper = _ppK;
     }
 
     function initialize(uint[] memory _timestamps, int[] memory _prices) public {
@@ -69,6 +72,10 @@ contract ChainlinkFeed is UnderlyingFeed {
     function getUnderlyingAddr() override external view returns (address) {
 
         return udlAddr;
+    }
+
+    function getPrivledgedPublisherKeeper() override external view returns (address) {
+        return privledgedPublisherKeeper;
     }
 
     function getUnderlyingAggAddr() override external view returns (address) {
