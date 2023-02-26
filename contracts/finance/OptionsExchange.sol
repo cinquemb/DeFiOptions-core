@@ -36,6 +36,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     ICreditProvider private creditProvider;
     IDEXFeedFactory private dexFeedFactory;
     IBaseCollateralManager private collateralManager;
+    address private pendingExposureRouterAddr;
 
     IOptionTokenFactory private optionTokenFactory;
     ILinearLiquidityPoolFactory private poolFactory;
@@ -80,6 +81,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
+        pendingExposureRouterAddr = deployer.getContractAddress("PendingExposureRouter");
 
         _volumeBase = 1e18;
     }
@@ -256,7 +258,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         ));
     }
 
-    //TODO: NEED TO ADD ARG FOR IF COMING FROM ROUTER
     function openExposure(
         IOptionsExchange.OpenExposureInputs memory oEi,
         address to
@@ -283,6 +284,13 @@ contract OptionsExchange is ERC20, ManagedContract {
         oEx._uncovered = new uint[](oEi.symbols.length);
         oEx._holding = new uint[](oEi.symbols.length);
 
+        address recipient = msg.sender;
+
+        //if msg.sender is pending order router, need to set proper recipient of positions
+        if(pendingExposureRouterAddr == msg.sender) {
+            recipient = to;
+        }
+
         for (uint i=0; i< oEi.symbols.length; i++) {
             oEx = getOpenExposureInternalArgs(i, oEx, oEi);
             require(tokenAddress[oEx.symbol] != address(0), "symbol not available");
@@ -292,7 +300,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             if (oEi.isShort[i] == true) {
                 //sell options
                 if (oEx.vol > 0) {
-                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to);
+                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to, recipient);
                     if (msg.sender == oEx.poolAddr){
                         //if the pool is the one writing the option to a user, transfer from exchange to user
                         IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
@@ -311,7 +319,6 @@ contract OptionsExchange is ERC20, ManagedContract {
                 // buy options
                 if (oEx.vol > 0) {
                     (_price,) = pool.queryBuy(oEx.symbol, true);
-                    //TODO: MANY NEED TO TRANSFER oEi.paymentTokens[i] to address(this)
                     pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
                     
                     oEx._holding[i] = oEx.vol;
@@ -321,22 +328,20 @@ contract OptionsExchange is ERC20, ManagedContract {
             if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
                 //this is handled by pool contract
             } else {
-                //TODO: if msg.sender is pending order router, need to credit proper addr
                 creditProvider.transferBalance(
                     address(this),
-                    (oEi.isShort[i] == true) ? msg.sender : oEx.poolAddr, 
+                    (oEi.isShort[i] == true) ? recipient : oEx.poolAddr, 
                     _price.mul(oEx.vol).div(_volumeBase)
                 );
             }
             
         }
 
-        //TODO: if msg.sender is pending order router, need to check collateral from proper addr
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
-        collateral[msg.sender] = collateral[msg.sender].add(
+        collateral[recipient] = collateral[recipient].add(
             collateralManager.calcNetCollateral(oEx._tokens, oEx._uncovered, oEx._holding, true)
         );
-        ensureFunds(msg.sender);
+        ensureFunds(recipient);
     }
 
     function getOpenExposureInternalArgs(uint index, IOptionsExchange.OpenExposureVars memory oEx, IOptionsExchange.OpenExposureInputs memory oEi) private pure returns (IOptionsExchange.OpenExposureVars memory) {
@@ -352,17 +357,23 @@ contract OptionsExchange is ERC20, ManagedContract {
         string memory symbol,
         bool isCovered,
         uint volume,
-        address to
+        address to,
+        address recipient
     ) private {
         address _tk = tokenAddress[symbol];
         IOptionToken tk = IOptionToken(_tk);
+
+        if (tk.writtenVolume(recipient) == 0 && tk.balanceOf(recipient) == 0) {
+            book[recipient].push(_tk);
+        }
+
+
         if (msg.sender != to && tk.writtenVolume(to) == 0 && tk.balanceOf(to) == 0) {
             book[to].push(_tk);
         }
 
-        //TODO: if msg.sender is pending order router, need to mint from proper addr
         //mint to exchange, then send pool (or send to user)
-        tk.issue(msg.sender, address(this), volume);
+        tk.issue(recipient, address(this), volume);
         if (isCovered == true) {
             //write covered
             address underlying = UnderlyingFeed(
@@ -373,10 +384,9 @@ contract OptionsExchange is ERC20, ManagedContract {
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)
             );
-            //TODO: if msg.sender is pending order router, need to lock proper addr
-            vault.lock(msg.sender, _tk, volume);
+            vault.lock(recipient, _tk, volume);
         }
-        emit WriteOptions(_tk, msg.sender, to, volume);
+        emit WriteOptions(_tk, recipient, to, volume);
     }
     
     function transferOwnership(

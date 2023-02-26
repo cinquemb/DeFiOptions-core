@@ -71,6 +71,10 @@ contract DEXFeed is UnderlyingFeed {
         return udlAddr;
     }
 
+    function getPrivledgedPublisherKeeper() override external view returns (address) {
+        return address(0);
+    }
+
     function getUnderlyingAggAddr() override external view returns (address) {
         return address(aggregator);
     }
