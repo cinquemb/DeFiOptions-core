@@ -250,10 +250,9 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         PricingParameters memory param = parameters[optSymbol];
         address _tk = exchange.resolveToken(optSymbol);
         uint optBal = (op == Operation.SELL) ? IOptionToken(_tk).balanceOf(address(this)) : IOptionToken(_tk).writtenVolume(address(this));
-        uint optBalInv = (op == Operation.SELL) ? IOptionToken(_tk).writtenVolume(address(this)) : IOptionToken(_tk).balanceOf(address(this));
         price = calcOptPrice(param, op, IOptionToken(_tk).balanceOf(address(this)), IOptionToken(_tk).writtenVolume(address(this)));
         volume = MoreMath.min(
-            calcVolume(optSymbol, param, price, op, optBalInv),
+            calcVolume(optSymbol, param, price, op, 0),
             (op == Operation.SELL) ? (
                 (param.bsStockSpread[1] >= optBal) ? param.bsStockSpread[1].sub(optBal) : 0
             ) : (
