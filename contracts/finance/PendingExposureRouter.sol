@@ -37,7 +37,7 @@ contract PendingExposureRouter is ManagedContract {
         IOptionsExchange.OpenExposureInputs oEi;
     }
 
-    PendingOrder[] private pendingMarketOrders;
+    PendingOrder[] public pendingMarketOrders;
 
     function initialize(Deployer deployer) override internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
