@@ -24,8 +24,8 @@ contract PendingExposureRouter is ManagedContract {
     using SafeERC20 for IERC20_2;
     using SafeMath for uint;
     using SignedSafeMath for int;
-	
-	IProtocolSettings private settings;
+    
+    IProtocolSettings private settings;
     IOptionsExchange private exchange;
 
     struct PendingOrder {
@@ -48,6 +48,14 @@ contract PendingExposureRouter is ManagedContract {
             ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
         );
         */
+    }
+
+    function getMaxPendingMarketOrders() public view returns (uint256) {
+        if (pendingMarketOrders.length == 0) {
+            return 0;
+        } else {
+            return pendingMarketOrders.length.sub(1);
+        }
     }
 
     function cancelOrder(uint256 orderId) public {
@@ -83,6 +91,7 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].canceled = true;
     }
 
+    //TODO: "InternalCompilerError: I sense a disturbance in the stack: 6 vs 7"
     function approveOrder(uint256 orderId, string[] calldata symbols) external {
         address pendingPPk = isPrivledgedPublisherKeeper(orderId, msg.sender);
         require(pendingPPk != address(0), "unauthorized approval");
@@ -133,9 +142,9 @@ contract PendingExposureRouter is ManagedContract {
     }
 
     function createOrder(
-        IOptionsExchange.OpenExposureInputs calldata oEi,
+        IOptionsExchange.OpenExposureInputs memory oEi,
         uint256 cancelAfter
-    ) external {
+    ) public {
         pendingMarketOrders.push();
         uint256 orderId = getMaxPendingMarketOrders();
 
@@ -184,7 +193,7 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].canceled = false;
     }
 
-    function getApprovals(uint256 orderId, string[] memory symbols) private returns (uint, uint) {
+    function getApprovals(uint256 orderId, string[] memory symbols) internal returns (uint, uint) {
         uint256 maxApprovalsNeeded = pendingMarketOrders[orderId].oEi.symbols.length;
         uint256 currentApprovals = 0;
         bool[] memory ca = canApprove(orderId, msg.sender);
@@ -203,7 +212,7 @@ contract PendingExposureRouter is ManagedContract {
         return (maxApprovalsNeeded, currentApprovals);
     }
 
-    function isPrivledgedPublisherKeeper(uint256 orderId, address caller) private view returns (address) {
+    function isPrivledgedPublisherKeeper(uint256 orderId, address caller) internal view returns (address) {
         for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
             address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
             IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
@@ -216,7 +225,7 @@ contract PendingExposureRouter is ManagedContract {
         return address(0);
     }
 
-    function canApprove(uint256 orderId, address caller) private view returns (bool[] memory) {
+    function canApprove(uint256 orderId, address caller) internal view returns (bool[] memory) {
         bool[] memory canApprove = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
         for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
             address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
@@ -230,14 +239,6 @@ contract PendingExposureRouter is ManagedContract {
         return canApprove;
     }
 
-    function getMaxPendingMarketOrders() public view returns (uint256) {
-        if (pendingMarketOrders.length == 0) {
-            return 0;
-        } else {
-            return pendingMarketOrders.length.sub(1);
-        }
-    }
-
     function foundSymbol(string memory symbol, string[] memory symbols) private pure returns (bool) {
         for (uint i = 0; i < symbols.length; i++) {
             if (strcmp(symbols[i], symbol) == true) {
@@ -248,10 +249,10 @@ contract PendingExposureRouter is ManagedContract {
         return false;
     }
 
-    function memcmp(bytes memory a, bytes memory b) internal pure returns(bool){
+    function memcmp(bytes memory a, bytes memory b) private pure returns(bool){
         return (a.length == b.length) && (keccak256(a) == keccak256(b));
     }
-    function strcmp(string memory a, string memory b) internal pure returns(bool){
+    function strcmp(string memory a, string memory b) private pure returns(bool){
         return memcmp(bytes(a), bytes(b));
     }
 }
