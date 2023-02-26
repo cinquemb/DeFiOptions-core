@@ -91,18 +91,48 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].canceled = true;
     }
 
-    //TODO: "InternalCompilerError: I sense a disturbance in the stack: 6 vs 7"
-    function approveOrder(uint256 orderId, string[] calldata symbols) external {
+    function approveOrder(uint256 orderId, string[] memory symbols) public {
         address pendingPPk = isPrivledgedPublisherKeeper(orderId, msg.sender);
         require(pendingPPk != address(0), "unauthorized approval");
-
 
         if(pendingMarketOrders[orderId].cancelAfter > block.timestamp) {
             cancelOrder(orderId);
         }
 
-        (uint256 maxApprovalsNeeded, uint currentApprovals) = getApprovals(orderId, symbols);
-        if (currentApprovals == maxApprovalsNeeded){
+        uint256 currentApprovals = 0;
+        //check approvals by that msg.sender matches privledgedPublisherKeeper for selected symbols in order
+        bool[] memory ca = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
+        for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
+            string memory currSym = pendingMarketOrders[orderId].oEi.symbols[i];
+            bool isApprovable = foundSymbol(currSym, symbols);
+            
+            if (isApprovable == false) {
+                if (pendingMarketOrders[orderId].isApproved[i]) {
+                    currentApprovals = currentApprovals.add(1);
+                }
+                continue;
+            }
+            
+            address optAddr = exchange.resolveToken(
+                currSym
+            );
+            
+            IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
+            address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
+            if (ppk == msg.sender) {
+                ca[i] = true;
+            }
+            
+            if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
+                pendingMarketOrders[orderId].isApproved[i] = true;
+                currentApprovals = currentApprovals.add(1);
+            } else if (pendingMarketOrders[orderId].isApproved[i]) {
+                currentApprovals = currentApprovals.add(1);
+            }
+        }
+
+        // execute orders if enough approvals
+        if (currentApprovals == pendingMarketOrders[orderId].oEi.symbols.length){
             // handle approvals
             for(uint i=0; i<pendingMarketOrders[orderId].oEi.symbols.length; i++){
                 if (pendingMarketOrders[orderId].oEi.isCovered[i]) {
@@ -135,10 +165,10 @@ contract PendingExposureRouter is ManagedContract {
                 pendingMarketOrders[orderId].oEi,
                 pendingMarketOrders[orderId].account
             );
+
+            // clear order
+            pendingMarketOrders[orderId].canceled = true;
         }
-        
-        // clear order
-        pendingMarketOrders[orderId].canceled = true;
     }
 
     function createOrder(
@@ -193,26 +223,7 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].canceled = false;
     }
 
-    function getApprovals(uint256 orderId, string[] memory symbols) internal returns (uint, uint) {
-        uint256 maxApprovalsNeeded = pendingMarketOrders[orderId].oEi.symbols.length;
-        uint256 currentApprovals = 0;
-        bool[] memory ca = canApprove(orderId, msg.sender);
-
-
-        for (uint i=0; i< maxApprovalsNeeded; i++) {
-            //check if not already approved, check if can approve, check if symbol in list is approvable
-            bool isApprovable = foundSymbol(pendingMarketOrders[orderId].oEi.symbols[i], symbols);
-            if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
-                pendingMarketOrders[orderId].isApproved[i] = true;
-                currentApprovals++;
-            } else if (pendingMarketOrders[orderId].isApproved[i]) {
-                currentApprovals++;
-            }
-        }
-        return (maxApprovalsNeeded, currentApprovals);
-    }
-
-    function isPrivledgedPublisherKeeper(uint256 orderId, address caller) internal view returns (address) {
+    function isPrivledgedPublisherKeeper(uint256 orderId, address caller) private view returns (address) {
         for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
             address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
             IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
@@ -225,23 +236,10 @@ contract PendingExposureRouter is ManagedContract {
         return address(0);
     }
 
-    function canApprove(uint256 orderId, address caller) internal view returns (bool[] memory) {
-        bool[] memory canApprove = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
-        for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
-            address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
-            IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
-            address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
-            if (ppk == caller) {
-                canApprove[i] = true;
-            }
-        }
-
-        return canApprove;
-    }
-
     function foundSymbol(string memory symbol, string[] memory symbols) private pure returns (bool) {
         for (uint i = 0; i < symbols.length; i++) {
-            if (strcmp(symbols[i], symbol) == true) {
+            string memory tmps = symbols[i];
+            if (strcmp(tmps, symbol) == true) {
                 return true;
             }
         }
