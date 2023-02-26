@@ -6,7 +6,7 @@ interface UnderlyingFeed {
 
     function getUnderlyingAddr() external view returns (address);
 
-    function getPrivledgedPublisherKeeper() override external view returns (address);
+    function getPrivledgedPublisherKeeper() external view returns (address);
 
     function getUnderlyingAggAddr() external view returns (address);
 
