@@ -255,6 +255,8 @@ contract MetavaultHedgingManager is BaseHedgingManager {
             return false;
         }
 
+
+        //close out existing open pos
         if (exData.real > 0) {
             //need to close long position first
             //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
@@ -334,13 +336,18 @@ contract MetavaultHedgingManager is BaseHedgingManager {
 
             exData.pos_size = uint256(exData.ideal);
         }
-        
 
+        //open new pos
         if (exData.ideal <= 0) {
             // increase short position by pos_size
             if (exData.pos_size != 0) {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
+
+                require(
+                    getMaxShortLiquidity(udlFeedAddr) >= exData.totalPosValue,
+                    "no short hedge liq"
+                );
 
                 // hedging should fail if not enough stables in exchange
                 if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
@@ -431,6 +438,11 @@ contract MetavaultHedgingManager is BaseHedgingManager {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
+                require(
+                    getMaxLongLiquidity(udlFeedAddr) >= exData.totalPosValue,
+                    "no long hedge liq"
+                );
+
                 // hedging should fail if not enough stables in exchange
                 if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
                     for (uint i=0; i< exData.allowedTokens.length; i++) {
@@ -515,6 +527,58 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         }
 
         return false;
+    }
+
+    function getMaxLongLiquidity(address udlFeedAddr) public view returns (uint v) {
+        /*
+
+            - To calculate the available amount of liquidity for long positions:
+
+                        indexToken: the address of the token to long
+                        Available amount in tokens: Vault.poolAmounts(indexToken) - Vault.reservedAmounts(indexToken)
+                        Available amount in USD: PositionRouter.maxGlobalLongSizes(indexToken) - Vault.guaranteedUsd(indexToken)
+                        The available liquidity will be the lower of these two values
+                        PositionRouter.maxGlobalLongSizes(indexToken) can be zero, in which case there is no additional cap, and available liquidity is based only on the available amount of tokens
+        */
+
+        ExposureData memory exData;
+        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        IVault mvxVault = IVault(mvxVaultAddr);
+
+        uint256 vliq = mvxVault.poolAmounts(exData.underlying).sub(mvxVault.reservedAmounts(exData.underlying));
+        uint256 pegliq = IPositionManager(positionManagerAddr).maxGlobalLongSizes(exData.underlying).sub(mvxVault.guaranteedUsd(exData.underlying));
+
+        uint256 totalLiq = MoreMath.min(vliq, pegliq);
+
+        return Convert.formatValue(totalLiq, 18, 30);
+
+    }
+
+    function getMaxShortLiquidity(address udlFeedAddr) public view returns (uint v) {
+        /*
+            -To calculate the available amount of liquidity for short positions:
+                        indexToken: the address of the token to short
+                        collateralToken: the address of the stablecoin token to be used as collateral
+                        Available amount in tokens: Vault.poolAmounts(collateralToken) - Vault.reservedAmounts(collateralToken)
+                        Available amount in USD: PositionRouter.maxGlobalShortSizes(indexToken) - Vault.globalShortSizes(indexToken)
+                        The available liquidity will be the lower of these two values
+                        PositionRouter.maxGlobalShortSizes(indexToken) can be zero, in which case there is no additional cap, and available liquidity is based only on the available amount of tokens
+        */
+        address[] memory tokens = getAllowedStables();
+        ExposureData memory exData;
+        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        IVault mvxVault = IVault(mvxVaultAddr);
+        IPositionManager mvxPositionManager = IPositionManager(positionManagerAddr);
+        uint256 totalLiq = 0;
+
+        for(uint i=0; i<tokens.length; i++) {
+            uint256 vliq = mvxVault.poolAmounts(tokens[i]).sub(mvxVault.reservedAmounts(tokens[i]));
+            uint256 pegliq = mvxPositionManager.maxGlobalShortSizes(exData.underlying).sub(mvxVault.globalShortSizes(exData.underlying));
+            totalLiq = totalLiq.add(MoreMath.min(vliq, pegliq));
+        }
+
+        return Convert.formatValue(totalLiq, 18, 30);
+        
     }
 
     function totalTokenStock() override public view returns (uint v) {

@@ -7,6 +7,8 @@ pragma experimental ABIEncoderV2;
 interface IPositionManager {
     function vault() external view returns (address);
     function router() external view returns (address);
+    function maxGlobalLongSizes(address _token) external view returns (uint256);
+    function maxGlobalShortSizes(address _token) external view returns (uint256);
 
     function increasePosition(
         address[] calldata _path,
