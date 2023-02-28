@@ -16,7 +16,6 @@ import "../interfaces/IDEXFeedFactory.sol";
 import "../interfaces/IOptionTokenFactory.sol";
 
 import "../utils/Arrays.sol";
-import "../utils/Address.sol";
 import "../utils/Convert.sol";
 import "../utils/ERC20.sol"; //issues with verifying and ERC20 that can reference other ERC20
 import "../utils/MoreMath.sol";
@@ -444,8 +443,8 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function calcSurplus(address owner) public view returns (uint) {
         
-        uint coll = collateralManager.calcCollateral(owner, true); // multi udl feed refs
-        uint bal = creditProvider.balanceOf(owner);
+        uint coll = calcCollateral(owner, true); // multi udl feed refs
+        uint bal = balanceOf(owner);
         if (bal >= coll) {
             return bal.sub(coll);
         }
@@ -453,7 +452,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     }
 
     function setCollateral(address owner) external {
-        collateral[owner] = collateralManager.calcCollateral(owner, true); // multi udl feed refs
+        collateral[owner] = calcCollateral(owner, true); // multi udl feed refs
     }
 
     function calcCollateral(address owner, bool is_regular) public view returns (uint) {
@@ -555,7 +554,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function ensureFunds(address owner) private view {
         require(
-            creditProvider.balanceOf(owner) >= collateral[owner],
+            balanceOf(owner) >= collateral[owner],
             "insufficient collateral"
         );
     }
