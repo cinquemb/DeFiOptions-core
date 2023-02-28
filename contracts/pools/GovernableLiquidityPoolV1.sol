@@ -123,8 +123,8 @@ abstract contract GovernableLiquidityPoolV1 is ManagedContract, RedeemableToken,
         emit AddSymbol(optSymbol);
     }
 
-    function showSymbol(string calldata optSymbol) external view returns (uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
-        return (parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
+    function showSymbol(string calldata optSymbol) external view returns (address, uint32, uint, uint, uint, uint120[] memory, uint120[] memory) {
+        return (parameters[optSymbol].udlFeed, parameters[optSymbol].t1, parameters[optSymbol].bsStockSpread[0], parameters[optSymbol].bsStockSpread[1], parameters[optSymbol].bsStockSpread[2], parameters[optSymbol].x, parameters[optSymbol].y);
     }
 
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {

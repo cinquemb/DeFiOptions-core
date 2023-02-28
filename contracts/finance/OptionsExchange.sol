@@ -16,6 +16,7 @@ import "../interfaces/IDEXFeedFactory.sol";
 import "../interfaces/IOptionTokenFactory.sol";
 
 import "../utils/Arrays.sol";
+import "../utils/Address.sol";
 import "../utils/Convert.sol";
 import "../utils/ERC20.sol"; //issues with verifying and ERC20 that can reference other ERC20
 import "../utils/MoreMath.sol";
@@ -254,7 +255,9 @@ contract OptionsExchange is ERC20, ManagedContract {
             "-",
             MoreMath.toString(strike),
             "-",
-            MoreMath.toString(maturity)
+            MoreMath.toString(maturity),
+            "-",
+            Address.toAsciiString(udlFeed)
         ));
     }
 
