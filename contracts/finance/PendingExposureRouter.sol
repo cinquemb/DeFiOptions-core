@@ -28,11 +28,15 @@ contract PendingExposureRouter is ManagedContract {
     IProtocolSettings private settings;
     IOptionsExchange private exchange;
 
+    uint256 slippageDenom = 10000;
+
     struct PendingOrder {
         bool canceled;
         address account;
         bool[] isApproved;
         uint256[] buyPrice;
+        uint256[] sellPrice;
+        uint256 slippage;
         uint256 cancelAfter;
         IOptionsExchange.OpenExposureInputs oEi;
     }
@@ -151,12 +155,32 @@ contract PendingExposureRouter is ManagedContract {
                 }
 
                 if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
+
+                    uint256 slippageAmount = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
+
+                    (uint256 _buyPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], true);
+
+                    if (pendingMarketOrders[orderId].buyPrice[i].add(slippageAmount) < _buyPrice) {
+                        //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
+                        cancelOrder(orderId);
+                    }
+                    
                     //collateral to approve  buy options
                     uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
                     IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).approve(
                         address(exchange), 
                         Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
                     );
+                } else {
+
+                    uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
+
+                    (uint256 _sellPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], false);
+
+                    if (pendingMarketOrders[orderId].sellPrice[i].sub(slippageAmount) > _sellPrice) {
+                        //sell, check sell price slippage here: if (queue price * (1 - slippage)) > current price -> cancel order
+                        cancelOrder(orderId);
+                    }
                 }
             }
 
@@ -173,7 +197,8 @@ contract PendingExposureRouter is ManagedContract {
 
     function createOrder(
         IOptionsExchange.OpenExposureInputs memory oEi,
-        uint256 cancelAfter
+        uint256 cancelAfter,
+        uint256 slippage
     ) public {
         pendingMarketOrders.push();
         uint256 orderId = getMaxPendingMarketOrders();
@@ -214,6 +239,10 @@ contract PendingExposureRouter is ManagedContract {
                     Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
                 );
                 pendingMarketOrders[orderId].buyPrice[i] = _price;
+            } else {
+                //TODO: sell, store sell price
+                (uint256 _price,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], false);
+                pendingMarketOrders[orderId].sellPrice[i] = _price;
             }
         }
 
@@ -221,6 +250,7 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].oEi = oEi;
         pendingMarketOrders[orderId].cancelAfter = cancelAfter;
         pendingMarketOrders[orderId].canceled = false;
+        pendingMarketOrders[orderId].slippage = slippage;
     }
 
     function isPrivledgedPublisherKeeper(uint256 orderId, address caller) private view returns (address) {
