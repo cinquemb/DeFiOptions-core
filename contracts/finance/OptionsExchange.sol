@@ -81,7 +81,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
-        pendingExposureRouterAddr = deployer.getContractAddress("PendingExposureRouter");
+        pendingExposureRouterAddr = address(0x70942Eb616DD2443f28372d40e8BD6E932f51f08);//deployer.getContractAddress("PendingExposureRouter");
 
         _volumeBase = 1e18;
     }

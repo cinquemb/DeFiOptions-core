@@ -43,6 +43,18 @@ contract PendingExposureRouter is ManagedContract {
 
     PendingOrder[] public pendingMarketOrders;
 
+    constructor() public {
+        Deployer deployer = Deployer(0x12062A38E2af0fFD760927955e907D64959d0B14);
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+
+        /*
+        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(
+            ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
+        );
+        */
+    }
+
     function initialize(Deployer deployer) override internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
