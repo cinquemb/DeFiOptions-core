@@ -128,8 +128,11 @@ contract ScryAggregatorV1 is AggregatorV3Interface {
         uint80
     )
     {
+
+        (uint256 feedValueRAW, uint256 feedLastTimeStamp,) = IScryOpenOracleFramework(_scryOracleAddr).getFeed(_feedId);
+
         roundId = uint80(latestRound);
-        answer = answers[rounds[latestRound]];
-        updatedAt = updatedAts[rounds[latestRound]];
+        answer = int256(feedValueRAW);
+        updatedAt = feedLastTimeStamp;
     }
 }

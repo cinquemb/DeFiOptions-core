@@ -146,8 +146,10 @@ contract PythAggregatorV1 is AggregatorV3Interface {
         uint80
     )
     {
+        IPyth.Price memory p = IPyth(_pythOracleAddr).getPrice(_feedId);
+
         roundId = uint80(latestRound);
-        answer = answers[rounds[latestRound]];
-        updatedAt = updatedAts[rounds[latestRound]];
+        answer = p.price;
+        updatedAt = uint(p.publishTime);
     }
 }
