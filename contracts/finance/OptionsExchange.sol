@@ -36,7 +36,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     ICreditProvider private creditProvider;
     IDEXFeedFactory private dexFeedFactory;
     IBaseCollateralManager private collateralManager;
-    address private pendingExposureRouterAddr;
 
     IOptionTokenFactory private optionTokenFactory;
     ILinearLiquidityPoolFactory private poolFactory;
@@ -57,6 +56,9 @@ contract OptionsExchange is ERC20, ManagedContract {
     string private constant _symbol = "DODv2-DODD";
 
     string[] public poolSymbols;
+
+    address private pendingExposureRouterAddr;
+
     
     event WithdrawTokens(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
