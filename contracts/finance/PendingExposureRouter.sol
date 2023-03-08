@@ -32,6 +32,7 @@ contract PendingExposureRouter is ManagedContract {
 
     struct PendingOrder {
         bool canceled;
+        bool filled;
         address account;
         bool[] isApproved;
         uint256[] buyPrice;
@@ -42,6 +43,19 @@ contract PendingExposureRouter is ManagedContract {
     }
 
     PendingOrder[] public pendingMarketOrders;
+
+    event PendingMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
+    event AcceptedMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
+    event CanceledMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
 
     constructor() public {
         Deployer deployer = Deployer(0x12062A38E2af0fFD760927955e907D64959d0B14);
@@ -105,105 +119,116 @@ contract PendingExposureRouter is ManagedContract {
         }
         // clear order
         pendingMarketOrders[orderId].canceled = true;
+
+        emit CanceledMarketOrder(pendingMarketOrders[orderId].account, orderId);
+
     }
 
     function approveOrder(uint256 orderId, string[] memory symbols) public {
         address pendingPPk = isPrivledgedPublisherKeeper(orderId, msg.sender);
         require(pendingPPk != address(0), "unauthorized approval");
+        require(pendingMarketOrders[orderId].canceled == false, "already canceled");
+        require(pendingMarketOrders[orderId].filled == false, "already filled");
 
         if(pendingMarketOrders[orderId].cancelAfter > block.timestamp) {
             cancelOrder(orderId);
-        }
-
-        uint256 currentApprovals = 0;
-        //check approvals by that msg.sender matches privledgedPublisherKeeper for selected symbols in order
-        bool[] memory ca = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
-        for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
-            string memory currSym = pendingMarketOrders[orderId].oEi.symbols[i];
-            bool isApprovable = foundSymbol(currSym, symbols);
-            
-            if (isApprovable == false) {
-                if (pendingMarketOrders[orderId].isApproved[i]) {
+        } else {
+            uint256 currentApprovals = 0;
+            //check approvals by that msg.sender matches privledgedPublisherKeeper for selected symbols in order
+            bool[] memory ca = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
+            for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
+                string memory currSym = pendingMarketOrders[orderId].oEi.symbols[i];
+                bool isApprovable = foundSymbol(currSym, symbols);
+                
+                if (isApprovable == false) {
+                    if (pendingMarketOrders[orderId].isApproved[i]) {
+                        currentApprovals = currentApprovals.add(1);
+                    }
+                    continue;
+                }
+                
+                address optAddr = exchange.resolveToken(
+                    currSym
+                );
+                
+                IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
+                address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
+                if (ppk == msg.sender) {
+                    ca[i] = true;
+                }
+                
+                if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
+                    pendingMarketOrders[orderId].isApproved[i] = true;
+                    currentApprovals = currentApprovals.add(1);
+                } else if (pendingMarketOrders[orderId].isApproved[i]) {
                     currentApprovals = currentApprovals.add(1);
                 }
-                continue;
             }
-            
-            address optAddr = exchange.resolveToken(
-                currSym
-            );
-            
-            IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
-            address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
-            if (ppk == msg.sender) {
-                ca[i] = true;
-            }
-            
-            if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
-                pendingMarketOrders[orderId].isApproved[i] = true;
-                currentApprovals = currentApprovals.add(1);
-            } else if (pendingMarketOrders[orderId].isApproved[i]) {
-                currentApprovals = currentApprovals.add(1);
-            }
-        }
 
-        // execute orders if enough approvals
-        if (currentApprovals == pendingMarketOrders[orderId].oEi.symbols.length){
-            // handle approvals
-            for(uint i=0; i<pendingMarketOrders[orderId].oEi.symbols.length; i++){
-                if (pendingMarketOrders[orderId].oEi.isCovered[i]) {
-                    //try to approve proper underlying here
-                    
-                    address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
-                    IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
-                    address underlying = UnderlyingFeed(
-                        optData.udlFeed
-                    ).getUnderlyingAddr();
+            // execute orders if enough approvals
+            if (currentApprovals == pendingMarketOrders[orderId].oEi.symbols.length){
+                // handle approvals
+                bool isCanceled = false;
+                for(uint i=0; i<pendingMarketOrders[orderId].oEi.symbols.length; i++){
+                    if (pendingMarketOrders[orderId].oEi.isCovered[i]) {
+                        //try to approve proper underlying here
+                        
+                        address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
+                        IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
+                        address underlying = UnderlyingFeed(
+                            optData.udlFeed
+                        ).getUnderlyingAddr();
 
-                    IERC20_2(underlying).approve(
-                        address(exchange), 
-                        Convert.from18DecimalsBase(underlying, pendingMarketOrders[orderId].oEi.volume[i])
-                    );
+                        IERC20_2(underlying).approve(
+                            address(exchange), 
+                            Convert.from18DecimalsBase(underlying, pendingMarketOrders[orderId].oEi.volume[i])
+                        );
+                    }
+
+                    if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
+
+                        uint256 slippageAmount = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
+
+                        (uint256 _buyPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], true);
+
+                        if (pendingMarketOrders[orderId].buyPrice[i].add(slippageAmount) < _buyPrice) {
+                            //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
+                            isCanceled = true;
+                        }
+                        
+                        //collateral to approve  buy options
+                        uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
+                        IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).approve(
+                            address(exchange), 
+                            Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
+                        );
+                    } else {
+
+                        uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
+
+                        (uint256 _sellPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], false);
+
+                        if (pendingMarketOrders[orderId].sellPrice[i].sub(slippageAmount) > _sellPrice) {
+                            //sell, check sell price slippage here: if (queue price * (1 - slippage)) > current price -> cancel order
+                            isCanceled = true;
+                        }
+                    }
                 }
 
-                if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
-
-                    uint256 slippageAmount = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
-
-                    (uint256 _buyPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], true);
-
-                    if (pendingMarketOrders[orderId].buyPrice[i].add(slippageAmount) < _buyPrice) {
-                        //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
-                        cancelOrder(orderId);
-                    }
-                    
-                    //collateral to approve  buy options
-                    uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
-                    IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).approve(
-                        address(exchange), 
-                        Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
+                if (isCanceled == false) {
+                    //execute order
+                    exchange.openExposure(
+                        pendingMarketOrders[orderId].oEi,
+                        pendingMarketOrders[orderId].account
                     );
+
+                    pendingMarketOrders[orderId].filled = true;
+                    emit AcceptedMarketOrder(pendingMarketOrders[orderId].account, orderId);
                 } else {
-
-                    uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
-
-                    (uint256 _sellPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], false);
-
-                    if (pendingMarketOrders[orderId].sellPrice[i].sub(slippageAmount) > _sellPrice) {
-                        //sell, check sell price slippage here: if (queue price * (1 - slippage)) > current price -> cancel order
-                        cancelOrder(orderId);
-                    }
+                    cancelOrder(orderId);
+                    emit CanceledMarketOrder(pendingMarketOrders[orderId].account, orderId);
                 }
             }
-
-            //execute order
-            exchange.openExposure(
-                pendingMarketOrders[orderId].oEi,
-                pendingMarketOrders[orderId].account
-            );
-
-            // clear order
-            pendingMarketOrders[orderId].canceled = true;
         }
     }
 
@@ -261,8 +286,10 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].account = msg.sender;
         pendingMarketOrders[orderId].oEi = oEi;
         pendingMarketOrders[orderId].cancelAfter = cancelAfter;
-        pendingMarketOrders[orderId].canceled = false;
         pendingMarketOrders[orderId].slippage = slippage;
+
+        emit PendingMarketOrder(pendingMarketOrders[orderId].account, orderId);
+
     }
 
     function isPrivledgedPublisherKeeper(uint256 orderId, address caller) private view returns (address) {
