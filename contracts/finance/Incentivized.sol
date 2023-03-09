@@ -33,9 +33,9 @@ contract Incentivized is ManagedContract {
         DEXAggregatorV1(dexAggAddr).incrementRound();
     }
 
-    function prefetchSample(address udlFeed) incentivized external {
-        require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
-        require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
+    function prefetchSample(address udlFeed) external {
+        //require(settings.checkUdlIncentiveBlacklist(udlFeed) == false, "blacklisted for incentives");
+        //require(settings.getUdlFeed(udlFeed) > 0, "feed not allowed");
         UnderlyingFeed(udlFeed).prefetchSample();
     }
 
