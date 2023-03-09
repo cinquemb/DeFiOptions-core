@@ -98,12 +98,24 @@ module.exports = async function(deployer) {
      setTimeout(function(){},10000);
     console.log("pythAVAXUSDAgg is at: "+ AVAXUSDAgg.address);
 
+    /*
+
+     string memory _sb,
+        address _udlAddr,
+        address _ppK,
+        address _aggregator,
+        address _time,
+        uint _offset,
+        uint[] memory _timestamps,
+        int[] memory _prices
+    */
+
        
     const btc = await deployer.deploy(
      feed, 
      "BTC/USD",
-     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      "0xC969024b804Bf0944610277Bb13eA820596eEdE8", //underlying addrsss on the chain
+     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      BTCUSDAgg.address,//eth/usd feed mock or chainlink agg
      "0x70e7E067706655abA62F9e4Df465979c2Ab9f496", //time provider address
      3 * 60 * 60,
@@ -117,8 +129,8 @@ module.exports = async function(deployer) {
    const eth = await deployer.deploy(
      feed, 
      "ETH/USD",
-     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      "0x7f817f49d1Bc9A76E4581845B2FDa6De28ea3dB2",
+     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      ETHUSDAgg.address,
      "0x70e7E067706655abA62F9e4Df465979c2Ab9f496",
      3 * 60 * 60,
@@ -132,8 +144,8 @@ module.exports = async function(deployer) {
    const matic = await deployer.deploy(
      feed, 
      "MATIC/USD",
-     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      "0xDd2451C438e1711f9b5015a8DbFA727382A0B08F",
+     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      MATICUSDAgg.address,
      "0x70e7E067706655abA62F9e4Df465979c2Ab9f496",
      3 * 60 * 60,
@@ -147,8 +159,8 @@ module.exports = async function(deployer) {
   const avax = await deployer.deploy(
      feed, 
      "AVAX/USD",
-     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      "0xf0cAe108823b80F37cfAA5E8aEc8190D66ED0d62",
+     oracleAdminAddr, //privledgedPublisherKeeper, may be address(0)
      AVAXUSDAgg.address,
      "0x70e7E067706655abA62F9e4Df465979c2Ab9f496",
      3 * 60 * 60,
