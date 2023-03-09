@@ -12,9 +12,9 @@ contract ScryAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
-    bool private lockedRound;
-    bool private lockedAnswers;
-    bool private lockedUpdatedAts;
+    bool private lockedRound = true;
+    bool private lockedAnswers = true;
+    bool private lockedUpdatedAts = true;
 
     address _scryOracleAddr;
     uint _feedId;
