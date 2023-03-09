@@ -14,9 +14,9 @@ contract PythAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
-    bool private lockedRound;
-    bool private lockedAnswers;
-    bool private lockedUpdatedAts;
+    bool private lockedRound = true;
+    bool private lockedAnswers = true;
+    bool private lockedUpdatedAts = true;
 
     address _pythOracleAddr;
     bytes32 _feedId;
@@ -55,7 +55,7 @@ contract PythAggregatorV1 is AggregatorV3Interface {
 
     function decimals() override external view returns (uint8) {
         IPyth.Price memory p = IPyth(_pythOracleAddr).getPriceUnsafe(_feedId);
-        return uint8(MoreMath.abs(p.conf));
+        return uint8(MoreMath.abs(p.expo));
     }
 
     function description() override external view returns (string memory) {
