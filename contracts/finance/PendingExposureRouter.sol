@@ -37,7 +37,7 @@ contract PendingExposureRouter is ManagedContract {
         bool[] isApproved;
         uint256[] buyPrice;
         uint256[] sellPrice;
-        uint256[] maxBuyPrice'
+        uint256[] maxBuyPrice;
         uint256 slippage;
         uint256 cancelAfter;
         IOptionsExchange.OpenExposureInputs oEi;
