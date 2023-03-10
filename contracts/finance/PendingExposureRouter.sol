@@ -37,6 +37,7 @@ contract PendingExposureRouter is ManagedContract {
         bool[] isApproved;
         uint256[] buyPrice;
         uint256[] sellPrice;
+        uint256[] maxBuyPrice;
         uint256 slippage;
         uint256 cancelAfter;
         IOptionsExchange.OpenExposureInputs oEi;
@@ -110,7 +111,7 @@ contract PendingExposureRouter is ManagedContract {
 
             if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
                 //refund collateral to buy options
-                uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
+                uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
                 IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).transfer(
                     pendingMarketOrders[orderId].account,
                     Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
@@ -187,17 +188,18 @@ contract PendingExposureRouter is ManagedContract {
 
                     if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
 
-                        uint256 slippageAmount = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
-
                         (uint256 _buyPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], true);
 
-                        if (pendingMarketOrders[orderId].buyPrice[i].add(slippageAmount) < _buyPrice) {
+                        if (pendingMarketOrders[orderId].maxBuyPrice[i] < _buyPrice) {
                             //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
                             isCanceled = true;
                         }
+
+                        //renormalize volume
+                        pendingMarketOrders[orderId].oEi.volume[i] = pendingMarketOrders[orderId].oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
                         
                         //collateral to approve  buy options
-                        uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
+                        uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
                         IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).approve(
                             address(exchange), 
                             Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
@@ -277,6 +279,7 @@ contract PendingExposureRouter is ManagedContract {
                     Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
                 );
                 pendingMarketOrders[orderId].buyPrice[i] = _price;
+                pendingMarketOrders[orderId].maxBuyPrice[i] = (_price.add(slippageAmount));
             } else {
                 //TODO: sell, store sell price
                 (uint256 _price,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], false);
