@@ -257,7 +257,8 @@ contract PendingExposureRouter is ManagedContract {
             if (oEi.paymentTokens[i] != address(0)) {
                 //collateral to buy options
                 (uint256 _price,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], true);
-                uint256 amountToTransfer = _price.mul(oEi.volume[i]).div(exchange.volumeBase());
+                uint256 slippageAmount = _price.mul(slippage).div(slippageDenom);
+                uint256 amountToTransfer = (_price.add(slippageAmount)).mul(oEi.volume[i]).div(exchange.volumeBase());
                 IERC20_2(oEi.paymentTokens[i]).safeTransferFrom(
                     msg.sender,
                     address(this), 
