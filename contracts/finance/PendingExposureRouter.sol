@@ -2,7 +2,7 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
+//import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IOptionsExchange.sol";
@@ -18,7 +18,8 @@ import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
 
-contract PendingExposureRouter is ManagedContract {
+//contract PendingExposureRouter is ManagedContract {
+contract PendingExposureRouter {
     
     using SafeCast for uint;
     using SafeERC20 for IERC20_2;
@@ -70,7 +71,7 @@ contract PendingExposureRouter is ManagedContract {
         */
     }
 
-    function initialize(Deployer deployer) override internal {
+    function initialize(Deployer deployer) internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
 
