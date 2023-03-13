@@ -60,7 +60,7 @@ contract PendingExposureRouter is ManagedContract {
         uint orderId
     );
     
-    function initialize(Deployer deployer) internal {
+    function initialize(Deployer deployer) override internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
 
