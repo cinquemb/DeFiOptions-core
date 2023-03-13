@@ -30,8 +30,8 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
 
-        ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).assign(
-            ITurnstile(0xfA428cA13C63101b537891daE5658785C82b0750).register(address(settings))
+        ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).assign(
+            ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).register(address(settings))
         );
     }
 
