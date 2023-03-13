@@ -197,17 +197,17 @@ contract PendingExposureRouter {
                         if (pendingMarketOrders[orderId].maxBuyPrice[i] < _buyPrice) {
                             //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
                             isCanceled = true;
-                        }
-
-                        //renormalize volume
-                       oEi.volume[i] = oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
-                        
-                        //collateral to approve  buy options
-                        uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(oEi.volume[i]).div(exchange.volumeBase());
-                        IERC20_2(oEi.paymentTokens[i]).approve(
-                            address(exchange), 
-                            Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
-                        );
+                        } else {
+                            //renormalize volume
+                            oEi.volume[i] = oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
+                            
+                            //collateral to approve  buy options
+                            uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(oEi.volume[i]).div(exchange.volumeBase());
+                            IERC20_2(oEi.paymentTokens[i]).approve(
+                                address(exchange), 
+                                Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
+                            );
+                        }                        
                     } else {
 
                         uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
