@@ -14,9 +14,9 @@ contract PythAggregatorV1 is AggregatorV3Interface {
     int[] answers;
     uint[] updatedAts;
 
-    bool private lockedRound;
-    bool private lockedAnswers;
-    bool private lockedUpdatedAts;
+    bool private lockedRound = true;
+    bool private lockedAnswers = true;
+    bool private lockedUpdatedAts = true;
 
     address _pythOracleAddr;
     bytes32 _feedId;
@@ -34,10 +34,19 @@ contract PythAggregatorV1 is AggregatorV3Interface {
 
             feed ids: https://pyth.network/developers/price-feed-ids
 
+            MAINET
+
             btc/usd: 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
             eth/usd: 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace
             matic/usd: 0x5de33a9112c2b700b8d30b8a3402c103578ccfa2765696471cc672bd5cf6ac52
             avax/usd: 0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7
+
+            TESTNET
+
+            btc/usd: 0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b
+            eth/usd: 0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6
+            matic/usd: 0xd2c2c1f2bba8e0964f9589e060c2ee97f5e19057267ac3284caef3bd50bd2cb5
+            avax/usd: 0xd7566a3ba7f7286ed54f4ae7e983f4420ae0b1e0f3892e11f9c4ab107bbad7b9
 
         */
         _pythOracleAddr = pythOracleAddr;
@@ -45,8 +54,8 @@ contract PythAggregatorV1 is AggregatorV3Interface {
     }
 
     function decimals() override external view returns (uint8) {
-        IPyth.Price memory p = IPyth(_pythOracleAddr).getPrice(_feedId);
-        return uint8(MoreMath.abs(p.conf));
+        IPyth.Price memory p = IPyth(_pythOracleAddr).getPriceUnsafe(_feedId);
+        return uint8(MoreMath.abs(p.expo));
     }
 
     function description() override external view returns (string memory) {
@@ -102,12 +111,12 @@ contract PythAggregatorV1 is AggregatorV3Interface {
     }
 
     function appendAnswer() private {
-        IPyth.Price memory p = IPyth(_pythOracleAddr).getPrice(_feedId);
+        IPyth.Price memory p = IPyth(_pythOracleAddr).getPriceUnsafe(_feedId);
         answers.push(p.price);
     }
 
     function appendUpdatedAt() private {
-        IPyth.Price memory p = IPyth(_pythOracleAddr).getPrice(_feedId);
+        IPyth.Price memory p = IPyth(_pythOracleAddr).getPriceUnsafe(_feedId);
         updatedAts.push(uint(p.publishTime));
     }
 
@@ -146,7 +155,7 @@ contract PythAggregatorV1 is AggregatorV3Interface {
         uint80
     )
     {
-        IPyth.Price memory p = IPyth(_pythOracleAddr).getPrice(_feedId);
+        IPyth.Price memory p = IPyth(_pythOracleAddr).getPriceUnsafe(_feedId);
 
         roundId = uint80(latestRound);
         answer = p.price;

@@ -18,6 +18,7 @@ import "../utils/SignedSafeMath.sol";
 
 
 contract PendingExposureRouter is ManagedContract {
+//contract PendingExposureRouter {
     
     using SafeCast for uint;
     using SafeERC20 for IERC20_2;
@@ -31,18 +32,34 @@ contract PendingExposureRouter is ManagedContract {
 
     struct PendingOrder {
         bool canceled;
+        bool filled;
         address account;
         bool[] isApproved;
         uint256[] buyPrice;
         uint256[] sellPrice;
+        uint256[] maxBuyPrice;
         uint256 slippage;
         uint256 cancelAfter;
         IOptionsExchange.OpenExposureInputs oEi;
     }
 
-    PendingOrder[] public pendingMarketOrders;
+    mapping(uint => PendingOrder) public pendingMarketOrders;
+    uint256 pendingMarketOrdersCount;
 
-    function initialize(Deployer deployer) override internal {
+    event PendingMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
+    event AcceptedMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
+    event CanceledMarketOrder(
+        address indexed trader,
+        uint orderId
+    );
+    
+    function initialize(Deployer deployer) internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
         
@@ -52,10 +69,10 @@ contract PendingExposureRouter is ManagedContract {
     }
 
     function getMaxPendingMarketOrders() public view returns (uint256) {
-        if (pendingMarketOrders.length == 0) {
+        if (pendingMarketOrdersCount == 0) {
             return 0;
         } else {
-            return pendingMarketOrders.length.sub(1);
+            return pendingMarketOrdersCount.sub(1);
         }
     }
 
@@ -81,7 +98,7 @@ contract PendingExposureRouter is ManagedContract {
 
             if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
                 //refund collateral to buy options
-                uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
+                uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
                 IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).transfer(
                     pendingMarketOrders[orderId].account,
                     Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
@@ -90,106 +107,153 @@ contract PendingExposureRouter is ManagedContract {
         }
         // clear order
         pendingMarketOrders[orderId].canceled = true;
+
+        emit CanceledMarketOrder(pendingMarketOrders[orderId].account, orderId);
+
     }
 
     function approveOrder(uint256 orderId, string[] memory symbols) public {
         address pendingPPk = isPrivledgedPublisherKeeper(orderId, msg.sender);
         require(pendingPPk != address(0), "unauthorized approval");
+        require(pendingMarketOrders[orderId].canceled == false, "already canceled");
+        require(pendingMarketOrders[orderId].filled == false, "already filled");
 
         if(pendingMarketOrders[orderId].cancelAfter > block.timestamp) {
             cancelOrder(orderId);
-        }
+        } else {
+            uint256 currentApprovals = 0;
+            //check approvals by that msg.sender matches privledgedPublisherKeeper for selected symbols in order
 
-        uint256 currentApprovals = 0;
-        //check approvals by that msg.sender matches privledgedPublisherKeeper for selected symbols in order
-        bool[] memory ca = new bool[](pendingMarketOrders[orderId].oEi.symbols.length);
-        for (uint i=0; i< pendingMarketOrders[orderId].oEi.symbols.length; i++) {
-            string memory currSym = pendingMarketOrders[orderId].oEi.symbols[i];
-            bool isApprovable = foundSymbol(currSym, symbols);
-            
-            if (isApprovable == false) {
-                if (pendingMarketOrders[orderId].isApproved[i]) {
+            IOptionsExchange.OpenExposureInputs memory oEi = pendingMarketOrders[orderId].oEi;
+            bool[] memory ca = new bool[](oEi.symbols.length);
+            for (uint i=0; i< oEi.symbols.length; i++) {
+                string memory currSym = oEi.symbols[i];
+                bool isApprovable = foundSymbol(currSym, symbols);
+                
+                if (isApprovable == false) {
+                    if (pendingMarketOrders[orderId].isApproved[i]) {
+                        currentApprovals = currentApprovals.add(1);
+                    }
+                    continue;
+                }
+                
+                address optAddr = exchange.resolveToken(
+                    currSym
+                );
+                
+                IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
+                address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
+                if (ppk == msg.sender) {
+                    ca[i] = true;
+                }
+                
+                if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
+                    pendingMarketOrders[orderId].isApproved[i] = true;
+                    currentApprovals = currentApprovals.add(1);
+                } else if (pendingMarketOrders[orderId].isApproved[i]) {
                     currentApprovals = currentApprovals.add(1);
                 }
-                continue;
             }
-            
-            address optAddr = exchange.resolveToken(
-                currSym
-            );
-            
-            IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
-            address ppk = UnderlyingFeed(optData.udlFeed).getPrivledgedPublisherKeeper();
-            if (ppk == msg.sender) {
-                ca[i] = true;
-            }
-            
-            if ((pendingMarketOrders[orderId].isApproved[i] == false) && (ca[i] == true) && isApprovable == true) {
-                pendingMarketOrders[orderId].isApproved[i] = true;
-                currentApprovals = currentApprovals.add(1);
-            } else if (pendingMarketOrders[orderId].isApproved[i]) {
-                currentApprovals = currentApprovals.add(1);
-            }
-        }
 
-        // execute orders if enough approvals
-        if (currentApprovals == pendingMarketOrders[orderId].oEi.symbols.length){
-            // handle approvals
-            for(uint i=0; i<pendingMarketOrders[orderId].oEi.symbols.length; i++){
-                if (pendingMarketOrders[orderId].oEi.isCovered[i]) {
-                    //try to approve proper underlying here
-                    
-                    address optAddr = exchange.resolveToken(pendingMarketOrders[orderId].oEi.symbols[i]);
-                    IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
-                    address underlying = UnderlyingFeed(
-                        optData.udlFeed
-                    ).getUnderlyingAddr();
+            // execute orders if enough approvals
+            if (currentApprovals == oEi.symbols.length){
+                // handle approvals
+                bool isCanceled = false;
+                for(uint i=0; i<oEi.symbols.length; i++){
+                    if (pendingMarketOrders[orderId].oEi.isCovered[i]) {
+                        //try to approve proper underlying here
+                        
+                        address optAddr = exchange.resolveToken(oEi.symbols[i]);
+                        IOptionsExchange.OptionData memory optData = exchange.getOptionData(optAddr);
+                        address underlying = UnderlyingFeed(
+                            optData.udlFeed
+                        ).getUnderlyingAddr();
 
-                    IERC20_2(underlying).approve(
-                        address(exchange), 
-                        Convert.from18DecimalsBase(underlying, pendingMarketOrders[orderId].oEi.volume[i])
-                    );
+                        IERC20_2(underlying).approve(
+                            address(exchange), 
+                            Convert.from18DecimalsBase(underlying, oEi.volume[i])
+                        );
+                    }
+
+                    if (oEi.paymentTokens[i] != address(0)) {
+
+                        (uint256 _buyPrice,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], true);
+
+                        if (pendingMarketOrders[orderId].maxBuyPrice[i] < _buyPrice) {
+                            //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
+                            isCanceled = true;
+                        } else {
+                            //renormalize volume
+                            oEi.volume[i] = oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
+                            
+                            //collateral to approve  buy options
+                            uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(oEi.volume[i]).div(exchange.volumeBase());
+                            IERC20_2(oEi.paymentTokens[i]).approve(
+                                address(exchange), 
+                                Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
+                            );
+                        }                        
+                    } else {
+
+                        uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
+
+                        (uint256 _sellPrice,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], false);
+
+                        if (pendingMarketOrders[orderId].sellPrice[i].sub(slippageAmount) > _sellPrice) {
+                            //sell, check sell price slippage here: if (queue price * (1 - slippage)) > current price -> cancel order
+                            isCanceled = true;
+                        }
+                    }
                 }
 
-                if (pendingMarketOrders[orderId].oEi.paymentTokens[i] != address(0)) {
-
-                    uint256 slippageAmount = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
-
-                    (uint256 _buyPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], true);
-
-                    if (pendingMarketOrders[orderId].buyPrice[i].add(slippageAmount) < _buyPrice) {
-                        //check buy slippage here: if (queue price * (1 +slippage)) < current price -> cancel order
-                        cancelOrder(orderId);
-                    }
-                    
-                    //collateral to approve  buy options
-                    uint256 amountToTransfer = pendingMarketOrders[orderId].buyPrice[i].mul(pendingMarketOrders[orderId].oEi.volume[i]).div(exchange.volumeBase());
-                    IERC20_2(pendingMarketOrders[orderId].oEi.paymentTokens[i]).approve(
-                        address(exchange), 
-                        Convert.from18DecimalsBase(pendingMarketOrders[orderId].oEi.paymentTokens[i], amountToTransfer)
+                if (isCanceled == false) {
+                    //execute order
+                    exchange.openExposure(
+                        oEi,
+                        pendingMarketOrders[orderId].account
                     );
+
+                    pendingMarketOrders[orderId].filled = true;
+                    emit AcceptedMarketOrder(pendingMarketOrders[orderId].account, orderId);
                 } else {
-
-                    uint256 slippageAmount = pendingMarketOrders[orderId].sellPrice[i].mul(pendingMarketOrders[orderId].slippage).div(slippageDenom);
-
-                    (uint256 _sellPrice,) = IGovernableLiquidityPool(pendingMarketOrders[orderId].oEi.poolAddrs[i]).queryBuy(pendingMarketOrders[orderId].oEi.symbols[i], false);
-
-                    if (pendingMarketOrders[orderId].sellPrice[i].sub(slippageAmount) > _sellPrice) {
-                        //sell, check sell price slippage here: if (queue price * (1 - slippage)) > current price -> cancel order
-                        cancelOrder(orderId);
-                    }
+                    cancelOrder(orderId);
+                    emit CanceledMarketOrder(pendingMarketOrders[orderId].account, orderId);
                 }
             }
-
-            //execute order
-            exchange.openExposure(
-                pendingMarketOrders[orderId].oEi,
-                pendingMarketOrders[orderId].account
-            );
-
-            // clear order
-            pendingMarketOrders[orderId].canceled = true;
         }
+    }
+
+    function addOrder(IOptionsExchange.OpenExposureInputs memory toEi) private {
+        pendingMarketOrdersCount++;
+        uint256 orderId = getMaxPendingMarketOrders();
+
+        IOptionsExchange.OpenExposureInputs memory oEi;
+
+        oEi.symbols = new string[](toEi.symbols.length);
+        oEi.volume = new uint[](toEi.symbols.length);
+        oEi.isShort = new bool[](toEi.symbols.length);
+        oEi.isCovered = new bool[](toEi.symbols.length);
+        oEi.poolAddrs = new address[](toEi.symbols.length);
+        oEi.paymentTokens = new address[](toEi.symbols.length);
+
+        bool[] memory isApproved = new bool[](toEi.symbols.length);
+        uint256[] memory buyPrice = new uint256[](toEi.symbols.length);
+        uint256[] memory sellPrice = new uint256[](toEi.symbols.length);
+        uint256[] memory maxBuyPrice = new uint256[](toEi.symbols.length);
+
+
+        pendingMarketOrders[orderId] = PendingOrder(
+            false,
+            false,
+            address(0),
+            isApproved,
+            buyPrice,
+            sellPrice,
+            maxBuyPrice,
+            0,
+            0,
+            oEi
+        );
     }
 
     function createOrder(
@@ -197,16 +261,15 @@ contract PendingExposureRouter is ManagedContract {
         uint256 cancelAfter,
         uint256 slippage
     ) public {
-        pendingMarketOrders.push();
-        uint256 orderId = getMaxPendingMarketOrders();
+
 
         require(
             (oEi.symbols.length == oEi.volume.length)  && (oEi.symbols.length == oEi.isShort.length) && (oEi.symbols.length == oEi.isCovered.length) && (oEi.symbols.length == oEi.poolAddrs.length) && (oEi.symbols.length == oEi.paymentTokens.length),
             "order params dim mismatch"
         );
 
-        pendingMarketOrders[orderId].isApproved = new bool[](oEi.symbols.length);
-        pendingMarketOrders[orderId].buyPrice = new uint256[](oEi.symbols.length);
+        addOrder(oEi);
+        uint256 orderId = getMaxPendingMarketOrders();
 
         for(uint i=0; i<oEi.symbols.length; i++){
             pendingMarketOrders[orderId].isApproved[i] = false;
@@ -229,13 +292,15 @@ contract PendingExposureRouter is ManagedContract {
             if (oEi.paymentTokens[i] != address(0)) {
                 //collateral to buy options
                 (uint256 _price,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], true);
-                uint256 amountToTransfer = _price.mul(oEi.volume[i]).div(exchange.volumeBase());
+                uint256 slippageAmount = _price.mul(slippage).div(slippageDenom);
+                uint256 amountToTransfer = (_price.add(slippageAmount)).mul(oEi.volume[i]).div(exchange.volumeBase());
                 IERC20_2(oEi.paymentTokens[i]).safeTransferFrom(
                     msg.sender,
                     address(this), 
                     Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
                 );
                 pendingMarketOrders[orderId].buyPrice[i] = _price;
+                pendingMarketOrders[orderId].maxBuyPrice[i] = (_price.add(slippageAmount));
             } else {
                 //TODO: sell, store sell price
                 (uint256 _price,) = IGovernableLiquidityPool(oEi.poolAddrs[i]).queryBuy(oEi.symbols[i], false);
@@ -246,8 +311,10 @@ contract PendingExposureRouter is ManagedContract {
         pendingMarketOrders[orderId].account = msg.sender;
         pendingMarketOrders[orderId].oEi = oEi;
         pendingMarketOrders[orderId].cancelAfter = cancelAfter;
-        pendingMarketOrders[orderId].canceled = false;
         pendingMarketOrders[orderId].slippage = slippage;
+
+        emit PendingMarketOrder(pendingMarketOrders[orderId].account, orderId);
+
     }
 
     function isPrivledgedPublisherKeeper(uint256 orderId, address caller) private view returns (address) {
