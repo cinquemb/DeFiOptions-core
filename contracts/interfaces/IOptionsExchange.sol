@@ -58,7 +58,6 @@ interface IOptionsExchange {
     function totalPoolSymbols() external view returns (uint);
     function getPoolAddress(string calldata poolSymbol) external view returns (address);
     function transferBalance(address from, address to, uint value) external;
-    function underlyingBalance(address owner, address _tk) external view returns (uint);
     function getOptionSymbol(OptionData calldata opt) external view returns (string memory symbol);
     function cleanUp(address owner, address _tk) external;
     function release(address owner, uint udl, uint coll) external;

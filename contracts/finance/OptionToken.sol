@@ -5,6 +5,7 @@ import "../finance/RedeemableToken.sol";
 import "../utils/ERC20.sol";
 import "../utils/Arrays.sol";
 import "../utils/SafeMath.sol";
+import "../interfaces/IUnderlyingVault.sol";
 
 contract OptionToken is RedeemableToken {
 
@@ -15,13 +16,15 @@ contract OptionToken is RedeemableToken {
     string private constant _prefix = "DeFi Options DAO Option Redeemable Token: ";
     string private _symbol;
     uint private _unliquidatedVolume;
+    address vault;
 
-    constructor(string memory _sb, address _issuer)
+    constructor(string memory _sb, address _issuer, address _vault)
         ERC20(string(abi.encodePacked(_prefix, _sb)))
         public
     {    
         _symbol = _sb;
         exchange = IOptionsExchange(_issuer);
+        vault = _vault;
     }
 
     function name() override external view returns (string memory) {
@@ -94,7 +97,7 @@ contract OptionToken is RedeemableToken {
     }
 
     function uncoveredVolume(address owner) public view returns (uint) {
-        uint covered = exchange.underlyingBalance(owner, address(this));
+        uint covered = IUnderlyingVault(vault).balanceOf(owner, address(this));
         uint w = _issued[owner];
         return w > covered ? w.sub(covered) : 0;
     }

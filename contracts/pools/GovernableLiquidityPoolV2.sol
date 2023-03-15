@@ -153,10 +153,12 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         emit AddSymbol(optSymbol);
     }
 
+    /*
     function setRange(string calldata optSymbol, Operation op, uint start, uint end) external {
         ensureCaller();
         ranges[optSymbol][uint(op)] = Range(start.toUint120(), end.toUint120());
     }
+    */
 
     function removeSymbol(string calldata optSymbol) external {
         require(parameters[optSymbol].maturity >= block.timestamp, "2 soon");        
@@ -351,6 +353,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         }
     }
 
+    /*
     function isInRange(
         string memory optSymbol,
         Operation op,
@@ -367,6 +370,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         int udlPrice = getUdlPrice(udlFeed);
         return uint(udlPrice) >= r.start && uint(udlPrice) <= r.end;
     }
+    */
 
     function validateOrder(
         uint volume,
@@ -380,7 +384,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         returns (uint p, PricingParameters memory param) 
     {
         param = parameters[optSymbol];
-        require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad rng or vol");
+        //require(volume > 0 && isInRange(optSymbol, op, param.udlFeed), "bad rng or vol");
+        require(volume > 0, "bad vol");
         p = calcOptPrice(
             param,
             op,
@@ -396,7 +401,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     function valueOf(address ownr) override public view returns (uint) {
         (uint bal, int pOut) = getBalanceAndPayout();
         return uint(int(bal).add(pOut))
-            .mul(balanceOf(ownr)).div(totalSupply());
+            .mul(balanceOf(ownr)).div(_totalSupply);
     }
     
     function writeOptions(

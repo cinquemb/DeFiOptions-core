@@ -163,11 +163,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         ensureFunds(msg.sender);
     }
 
-    function underlyingBalance(address owner, address _tk) external view returns (uint) {
-
-        return vault.balanceOf(owner, _tk);
-    }
-
     function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
 
         uint value;

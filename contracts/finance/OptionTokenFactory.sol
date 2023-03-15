@@ -8,8 +8,10 @@ import "./OptionToken.sol";
 
 contract OptionTokenFactory is ManagedContract {
 
-    function initialize(Deployer deployer) override internal {
+    address vault;
 
+    function initialize(Deployer deployer) override internal {
+        vault = deployer.getContractAddress("UnderlyingVault");
     }
 
     function create(string calldata symbol, address udlFeed) external returns (address) {
@@ -21,6 +23,6 @@ contract OptionTokenFactory is ManagedContract {
                 revert("invalid feed");
             }
         }
-        return address(new OptionToken(symbol, msg.sender));
+        return address(new OptionToken(symbol, msg.sender, vault));
     }
 }
