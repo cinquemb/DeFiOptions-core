@@ -5,6 +5,10 @@ pragma experimental ABIEncoderV2;
 // "onwer" storage variable must be set to a GnosisSafe multisig wallet address:
 // - https://github.com/gnosis/safe-contracts/blob/main/contracts/GnosisSafe.sol
 
+import "../interfaces/external/canto/ITurnstile.sol";
+import "../interfaces/IDeployer.sol";
+
+
 contract Proxy {
 
     // ATTENTION: storage variable alignment
@@ -92,5 +96,12 @@ contract Proxy {
 
     function willFallback() internal virtual {
         
+    }
+
+    function registerAndAssign(address deployerAddr) public {
+        address settings = IDeployer(deployerAddr).getContractAddress("ProtocolSettings");
+        address turnstileAddr = address(0xEcf044C5B4b867CFda001101c617eCd347095B44);
+        uint256 nftIid = ITurnstile(turnstileAddr).register(settings);
+        ITurnstile(turnstileAddr).assign(nftIid);
     }
 }

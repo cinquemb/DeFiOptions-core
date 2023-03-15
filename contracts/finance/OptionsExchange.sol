@@ -14,7 +14,6 @@ import "../interfaces/IOptionToken.sol";
 import "../interfaces/ILinearLiquidityPoolFactory.sol";
 import "../interfaces/IDEXFeedFactory.sol";
 import "../interfaces/IOptionTokenFactory.sol";
-import "../interfaces/external/canto/ITurnstile.sol";
 
 import "../utils/Arrays.sol";
 import "../utils/Convert.sol";
@@ -81,10 +80,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         optionTokenFactory = IOptionTokenFactory(deployer.getContractAddress("OptionTokenFactory"));
         poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
-        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));        
-        ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).assign(
-            ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).register(address(settings))
-        );
+        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
         pendingExposureRouterAddr = deployer.getContractAddress("PendingExposureRouter");
 
         _volumeBase = 1e18;
