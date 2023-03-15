@@ -7,6 +7,7 @@ import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
 
 import "../utils/Convert.sol";
 import "../utils/MoreMath.sol";
@@ -61,6 +62,7 @@ contract PendingExposureRouter is ManagedContract {
     function initialize(Deployer deployer) override internal {
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
+        ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).register(address(settings));
     }
 
     function getMaxPendingMarketOrders() public view returns (uint256) {

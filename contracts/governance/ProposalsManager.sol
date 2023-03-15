@@ -3,6 +3,7 @@ pragma solidity >=0.6.0;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
+import "../interfaces/external/canto/ITurnstile.sol";
 import "../utils/Arrays.sol";
 import "../utils/SafeMath.sol";
 import "./ProposalWrapper.sol";
@@ -33,6 +34,7 @@ contract ProposalsManager is ManagedContract {
 
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         govToken = GovToken(deployer.getContractAddress("GovToken"));
+        ITurnstile(0xEcf044C5B4b867CFda001101c617eCd347095B44).register(address(settings));
         serial = 1;
     }
 

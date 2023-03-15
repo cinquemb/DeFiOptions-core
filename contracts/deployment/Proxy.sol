@@ -97,11 +97,4 @@ contract Proxy {
     function willFallback() internal virtual {
         
     }
-
-    function registerAndAssign(address deployerAddr) public {
-        address settings = IDeployer(deployerAddr).getContractAddress("ProtocolSettings");
-        address turnstileAddr = address(0xEcf044C5B4b867CFda001101c617eCd347095B44);
-        uint256 nftIid = ITurnstile(turnstileAddr).register(settings);
-        ITurnstile(turnstileAddr).assign(nftIid);
-    }
 }
