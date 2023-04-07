@@ -347,22 +347,22 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             } else {
                 require(now.sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
             }
-        }
 
-        if (msg.sender != owner){
-            // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
-            uint256 creditingValue = value.mul(5).div(100);
-            creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
-            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
-            // if borrowed liquidty was used to write options need to debit it from pool addr
-            creditProvider.nullOptionBorrowBalance(address(tk), owner);
-        }
+            if (msg.sender != owner){
+                // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
+                uint256 creditingValue = value.mul(5).div(100);
+                creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
+                creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+                // if borrowed liquidty was used to write options need to debit it from pool addr
+                creditProvider.nullOptionBorrowBalance(address(tk), owner);
+            }
 
-        if (volume > 0) {
-            exchange.burn(owner, volume, address(tk));
-        }
+            if (volume > 0) {
+                exchange.burn(owner, volume, address(tk));
+            }
 
-        emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
+            emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
+        }        
     }
 
     function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     
