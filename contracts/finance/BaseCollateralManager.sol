@@ -331,15 +331,19 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
 
-        if (writerCollateralCall[owner][tkAddr] == 0){
+        uint now = settings.exchangeTime();
+
+        bool nearMat = (opt.maturity > now) ? (uint256(opt.maturity).sub(now) < (60 * 60 * 24)) : true;
+
+        if ((writerCollateralCall[owner][tkAddr] == 0) || ((writerCollateralCall[owner][tkAddr] == 0) && (nearMat == true))) {
             // the first time triggers a margin call event for the owner (how to incentivize? 10$ in exchange credit)
             if (msg.sender != owner) {
-                writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
+                writerCollateralCall[owner][tkAddr] = now;
                 creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
                 emit CollateralCall(tkAddr, msg.sender, owner, volume);
             }
         } else {
-            require(settings.exchangeTime().sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
+            require(now.sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
         }
 
         if (msg.sender != owner){
