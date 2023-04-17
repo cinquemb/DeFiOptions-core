@@ -353,8 +353,6 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
                 uint256 creditingValue = value.mul(5).div(100);
                 creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
                 creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
-                // if borrowed liquidty was used to write options need to debit it from pool addr
-                creditProvider.nullOptionBorrowBalance(address(tk), owner);
             }
 
             if (volume > 0) {
