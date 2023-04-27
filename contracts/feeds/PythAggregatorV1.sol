@@ -162,7 +162,7 @@ contract PythAggregatorV1 is AggregatorV3Interface {
         updatedAt = uint(p.publishTime);
     }
 
-    function bytes32ToString(bytes32 x) private pure returns (string) {
+    function bytes32ToString(bytes32 x) private pure returns (string memory) {
         bytes memory bytesString = new bytes(32);
         uint charCount = 0;
         for (uint j = 0; j < 32; j++) {
@@ -173,7 +173,7 @@ contract PythAggregatorV1 is AggregatorV3Interface {
             }
         }
         bytes memory bytesStringTrimmed = new bytes(charCount);
-        for (j = 0; j < charCount; j++) {
+        for (uint j = 0; j < charCount; j++) {
             bytesStringTrimmed[j] = bytesString[j];
         }
         return string(bytesStringTrimmed);
