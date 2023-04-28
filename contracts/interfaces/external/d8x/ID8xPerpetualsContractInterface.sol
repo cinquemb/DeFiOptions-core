@@ -71,4 +71,7 @@ interface ID8xPerpetualsContractInterface {
         int128 _fCurrentTraderPos,
         bool _isBuy
     ) external view returns (int128);
+
+    function getPriceInfo(uint24 _perpetualId) external view returns (bytes32[] memory, bool[] memory);
+
 }

@@ -82,6 +82,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         IERC20(mgnTokenAddr).approve(perpetualProxy, _amount);
     }
 
+
     /**
      * Post an order to the order book. Order will be executed by
      * external "keepers".
@@ -123,6 +124,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         //      bytes32 parentChildDigest2;
 
         // submit order
+        //TODO: missing  OrderBookContractInterface
         try OrderBookContractInterface(orderBookAddr).postOrder(order, bytes("")) {
             emit PerpOrderSubmitSuccess(_amountDec18, _leverageInteger);
             return true;
@@ -136,7 +138,7 @@ contract D8xHedgingManager is BaseHedgingManager {
      * Return margin account information in decimal 18 format
      */
     function getMarginAccount(uint24 iPerpetualId) internal view returns (D18MarginAccount memory) {
-        MarginAccount memory acc = PerpetualsContractInterface(perpetualProxy).getMarginAccount(
+        MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
             iPerpetualId,
             address(this)
         );
@@ -154,11 +156,11 @@ contract D8xHedgingManager is BaseHedgingManager {
      * @return signed maximal trade size (negative if resulting position is short, positive otherwise)
      */
     function getMaxTradeAmount(uint24 iPerpetualId, bool isBuy) internal view returns (int256) {
-        MarginAccount memory acc = PerpetualsContractInterface(perpetualProxy).getMarginAccount(
+        MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
             iPerpetualId,
             address(this)
         );
-        int128 fSize = PerpetualsContractInterface(perpetualProxy).getMaxSignedOpenTradeSizeForPos(
+        int128 fSize = ID8xPerpetualsContractInterface(perpetualProxy).getMaxSignedOpenTradeSizeForPos(
             iPerpetualId,
             acc.fPositionBC,
             isBuy
