@@ -73,6 +73,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         perpetualProxy = _perpetualProxy;
     }
 
+    //TODO: need to get methond/interface and addr where to loop over pool ids
+
     /**
      * Approve the margin-token to be spent by perpetuals contract.
      * Required to trade.
@@ -124,8 +126,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         //      bytes32 parentChildDigest2;
 
         // submit order
-        //TODO: missing  OrderBookContractInterface
-        try OrderBookContractInterface(orderBookAddr).postOrder(order, bytes("")) {
+        //TODO: missing  OrderBookContractInterface, mapping to ID8xPerpetualsContractInterface
+        try ID8xPerpetualsContractInterface(orderBookAddr).postOrder(order, bytes("")) {
             emit PerpOrderSubmitSuccess(_amountDec18, _leverageInteger);
             return true;
         } catch Error(string memory reason) {
@@ -210,6 +212,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         address[] memory _collateralTokens = new address[](allowedTokens.length);
         address[] memory _indexTokens = new address[](allowedTokens.length);
         bool[] memory _isLong = new bool[](allowedTokens.length);
+
+        //TODO: need to use getMaxTradeAmount, and get the `asset id` from the  `oracle` from `underlying`, and map it to looping over the pool ids, 
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
