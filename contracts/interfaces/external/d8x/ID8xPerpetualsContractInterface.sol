@@ -33,6 +33,35 @@ interface ID8xPerpetualsContractInterface {
         bytes32 parentChildDigest1;
         bytes32 parentChildDigest2;
     }
+
+    struct LiquidityPoolData {
+        bool isRunning; // state
+        uint8 iPerpetualCount; // state
+        uint8 id; // parameter: index, starts from 1
+        uint16 iTargetPoolSizeUpdateTime; //parameter: timestamp in seconds. How often we update the pool's target size
+        address marginTokenAddress; //parameter: address of the margin token
+        // -----
+        int128 fFundAllocationNormalizationCC; // state: sum of all perpetual weights during fund allocation (cheaper than re-normalizing w/each trade)
+        int128 fDefaultFundCashCC; // state: profit/loss
+        // -----
+        uint64 prevAnchor; // state: keep track of timestamp since last withdrawal was initiated
+        int32 fRedemptionRate; // state: used for settlement in case of AMM default
+        address shareTokenAddress; // parameter
+        // -----
+        int128 fPnLparticipantsCashCC; // state: addLiquidity/withdrawLiquidity + profit/loss - rebalance
+        int128 fAMMFundCashCC; // state: profit/loss - rebalance (sum of cash in individual perpetuals)
+        // -----
+        int128 fTargetAMMFundSize; // state: target AMM pool size for all perpetuals in pool (sum)
+        int128 fTargetDFSize; // state: target default fund size for all perpetuals in pool
+        // -----
+        int128 fMaxTransferPerConvergencePeriod; // param: how many funds can be transferred in FUND_TRANSFER_CONVERGENCE_HOURS hours
+        int128 fBrokerCollateralLotSize; // param:how much collateral do brokers deposit when providing "1 lot" (not trading lot)
+        // -----
+        uint128 prevTokenAmount; // state
+        uint128 nextTokenAmount; // state
+        // -----
+        uint128 totalSupplyShareToken; // state
+    }
     
     /**
      * @notice  D8X Perpetual Data structure to store user margin information.
@@ -73,5 +102,21 @@ interface ID8xPerpetualsContractInterface {
     ) external view returns (int128);
 
     function getPriceInfo(uint24 _perpetualId) external view returns (bytes32[] memory, bool[] memory);
+
+    function getPoolCount() external view override returns (uint8);
+   
+    /**
+
+     * Query liquidity pool data for given indices
+
+     * @param _poolFromIdx start from (>=1)
+
+     * @param _poolToIdx up to (can be larger than number of pools)
+
+     * @return array with liquidity pool data
+
+     */
+
+    function getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
 
 }

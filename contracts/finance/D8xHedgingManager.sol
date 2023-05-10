@@ -73,7 +73,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         perpetualProxy = _perpetualProxy;
     }
 
-    //TODO: need to get methond/interface and addr where to loop over pool ids
+    ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
+
 
     /**
      * Approve the margin-token to be spent by perpetuals contract.
@@ -195,6 +196,13 @@ contract D8xHedgingManager is BaseHedgingManager {
 
         address[] memory outTokensReal = new address[](foundCount);
 
+        //TODO: need to loop over pools and look for the collateral addrs
+
+        //ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount() external view override returns (uint8);
+
+        //ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
+
+
 
         uint rIdx = 0;
         for (uint i=0; i<allowedTokens.length; i++) {
@@ -214,6 +222,11 @@ contract D8xHedgingManager is BaseHedgingManager {
         bool[] memory _isLong = new bool[](allowedTokens.length);
 
         //TODO: need to use getMaxTradeAmount, and get the `asset id` from the  `oracle` from `underlying`, and map it to looping over the pool ids, 
+
+        //ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount() external view override returns (uint8);
+
+
+        //ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
