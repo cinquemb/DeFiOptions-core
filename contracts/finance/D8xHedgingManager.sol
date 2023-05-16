@@ -6,6 +6,7 @@ import "./BaseHedgingManager.sol";
 import "../interfaces/ICollateralManager.sol";
 import "../interfaces/IGovernableLiquidityPool.sol";
 import "../interfaces/external/d8x/ID8xPerpetualsContractInterface.sol";
+import "../interfaces/AggregatorV3Interface.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ID8xHedgingManagerFactory.sol";
 import "../utils/Convert.sol";
@@ -50,6 +51,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         uint256 totalPosValueToTransfer;
         
         address underlying;
+        string underlyingStr;
         
         address[] at;
         address[] _pathDecLong;
@@ -72,9 +74,6 @@ contract D8xHedgingManager is BaseHedgingManager {
         orderBookAddr = _d8xOrderBookAddr;
         perpetualProxy = _perpetualProxy;
     }
-
-    ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
-
 
     /**
      * Approve the margin-token to be spent by perpetuals contract.
@@ -180,13 +179,13 @@ contract D8xHedgingManager is BaseHedgingManager {
     function getAllowedStables() public view returns (address[] memory) {
         address[] memory allowedTokens = settings.getAllowedTokens();
         IVault mvxVault = IVault(mvxVaultAddr);
-        uint256 mvxAllowedTokensLen = mvxVault.allWhitelistedTokensLength();
+        uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
         address[] memory outTokens = new address[](allowedTokens.length);
         uint256 foundCount  = 0;
         for (uint256 i=0;i<allowedTokens.length;i++){
-            for (uint j=0;j<mvxAllowedTokensLen;j++){
-                address mvxAllowedToken = mvxVault.allWhitelistedTokens(j);
-                if (allowedTokens[i] == mvxAllowedToken) {
+            for (uint8 j=0; j<d8xPoolCount; j++){
+                ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(j, j);
+                 if (allowedTokens[i] == d8xPoolData[0].marginTokenAddress) {
                     outTokens[i] = allowedTokens[i];
                     foundCount++;
                     continue;
@@ -195,14 +194,6 @@ contract D8xHedgingManager is BaseHedgingManager {
         }
 
         address[] memory outTokensReal = new address[](foundCount);
-
-        //TODO: need to loop over pools and look for the collateral addrs
-
-        //ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount() external view override returns (uint8);
-
-        //ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
-
-
 
         uint rIdx = 0;
         for (uint i=0; i<allowedTokens.length; i++) {
@@ -215,39 +206,45 @@ contract D8xHedgingManager is BaseHedgingManager {
         return outTokensReal;
     }
 
-    function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
+    function getPosSize(string underlyingStr, bool isLong) public view returns (uint[] memory) {
         address[] memory allowedTokens = getAllowedStables();
         address[] memory _collateralTokens = new address[](allowedTokens.length);
         address[] memory _indexTokens = new address[](allowedTokens.length);
         bool[] memory _isLong = new bool[](allowedTokens.length);
+        uint[] memory posSize = new uint[](allowedTokens.length);
+
 
         //TODO: need to use getMaxTradeAmount, and get the `asset id` from the  `oracle` from `underlying`, and map it to looping over the pool ids, 
+
+        //ID8xPerpetualsContractInterface(perpetualProxy).getPriceInfo(uint _perpetualId) returns (bytes32[] memory, bool[] memory); << to get asset id
 
         //ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount() external view override returns (uint8);
 
 
         //ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
 
+        uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
+
+        //loop over pools and map asset id, to pool ids
+
         for (uint i=0; i<allowedTokens.length; i++) {
             
              _collateralTokens[i] = allowedTokens[i];
             _indexTokens[i] = underlying;
             _isLong[i] = isLong;
+
+            for (uint8 j=0; j<d8xPoolCount; j++){
+                ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(j, j);
+                 if (allowedTokens[i] == d8xPoolData[0].marginTokenAddress) {
+                    outTokens[i] = allowedTokens[i];
+                    foundCount++;
+                    continue;
+                }
+            }
+
+            posSize[i] = getMaxTradeAmount(uint24 iPerpetualId, isLong);
         }
 
-        uint256[] memory posData = IReader(readerAddr).getPositions(
-            mvxVaultAddr,
-            address(this),
-            _collateralTokens, //need to be the approved stablecoins on dod * [long, short]
-            _indexTokens,
-            _isLong
-        );
-
-        uint[] memory posSize = new uint[](allowedTokens.length);
-
-        for (uint i=0; i<allowedTokens.length; i++) {
-            posSize[i] = posData[i*9];
-        }
 
         return posSize;
     }
@@ -257,6 +254,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
         address[] memory _indexTokens = new address[](allowedTokens.length * 2);
         bool[] memory _isLong = new bool[](allowedTokens.length * 2);
+
+        //TODO: need to use getMaxTradeAmount and get perp id's that maches the exposure
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
@@ -362,6 +361,7 @@ contract D8xHedgingManager is BaseHedgingManager {
     function balanceExposure(address udlFeedAddr) override external returns (bool) {
         ExposureData memory exData;
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
         exData.allowedTokens = getAllowedStables();
