@@ -18,7 +18,7 @@ contract D8xHedgingManagerFactory is ManagedContract {
     );
 
     constructor(address _orderBookAddr, address _perpetualProxy) public {
-        orderBookAddr = _positionManager;
+        orderBookAddr = _orderBookAddr;
         perpetualProxy = _perpetualProxy;
     }
     
@@ -26,7 +26,7 @@ contract D8xHedgingManagerFactory is ManagedContract {
         deployerAddress = address(deployer);
     }
 
-    function getRemoteContractAddresses() external view returns (address, address, bytes32) {
+    function getRemoteContractAddresses() external view returns (address, address) {
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("orderBookAddr()")));
         bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("perpetualProxy()")));
         

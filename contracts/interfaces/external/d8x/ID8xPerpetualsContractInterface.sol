@@ -103,7 +103,7 @@ interface ID8xPerpetualsContractInterface {
 
     function getPriceInfo(uint24 _perpetualId) external view returns (bytes32[] memory, bool[] memory);
 
-    function getPoolCount() external view override returns (uint8);
+    function getPoolCount() external view returns (uint8);
    
     /**
 
@@ -117,6 +117,6 @@ interface ID8xPerpetualsContractInterface {
 
      */
 
-    function getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view override returns (LiquidityPoolData[] memory);
+    function getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view returns (LiquidityPoolData[] memory);
 
 }

@@ -55,8 +55,8 @@ contract D8xHedgingManager is BaseHedgingManager {
         address[] _pathDecLong;
         address[] allowedTokens;
         uint256[] tv;
-        uint256[] openPos;
-        uint256[] perpIds;
+        int256[] openPos;
+        uint24[] perpIds;
         
     }
 
@@ -65,7 +65,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         d8xHedgingManagerFactoryAddr = deployer.getContractAddress("D8xHedgingManagerFactory");
-        (_d8xOrderBookAddr, _perpetualProxy) = ID8xHedgingManagerFactory(d8xHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        (address _d8xOrderBookAddr,address _perpetualProxy) = ID8xHedgingManagerFactory(d8xHedgingManagerFactoryAddr).getRemoteContractAddresses();
         
         require(_d8xOrderBookAddr != address(0), "bad order book");
         require(_perpetualProxy != address(0), "bad perp proxy");
@@ -96,7 +96,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         require(_leverageInteger >= 0, "invalid lvg");
         int128 fTradeAmount = _fromDec18(_amountDec18);
         int128 fLeverage = _fromInt(int256(_leverageInteger));
-        IClientOrder.ClientOrder memory order;
+        ID8xPerpetualsContractInterface.ClientOrder memory order;
         order.flags = orderFlag;//MASK_MARKET_ORDER
         order.iPerpetualId = iPerpetualId;
         order.traderAddr = address(this);
@@ -127,12 +127,12 @@ contract D8xHedgingManager is BaseHedgingManager {
     /**
      * Return margin account information in decimal 18 format
      */
-    function getMarginAccount(uint24 iPerpetualId) internal view returns (D18MarginAccount memory) {
-        MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
+    function getMarginAccount(uint24 iPerpetualId) internal view returns (ID8xPerpetualsContractInterface.D18MarginAccount memory) {
+        ID8xPerpetualsContractInterface.MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
             iPerpetualId,
             address(this)
         );
-        D18MarginAccount memory accD18;
+        ID8xPerpetualsContractInterface.D18MarginAccount memory accD18;
         accD18.lockedInValueQCD18 = toDec18(acc.fLockedInValueQC); // unrealized value locked-in when trade occurs: price * position size
         accD18.cashCCD18 = toDec18(acc.fCashCC); // cash in collateral currency (base, quote, or quanto)
         accD18.positionSizeBCD18 = toDec18(acc.fPositionBC); // position in base currency (e.g., 1 BTC for BTCUSD)
@@ -146,7 +146,7 @@ contract D8xHedgingManager is BaseHedgingManager {
      * @return signed maximal trade size (negative if resulting position is short, positive otherwise)
      */
     function getMaxTradeAmount(uint24 iPerpetualId, bool isBuy) internal view returns (int256) {
-        MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
+        ID8xPerpetualsContractInterface.MarginAccount memory acc = ID8xPerpetualsContractInterface(perpetualProxy).getMarginAccount(
             iPerpetualId,
             address(this)
         );
@@ -166,7 +166,6 @@ contract D8xHedgingManager is BaseHedgingManager {
 
     function getAllowedStables() public view returns (address[] memory) {
         address[] memory allowedTokens = settings.getAllowedTokens();
-        IVault mvxVault = IVault(mvxVaultAddr);
         uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
         address[] memory outTokens = new address[](allowedTokens.length);
         uint256 foundCount  = 0;
@@ -194,30 +193,37 @@ contract D8xHedgingManager is BaseHedgingManager {
         return outTokensReal;
     }
 
-    function getAssetIdsForUnderlying(string underlyingStr, address allowedToken) private view returns (uint) {
+    function getAssetIdsForUnderlying(string memory underlyingStr, address allowedToken) private view returns (uint24) {
 
         uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
 
-        for (uint8 j=0; j<d8xPoolCount; j++){
-            ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(j, j);
-            (bytes32[] memory d8xAssetIds, ) = D8xPerpetualsContractInterface(perpetualProxy).getPriceInfo(j);
+        for (uint24 j=0; j<d8xPoolCount; j++){
+            ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8(j), uint8(j));
+            (bytes32[] memory d8xAssetIds, ) = ID8xPerpetualsContractInterface(perpetualProxy).getPriceInfo(j);
             bool foundId = findAllowedUnderlying(underlyingStr, d8xAssetIds);
 
             if ((allowedToken == d8xPoolData[0].marginTokenAddress) && (foundId == true)) {
-                return uint(j);
+                return j;
             } 
         }
     }
 
-    function getPosSize(string underlyingStr, bool isLong) public view returns (uint[] memory, uint[] memory) {
+    function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
         address[] memory allowedTokens = getAllowedStables();
-        uint[] memory posSize = new uint[](allowedTokens.length);
-        uint[] memory perIds = new uint[](allowedTokens.length);
+        uint256[] memory posData = new uint256[](allowedTokens.length);
+        return posData;
+    }
+
+    function getPosSize(string memory underlyingStr, bool isLong) public view returns (int256[] memory, uint24[] memory) {
+        address[] memory allowedTokens = getAllowedStables();
+        int256[] memory posSize = new int256[](allowedTokens.length);
+        uint24[] memory perIds = new uint24[](allowedTokens.length);
 
         for (uint i=0; i<allowedTokens.length; i++) {
-            uint d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
+            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
+            ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
 
-            posSize[i] = getMaxTradeAmount(d8xPerpId, isLong);
+            posSize[i] = accD18.positionSizeBCD18;
             perIds[i] = d8xPerpId;
         }
 
@@ -225,33 +231,42 @@ contract D8xHedgingManager is BaseHedgingManager {
         return (posSize, perIds);
     }
 
-    function getHedgeExposure(string underlyingStr) public view returns (int256) {
+    function getMaxPosSize(string memory underlyingStr, bool isLong) public view returns (int256) {
         address[] memory allowedTokens = getAllowedStables();
-        address[] memory _collateralTokens = new address[](allowedTokens.length * 2);
-        bool[] memory _isLong = new bool[](allowedTokens.length * 2);
-        uint256[] memory posData = new uint256[](allowedTokens.length * 2);
+        int256[] memory posData = new int256[](allowedTokens.length);
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
-            _collateralTokens[i * 2] = allowedTokens[i];
-            _collateralTokens[((i+1) * 2) - 1] = allowedTokens[i];
-
-            uint d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
-
-            posData[i] = getMaxTradeAmount(d8xPerpId, true);
-            posData[((i+1) * 2) - 1] = getMaxTradeAmount(d8xPerpId, false);
-            
-            _isLong[i * 2] = true;
-            _isLong[((i+1) * 2) - 1] = false;
+            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
+            posData[i] = getMaxTradeAmount(d8xPerpId, isLong);
         }
 
         int256 totalExposure = 0;
-        for (uint i=0; i<(allowedTokens.length*2); i++) {
-            if (_isLong[i] == true) {
-                totalExposure = totalExposure.add(int256(posData[i]));
-            } else {
-                totalExposure = totalExposure.sub(int256(posData[i]));
-            }
+        for (uint i=0; i<(allowedTokens.length); i++) {
+            totalExposure = totalExposure.add(posData[i]);
+        }
+
+        return totalExposure;
+    }
+
+    function getHedgeExposure(address underlying) override public view returns (int256) {
+        return 0;
+    }
+
+    function getHedgeExposure(string memory underlyingStr) public view returns (int256) {
+        address[] memory allowedTokens = getAllowedStables();
+        int256[] memory posData = new int256[](allowedTokens.length);
+
+        for (uint i=0; i<allowedTokens.length; i++) {
+            
+            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
+            ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
+            posData[i] = accD18.positionSizeBCD18;
+        }
+
+        int256 totalExposure = 0;
+        for (uint i=0; i<(allowedTokens.length); i++) {
+            totalExposure = totalExposure.add(posData[i]);
         }
 
         return totalExposure;
@@ -299,7 +314,7 @@ contract D8xHedgingManager is BaseHedgingManager {
     function realHedgeExposure(address udlFeedAddr) override public view returns (int256) {
         // look at metavault exposure for underlying, and divide by asset price
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
-        string underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
+        string memory underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
 
         int256 exposure = getHedgeExposure(underlyingStr);
         return exposure.mul(int(_volumeBase)).div(udlPrice);
@@ -330,15 +345,9 @@ contract D8xHedgingManager is BaseHedgingManager {
         if (exData.real != 0) {
             //need to close long position first
             //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
-            (exData.openPos, exData.perpIds) = getPosSize(exData.underlying, true);
+            (exData.openPos, exData.perpIds) = getPosSize(exData.underlyingStr, true);
             for(uint i=0; i< exData.openPos.length; i++){
-                if (exData.openPos[i] > 0) {
-                    exData.t = IERC20_2(exData.allowedTokens[i]);
-                    exData._pathDecLong = new address[](2);
-                    exData._pathDecLong[0] = exData.underlying;
-                    exData._pathDecLong[1] = exData.allowedTokens[i];
-
-                    //TODO: ask does it matter what _leverageInteger is when closing a trade?
+                if (exData.openPos[i] != 0) {
                     postOrder(exData.perpIds[i], exData.openPos[i], 0, 0x80000000);
                 }
             }
@@ -381,7 +390,7 @@ contract D8xHedgingManager is BaseHedgingManager {
 
                                 //.mul(b).div(r); //convert to exchange decimals
 
-                                if (exData.t.allowance(address(this), mvxRouter) > 0) {
+                                if (exData.t.allowance(address(this), perpetualProxy) > 0) {
                                     exData.t.safeApprove(perpetualProxy, 0);
                                 }
                                 exData.t.safeApprove(perpetualProxy, v.mul(exData.r).div(exData.b));
@@ -406,8 +415,8 @@ contract D8xHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-                                uint d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                postOrder(d8xPerpId, v.mul(exData.r).div(exData.b)).mul(-1), exData.poolLeverage, 0x40000000);
+                                uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
+                                postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)).mul(-1), int16(exData.poolLeverage), 0x40000000);
 
                                 //back to exchange decimals
 
@@ -452,7 +461,7 @@ contract D8xHedgingManager is BaseHedgingManager {
                                     exData.totalPosValueToTransfer,
                                     exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
                                 );
-                                if (exData.t.allowance(address(this), mvxRouter) > 0) {
+                                if (exData.t.allowance(address(this), perpetualProxy) > 0) {
                                     exData.t.safeApprove(perpetualProxy, 0);
                                 }
                                 exData.t.safeApprove(perpetualProxy, v.mul(exData.r).div(exData.b));
@@ -481,8 +490,8 @@ contract D8xHedgingManager is BaseHedgingManager {
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
 
-                                uint d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                postOrder(d8xPerpId, v.mul(exData.r).div(exData.b)), exData.poolLeverage, 0x40000000);
+                                uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
+                                postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)), int16(exData.poolLeverage), 0x40000000);
 
                                 //back to exchange decimals
                                 if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
@@ -508,54 +517,20 @@ contract D8xHedgingManager is BaseHedgingManager {
     //TODO: ask about how to get maxmium size avaialble to trade for an account, and my account existing pos size for a pool
 
     function getMaxLongLiquidity(address udlFeedAddr) public view returns (uint v) {
-        /*
-
-            - To calculate the available amount of liquidity for long positions:
-
-                        indexToken: the address of the token to long
-                        Available amount in tokens: Vault.poolAmounts(indexToken) - Vault.reservedAmounts(indexToken)
-                        Available amount in USD: PositionRouter.maxGlobalLongSizes(indexToken) - Vault.guaranteedUsd(indexToken)
-                        The available liquidity will be the lower of these two values
-                        PositionRouter.maxGlobalLongSizes(indexToken) can be zero, in which case there is no additional cap, and available liquidity is based only on the available amount of tokens
-        */
-
         ExposureData memory exData;
-        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        IVault mvxVault = IVault(mvxVaultAddr);
+        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
 
-        uint256 vliq = mvxVault.poolAmounts(exData.underlying).sub(mvxVault.reservedAmounts(exData.underlying));
-        uint256 pegliq = IPositionManager(positionManagerAddr).maxGlobalLongSizes(exData.underlying).sub(mvxVault.guaranteedUsd(exData.underlying));
-
-        uint256 totalLiq = MoreMath.min(vliq, pegliq);
-
-        return Convert.formatValue(totalLiq, 18, 30);
+        return uint256(getMaxPosSize(exData.underlyingStr, true));
 
     }
 
     function getMaxShortLiquidity(address udlFeedAddr) public view returns (uint v) {
-        /*
-            -To calculate the available amount of liquidity for short positions:
-                        indexToken: the address of the token to short
-                        collateralToken: the address of the stablecoin token to be used as collateral
-                        Available amount in tokens: Vault.poolAmounts(collateralToken) - Vault.reservedAmounts(collateralToken)
-                        Available amount in USD: PositionRouter.maxGlobalShortSizes(indexToken) - Vault.globalShortSizes(indexToken)
-                        The available liquidity will be the lower of these two values
-                        PositionRouter.maxGlobalShortSizes(indexToken) can be zero, in which case there is no additional cap, and available liquidity is based only on the available amount of tokens
-        */
+
         address[] memory tokens = getAllowedStables();
         ExposureData memory exData;
-        exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        IVault mvxVault = IVault(mvxVaultAddr);
-        IPositionManager mvxPositionManager = IPositionManager(positionManagerAddr);
-        uint256 totalLiq = 0;
+        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
 
-        for(uint i=0; i<tokens.length; i++) {
-            uint256 vliq = mvxVault.poolAmounts(tokens[i]).sub(mvxVault.reservedAmounts(tokens[i]));
-            uint256 pegliq = mvxPositionManager.maxGlobalShortSizes(exData.underlying).sub(mvxVault.globalShortSizes(exData.underlying));
-            totalLiq = totalLiq.add(MoreMath.min(vliq, pegliq));
-        }
-
-        return Convert.formatValue(totalLiq, 18, 30);
+        return uint256(MoreMath.abs(getMaxPosSize(exData.underlyingStr, false)));
         
     }
 
@@ -567,19 +542,6 @@ contract D8xHedgingManager is BaseHedgingManager {
             uint value = IERC20_2(tokens[i]).balanceOf(address(this));
             v = v.add(value.mul(b).div(r));
         }
-    }
-
-    function notitionalValue(uint256 value, uint256 multiplier, uint256 b, uint256 r) pure internal returns (uint256) {
-        return value.mul(multiplier).mul(b).div(r)
-    }
-
-    function priceAndApplySlippage(uint256 value, bool isAdd) pure internal returns (uint256) {
-        if (isAdd) {
-            return uint256(value.add(value.mul(3).div(1000)));
-        } else {
-            return uint256(value.sub(value.mul(3).div(1000)));
-        }
-
     }
 
     /**
@@ -623,10 +585,10 @@ contract D8xHedgingManager is BaseHedgingManager {
         }
     }
 
-    function findAllowedUnderlying(string underlyingStr, bytes32[] memory d8xAssetIds) private view returns (bool){
+    function findAllowedUnderlying(string memory underlyingStr, bytes32[] memory d8xAssetIds) private view returns (bool){
 
         for (uint i = 0; i < d8xAssetIds.length; i++) {
-            if(underlyingStr == bytes32ToString(d8xAssetIds[i]) {
+            if(keccak256(abi.encodePacked((underlyingStr))) == keccak256(abi.encodePacked((bytes32ToString(d8xAssetIds[i]))))) {
                 return true;
             }
         }
