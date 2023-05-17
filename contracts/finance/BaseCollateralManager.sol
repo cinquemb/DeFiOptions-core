@@ -331,31 +331,36 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
             .div(_volumeBase);
 
-        if (writerCollateralCall[owner][tkAddr] == 0){
+        uint now = settings.exchangeTime();
+        bool nearMat = (opt.maturity > now) ? (uint256(opt.maturity).sub(now) < (60 * 60 * 24)) : true;
+
+        if ((writerCollateralCall[owner][tkAddr] == 0) && (nearMat == false)) {
             // the first time triggers a margin call event for the owner (how to incentivize? 10$ in exchange credit)
             if (msg.sender != owner) {
-                writerCollateralCall[owner][tkAddr] = settings.exchangeTime();
+                writerCollateralCall[owner][tkAddr] = now;
                 creditProvider.processIncentivizationPayment(msg.sender, settings.getBaseIncentivisation());
                 emit CollateralCall(tkAddr, msg.sender, owner, volume);
             }
         } else {
-            require(settings.exchangeTime().sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
-        }
+            if ((writerCollateralCall[owner][tkAddr] == 0) && (nearMat == true)) {
+                //pass, liq right away
+            } else {
+                require(now.sub(writerCollateralCall[owner][tkAddr]) >= collateralCallPeriod, "Collateral Manager: active collateral call");
+            }
 
-        if (msg.sender != owner){
-            // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
-            uint256 creditingValue = value.mul(5).div(100);
-            creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
-            creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
-            // if borrowed liquidty was used to write options need to debit it from pool addr
-            creditProvider.nullOptionBorrowBalance(address(tk), owner);
-        }
+            if (msg.sender != owner){
+                // second step triggers the actual liquidation (incentivized, 5% of collateral liquidated in exchange creditbalance, owner gets charged 105%)
+                uint256 creditingValue = value.mul(5).div(100);
+                creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
+                creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+            }
 
-        if (volume > 0) {
-            exchange.burn(owner, volume, address(tk));
-        }
+            if (volume > 0) {
+                exchange.burn(owner, volume, address(tk));
+            }
 
-        emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
+            emit LiquidateEarly(tkAddr, msg.sender, owner, volume);
+        }        
     }
 
     function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     

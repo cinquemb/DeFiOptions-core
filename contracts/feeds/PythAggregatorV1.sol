@@ -59,7 +59,7 @@ contract PythAggregatorV1 is AggregatorV3Interface {
     }
 
     function description() override external view returns (string memory) {
-
+        return bytes32ToString(_feedId);
     }
 
     function version() override external view returns (uint256) {
@@ -160,5 +160,22 @@ contract PythAggregatorV1 is AggregatorV3Interface {
         roundId = uint80(latestRound);
         answer = p.price;
         updatedAt = uint(p.publishTime);
+    }
+
+    function bytes32ToString(bytes32 x) private pure returns (string memory) {
+        bytes memory bytesString = new bytes(32);
+        uint charCount = 0;
+        for (uint j = 0; j < 32; j++) {
+            byte char = byte(bytes32(uint(x) * 2 ** (8 * j)));
+            if (char != 0) {
+                bytesString[charCount] = char;
+                charCount++;
+            }
+        }
+        bytes memory bytesStringTrimmed = new bytes(charCount);
+        for (uint j = 0; j < charCount; j++) {
+            bytesStringTrimmed[j] = bytesString[j];
+        }
+        return string(bytesStringTrimmed);
     }
 }
