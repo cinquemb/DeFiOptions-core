@@ -17,14 +17,9 @@ import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
 
-
-<<<<<<< HEAD
 //contract PendingExposureRouter is ManagedContract {
 contract PendingExposureRouter {
-=======
-contract PendingExposureRouter is ManagedContract {
-//contract PendingExposureRouter {
->>>>>>> master
+
     
     using SafeCast for uint;
     using SafeERC20 for IERC20_2;

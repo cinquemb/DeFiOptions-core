@@ -2,10 +2,11 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
+//import "../deployment/ManagedContract.sol";
 import "./D8xHedgingManager.sol";
 
-contract D8xHedgingManagerFactory is ManagedContract {
+//contract D8xHedgingManagerFactory is ManagedContract {
+contract D8xHedgingManagerFactory {
 
     address public orderBookAddr;
     address public perpetualProxy;
@@ -20,6 +21,7 @@ contract D8xHedgingManagerFactory is ManagedContract {
     constructor(address _orderBookAddr, address _perpetualProxy) public {
         orderBookAddr = _orderBookAddr;
         perpetualProxy = _perpetualProxy;
+        deployerAddress = address(0x12062A38E2af0fFD760927955e907D64959d0B14);
     }
     
     function initialize(Deployer deployer) override internal {
@@ -27,6 +29,7 @@ contract D8xHedgingManagerFactory is ManagedContract {
     }
 
     function getRemoteContractAddresses() external view returns (address, address) {
+        /*
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("orderBookAddr()")));
         bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("perpetualProxy()")));
         
@@ -40,6 +43,8 @@ contract D8xHedgingManagerFactory is ManagedContract {
         require(ppAddr != address(0), "bad perp proxy");
 
         return (obAddr, ppAddr);
+        */
+        return (orderBookAddr, perpetualProxy);
     }
 
     function create(address _poolAddr) external returns (address) {
