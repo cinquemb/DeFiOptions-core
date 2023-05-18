@@ -24,7 +24,8 @@ contract D8xHedgingManagerFactory {
         deployerAddress = address(0x12062A38E2af0fFD760927955e907D64959d0B14);
     }
     
-    function initialize(Deployer deployer) override internal {
+    //function initialize(Deployer deployer) override internal {
+    function initialize(Deployer deployer) internal {
         deployerAddress = address(deployer);
     }
 
