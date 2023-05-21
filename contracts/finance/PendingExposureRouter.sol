@@ -121,7 +121,7 @@ contract PendingExposureRouter is ManagedContract {
         require(pendingMarketOrders[orderId].canceled == false, "already canceled");
         require(pendingMarketOrders[orderId].filled == false, "already filled");
 
-        if(pendingMarketOrders[orderId].cancelAfter > block.timestamp) {
+        if(pendingMarketOrders[orderId].cancelAfter < block.timestamp) {
             cancelOrder(orderId);
         } else {
             uint256 currentApprovals = 0;
