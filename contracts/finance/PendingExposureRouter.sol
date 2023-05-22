@@ -187,14 +187,16 @@ contract PendingExposureRouter is ManagedContract {
                             isCanceled = true;
                         } else {
                             //renormalize volume
-                            oEi.volume[i] = oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
+                            //oEi.volume[i] = oEi.volume[i].mul(pendingMarketOrders[orderId].maxBuyPrice[i]).div(_buyPrice);
                             
                             //collateral to approve  buy options
                             uint256 amountToTransfer = pendingMarketOrders[orderId].maxBuyPrice[i].mul(oEi.volume[i]).div(exchange.volumeBase());
+                            uint256 cAmountToTransfer = Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer);
                             IERC20_2(oEi.paymentTokens[i]).approve(
                                 address(exchange), 
-                                Convert.from18DecimalsBase(oEi.paymentTokens[i], amountToTransfer)
+                                cAmountToTransfer
                             );
+                            IERC20_2(oEi.paymentTokens[i]).transfer(address(exchange), cAmountToTransfer);
                         }                        
                     } else {
 

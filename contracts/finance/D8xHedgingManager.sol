@@ -170,7 +170,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         address[] memory outTokens = new address[](allowedTokens.length);
         uint256 foundCount  = 0;
         for (uint256 i=0;i<allowedTokens.length;i++){
-            for (uint8 j=0; j<d8xPoolCount; j++){
+            for (uint8 j=1; j<d8xPoolCount; j++){
                 ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(j, j);
                  if (allowedTokens[i] == d8xPoolData[0].marginTokenAddress) {
                     outTokens[i] = allowedTokens[i];
@@ -197,7 +197,7 @@ contract D8xHedgingManager is BaseHedgingManager {
 
         uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
 
-        for (uint24 j=0; j<d8xPoolCount; j++){
+        for (uint24 j=1; j<d8xPoolCount; j++){
             ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8(j), uint8(j));
             (bytes32[] memory d8xAssetIds, ) = ID8xPerpetualsContractInterface(perpetualProxy).getPriceInfo(j);
             bool foundId = findAllowedUnderlying(underlyingStr, d8xAssetIds);
@@ -525,8 +525,6 @@ contract D8xHedgingManager is BaseHedgingManager {
     }
 
     function getMaxShortLiquidity(address udlFeedAddr) public view returns (uint v) {
-
-        address[] memory tokens = getAllowedStables();
         ExposureData memory exData;
         exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
 
@@ -585,7 +583,7 @@ contract D8xHedgingManager is BaseHedgingManager {
         }
     }
 
-    function findAllowedUnderlying(string memory underlyingStr, bytes32[] memory d8xAssetIds) private view returns (bool){
+    function findAllowedUnderlying(string memory underlyingStr, bytes32[] memory d8xAssetIds) private pure returns (bool){
 
         for (uint i = 0; i < d8xAssetIds.length; i++) {
             if(keccak256(abi.encodePacked((underlyingStr))) == keccak256(abi.encodePacked((bytes32ToString(d8xAssetIds[i]))))) {

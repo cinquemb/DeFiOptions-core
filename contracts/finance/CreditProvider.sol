@@ -311,8 +311,7 @@ contract CreditProvider is ManagedContract {
         }
     }
 
-    function debitPoolBalance(address from, uint value) internal {
-        ensurePrimeCaller();
+    function debitPoolBalance(address from, uint value) private {
 
         require(
             settings.isAllowedHedgingManager(IGovernableLiquidityPool(from).getHedgingManager()) == true, 
@@ -595,7 +594,7 @@ contract CreditProvider is ManagedContract {
     }
 
     function ensureCaller(address addr) external view {
-        require(primeCallers[addr] == 1, "unauthorized caller");
+        require(primeCallers[addr] == 1, "unauthorized caller (ex)");
     }
 
     function findAllowedToken(address addr) private view returns (bool){
@@ -611,10 +610,10 @@ contract CreditProvider is ManagedContract {
     }
 
     function ensurePoolCaller() private view {        
-        require(poolCallers[msg.sender] == 1, "unauthorized caller");
+        require(poolCallers[msg.sender] == 1, "unauthorized caller (pool)");
     }
 
     function ensurePrimeCaller() private view {        
-        require(primeCallers[msg.sender] == 1, "unauthorized caller");
+        require(primeCallers[msg.sender] == 1, "unauthorized caller (prime)");
     }
 }
