@@ -313,6 +313,11 @@ contract OptionsExchange is ERC20, ManagedContract {
                         (_price,) = pool.queryBuy(oEx.symbol, false);
                         IERC20_2(oEx._tokens[i]).approve(address(pool), oEx.vol);
                         pool.sell(oEx.symbol, _price, oEx.vol);
+                        creditProvider.transferBalance(
+                            address(this), 
+                            recipient, 
+                            _price.mul(oEx.vol).div(_volumeBase)
+                        );
                     }
                     //if not covered option
                     if (oEx.isCovered == false) {
@@ -322,13 +327,31 @@ contract OptionsExchange is ERC20, ManagedContract {
             } else {
                 // buy options
                 if (oEx.vol > 0) {
+                    //need to approve pool to spend payment tokens
                     (_price,) = pool.queryBuy(oEx.symbol, true);
+                    //TODO: CAN ONLY BUY WITH EXCHANGE BALANCE
+                    require (oEi.paymentTokens[i] == address(this), "only with ex bal");
+                    uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
+                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
+
+
+                    /*
+                    uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
+                    if (oEi.paymentTokens[i] != address(this)) {
+                        (uint tv, uint tb) = settings.getTokenRate(oEi.paymentTokens[i]);
+                        pvalue = pvalue.mul(tv).div(tb);
+                    }
+                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
+                    */
+                    //buy options from pool
                     pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
-                    
+                    //transfer option token from exchange to user
+                    IERC20_2(oEx._tokens[i]).transfer(recipient, oEx.vol);
                     oEx._holding[i] = oEx.vol;
                 }
             }
 
+            /*
             if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
                 //this is handled by pool contract
             } else {
@@ -337,7 +360,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                     (oEi.isShort[i] == true) ? recipient : oEx.poolAddr, 
                     _price.mul(oEx.vol).div(_volumeBase)
                 );
-            }
+            }*/
             
         }
 
