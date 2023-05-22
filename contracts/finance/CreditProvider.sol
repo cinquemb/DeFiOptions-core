@@ -195,6 +195,7 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid borrower");
         require(poolCallers[to] == 1, "invalid pool");
         require(settings.checkPoolBuyCreditTradable(to) == true, "pool cant sell on credit");
+        
         // increment exchange balance for liquidity pool
         addBalance(to, credit);
         //increment value used to write options
@@ -206,10 +207,6 @@ contract CreditProvider is ManagedContract {
         require(to != address(this), "invalid borrower");
         require(poolCallers[to] == 1, "invalid pool");
         require(settings.checkPoolSellCreditTradable(to) == true, "pool cant buy on credit");
-        require(
-            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
-            "pool hedge manager not allowed"
-        );
 
         // increment exchange balance for liquidity pool
         addBalance(to, credit);
@@ -517,7 +514,12 @@ contract CreditProvider is ManagedContract {
     }
 
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
-        ensurePrimeCaller();
+        
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
        
         // preferred order
