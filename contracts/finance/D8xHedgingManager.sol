@@ -198,8 +198,8 @@ contract D8xHedgingManager is BaseHedgingManager {
 
         uint8 d8xPoolCount = ID8xPerpetualsContractInterface(perpetualProxy).getPoolCount();
 
-        for (uint24 j=1; j<=d8xPoolCount; j++){
-            ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(uint8(j), uint8(j));
+        for (uint8 j=1; j<=d8xPoolCount; j++){
+            ID8xPerpetualsContractInterface.LiquidityPoolData[] memory d8xPoolData = ID8xPerpetualsContractInterface(perpetualProxy).getLiquidityPools(j, j);
             uint8 d8xPoolDataPerpCount = ID8xPerpetualsContractInterface(perpetualProxy).getPerpetualCountInPool(j);
             for (uint8 k = 0; k < d8xPoolDataPerpCount; k++){
                 uint24 tPerpId = ID8xPerpetualsContractInterface(perpetualProxy).getPerpetualId(j, k);
