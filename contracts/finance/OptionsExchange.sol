@@ -36,7 +36,6 @@ contract OptionsExchange is ERC20, ManagedContract {
     ICreditProvider private creditProvider;
     IDEXFeedFactory private dexFeedFactory;
     IBaseCollateralManager private collateralManager;
-    address private pendingExposureRouterAddr;
 
     IOptionTokenFactory private optionTokenFactory;
     ILinearLiquidityPoolFactory private poolFactory;
@@ -57,6 +56,9 @@ contract OptionsExchange is ERC20, ManagedContract {
     string private constant _symbol = "DODv2-DODD";
 
     string[] public poolSymbols;
+
+    address private pendingExposureRouterAddr;
+
     
     event WithdrawTokens(address indexed from, uint value);
     event CreatePool(address indexed token, address indexed sender);
@@ -81,7 +83,7 @@ contract OptionsExchange is ERC20, ManagedContract {
         poolFactory  = ILinearLiquidityPoolFactory(deployer.getContractAddress("LinearLiquidityPoolFactory"));
         collateralManager = IBaseCollateralManager(deployer.getContractAddress("CollateralManager"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
-        pendingExposureRouterAddr = deployer.getContractAddress("PendingExposureRouter");
+        pendingExposureRouterAddr = address(0xEC1DCD75ef7a94cD068b82e504ef5D0448E281fe);//deployer.getContractAddress("PendingExposureRouter");
 
         _volumeBase = 1e18;
     }
@@ -313,10 +315,9 @@ contract OptionsExchange is ERC20, ManagedContract {
                         pool.sell(oEx.symbol, _price, oEx.vol);
                         creditProvider.transferBalance(
                             address(this), 
-                            recipient, 
+                            to, 
                             _price.mul(oEx.vol).div(_volumeBase)
                         );
-
                     }
                     //if not covered option
                     if (oEx.isCovered == false) {
@@ -331,37 +332,23 @@ contract OptionsExchange is ERC20, ManagedContract {
                     //TODO: CAN ONLY BUY WITH EXCHANGE BALANCE
                     require (oEi.paymentTokens[i] == address(this), "only with ex bal");
                     uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
-                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
-
-
+                    
                     /*
-                    uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
                     if (oEi.paymentTokens[i] != address(this)) {
                         (uint tv, uint tb) = settings.getTokenRate(oEi.paymentTokens[i]);
                         pvalue = pvalue.mul(tv).div(tb);
                     }
-                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
                     */
+
+                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
+
                     //buy options from pool
                     pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
                     //transfer option token from exchange to user
-                    IERC20_2(oEx._tokens[i]).transfer(recipient, oEx.vol);
-                    
+                    IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
                     oEx._holding[i] = oEx.vol;
                 }
             }
-
-            /*
-            if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
-                //this is handled by pool contract
-            } else {
-                creditProvider.transferBalance(
-                    address(this),
-                    (oEi.isShort[i] == true) ? recipient : oEx.poolAddr, 
-                    _price.mul(oEx.vol).div(_volumeBase)
-                );
-            }
-            */
         }
 
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS
