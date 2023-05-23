@@ -332,17 +332,16 @@ contract OptionsExchange is ERC20, ManagedContract {
                     //TODO: CAN ONLY BUY WITH EXCHANGE BALANCE
                     require (oEi.paymentTokens[i] == address(this), "only with ex bal");
                     uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
-                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
-
-
+                    
                     /*
-                    uint pvalue = _price.mul(oEx.vol).div(_volumeBase);
                     if (oEi.paymentTokens[i] != address(this)) {
                         (uint tv, uint tb) = settings.getTokenRate(oEi.paymentTokens[i]);
                         pvalue = pvalue.mul(tv).div(tb);
                     }
-                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
                     */
+
+                    IERC20_2(oEi.paymentTokens[i]).approve(address(pool), pvalue);
+
                     //buy options from pool
                     pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
                     //transfer option token from exchange to user
@@ -350,18 +349,6 @@ contract OptionsExchange is ERC20, ManagedContract {
                     oEx._holding[i] = oEx.vol;
                 }
             }
-
-            /*
-            if ((msg.sender == oEx.poolAddr) && (oEi.isShort[i] == true)) {
-                //this is handled by pool contract
-            } else {
-                creditProvider.transferBalance(
-                    address(this),
-                    (oEi.isShort[i] == true) ? recipient : oEx.poolAddr, 
-                    _price.mul(oEx.vol).div(_volumeBase)
-                );
-            }*/
-            
         }
 
         //NOTE: MAY NEED TO ONLY COMPUTE THE ONES WRITTEN/BOUGHT HERE FOR GAS CONSTRAINTS

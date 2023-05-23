@@ -119,4 +119,8 @@ interface ID8xPerpetualsContractInterface {
 
     function getLiquidityPools(uint8 _poolFromIdx, uint8 _poolToIdx) external view returns (LiquidityPoolData[] memory);
 
+    function getPerpetualCountInPool(uint8 _poolId) external view returns (uint8);
+
+    function getPerpetualId(uint8 _poolId, uint8 _perpetualIndex) external view returns (uint24);
+
 }
