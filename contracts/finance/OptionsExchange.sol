@@ -315,7 +315,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                         pool.sell(oEx.symbol, _price, oEx.vol);
                         creditProvider.transferBalance(
                             address(this), 
-                            recipient, 
+                            to, 
                             _price.mul(oEx.vol).div(_volumeBase)
                         );
                     }
@@ -345,7 +345,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                     //buy options from pool
                     pool.buy(oEx.symbol, _price, oEx.vol, oEi.paymentTokens[i]);
                     //transfer option token from exchange to user
-                    IERC20_2(oEx._tokens[i]).transfer(recipient, oEx.vol);
+                    IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
                     oEx._holding[i] = oEx.vol;
                 }
             }
