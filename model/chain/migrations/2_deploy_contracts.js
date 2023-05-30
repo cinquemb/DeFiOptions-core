@@ -9,8 +9,6 @@ const CreditToken = artifacts.require("CreditToken");
 const CreditProvider = artifacts.require("CreditProvider");
 const CollateralManager = artifacts.require("CollateralManager");
 const MetavaultHedgingManagerFactory = artifacts.require("MetavaultHedgingManagerFactory");
-const MetavaultPositionManager = artifacts.require("PositionManagerMock");
-const MetavaultReader = artifacts.require("MetavaultReaderMock");
 const OptionTokenFactory = artifacts.require("OptionTokenFactory");
 const OptionsExchange = artifacts.require("OptionsExchange");
 const Incentivized = artifacts.require("Incentivized");
@@ -26,6 +24,8 @@ const YieldTracker = artifacts.require("YieldTracker");
 const UnderlyingVault = artifacts.require("UnderlyingVault");
 
 const ERC20 = artifacts.require("ERC20Mock");
+const ProtocolReader = artifacts.require("ProtocolReader");
+
 
 
 module.exports = async function(deployer) {
@@ -46,6 +46,7 @@ module.exports = async function(deployer) {
   const yt = await deployer.deploy(YieldTracker);
   const uv = await deployer.deploy(UnderlyingVault);
   const id = await deployer.deploy(Incentivized);
+  const pr = await deployer.deploy(ProtocolReader);
   const lasit = await deployer.deploy(LinearAnySlopeInterpolator);
   const creditProvider = await deployer.deploy(CreditProvider);
   console.log("creditProvider is at: "+ creditProvider.address);
@@ -58,29 +59,13 @@ module.exports = async function(deployer) {
   console.log("dexFeedFactory is at: "+ dexFeedFactory.address);
   const collateralManager = await deployer.deploy(CollateralManager);
 
-    /* MOCK BELOW */
-  const metavaultPositionManager = await deployer.deploy(MetavaultPositionManager);
-  console.log("metavaultPositionManager is at: "+ metavaultPositionManager.address);
-  const metavaultReader = await deployer.deploy(MetavaultReader);
-  console.log("metavaultReader is at: "+ metavaultReader.address);
-  /* MOCK ABOVE */
-
   const mvHedgingManagerFactory = await deployer.deploy(
     MetavaultHedgingManagerFactory, 
-    metavaultPositionManager.address, // address _positionManager
-    metavaultReader.address, //address _reader
+    "0x0000000000000000000000000000000000000000", // address _positionManager
+    "0x0000000000000000000000000000000000000000", //address _reader
     "0x0000000000000000000000000000000000000000" //bytes32 _referralCode
   );
   console.log("MetavaultHedgingManagerFactory is at: "+ mvHedgingManagerFactory.address);
-
-  const FakeDAI = await deployer.deploy(ERC20, 18, "FakeDAI");
-  deployer4.setContractAddress("FakeDAI", FakeDAI.address, false);
-  const FakeUSDC = await deployer.deploy(ERC20, 6, "FakeUSDC");
-  deployer4.setContractAddress("FakeUSDC", FakeUSDC.address, false);
-  const FakeBTC = await deployer.deploy(ERC20, 18, "FakeBTC");
-  deployer4.setContractAddress("FakeBTC", FakeBTC.address, false);
-  const FakeETH = await deployer.deploy(ERC20, 18, "FakeETH");
-  deployer4.setContractAddress("FakeETH", FakeETH.address, false);
 
   
   await deployer4.setContractAddress("TimeProvider", timeProvider.address);
@@ -100,60 +85,56 @@ module.exports = async function(deployer) {
   await deployer4.setContractAddress("UnderlyingVault", uv.address);
   await deployer4.setContractAddress("Incentivized", id.address);
   await deployer4.setContractAddress("MetavaultHedgingManagerFactory", mvHedgingManagerFactory.address);
+  await deployer4.setContractAddress("ProtocolReader", pr.address);
+
 
   await deployer4.deploy();
 
-  const timeProviderAddress = await deployer4.getContractAddress("TimeProvider");
-  console.log("timeProviderAddress is at: "+ timeProviderAddress);
-  const ProtocolSettingsAddress = await deployer4.getContractAddress("ProtocolSettings");
-  console.log("ProtocolSettingsAddress is at: "+ ProtocolSettingsAddress);
-  const CreditProviderAddress = await deployer4.getContractAddress("CreditProvider");
-  console.log("CreditProviderAddress is at: "+ CreditProviderAddress);
-  const OptionsExchangeAddress = await deployer4.getContractAddress("OptionsExchange");
-  console.log("OptionsExchangeAddress is at: "+ OptionsExchangeAddress);
-  const LinearLiquidityPoolFactoryAddress = await deployer4.getContractAddress("LinearLiquidityPoolFactory");
-  console.log("LinearLiquidityPoolFactoryAddress is at: "+ LinearLiquidityPoolFactoryAddress);
-  const DEXFeedFactoryAddress = await deployer4.getContractAddress("DEXFeedFactory");
-  console.log("DEXFeedFactoryAddress is at: "+ DEXFeedFactoryAddress);
-  const ProposalsManagerAddress = await deployer4.getContractAddress("ProposalsManager");
-  console.log("ProposalsManagerAddress is at: "+ ProposalsManagerAddress);
-  const GovTokenAddress = await deployer4.getContractAddress("GovToken");
-  console.log("GovTokenAddress is at: "+ GovTokenAddress);
-  const MetavaultHedgingManagerFactoryAddress = await deployer4.getContractAddress("MetavaultHedgingManagerFactory");
-  console.log("MetavaultHedgingManagerFactoryAddress is at: "+ MetavaultHedgingManagerFactoryAddress);
+  let settingContractsProxy = [
+    {name:"ProtocolSettings", addr: null},
+    {name:"TimeProvider", addr: null},
+    {name:"CreditProvider", addr: null},
+    {name:"CreditToken", addr: null},
+    {name:"ProposalsManager", addr: null},
+    {name:"CollateralManager", addr: null},
+    {name:"OptionsExchange", addr: null},
+    {name:"OptionTokenFactory", addr: null},
+    {name:"GovToken", addr: null},
+    {name:"LinearLiquidityPoolFactory", addr: null},
+    {name:"DEXFeedFactory", addr: null},
+    {name:"Interpolator", addr: null},
+    {name:"YieldTracker", addr: null},
+    {name:"UnderlyingVault", addr: null},
+    {name:"Incentivized", addr: null},
+    {name:"MetavaultHedgingManagerFactory", addr: null},
+    {name:"ProtocolReader", addr:null}
+  ];
 
+  for(let node of settingContractsProxy){
+      let proxAddr = await d.getContractAddress(node.name); 
+      console.log(node.name + ": "+ proxAddr);
+  }
 
   /* MOCK BELOW */
+
+  const FakeDAI = await deployer.deploy(ERC20, 18, "FakeDAI");
+  const FakeUSDC = await deployer.deploy(ERC20, 6, "FakeUSDC");
+  const FakeBTC = await deployer.deploy(ERC20, 18, "FakeBTC");
+  const FakeETH = await deployer.deploy(ERC20, 18, "FakeETH");
+
+  const FakeDAI = await deployer.deploy(ERC20, 18, "FakeDAI");
+  console.log("FakeDAI is at: "+ FakeDAI.address);
+  const FakeUSDC = await deployer.deploy(ERC20, 6, "FakeUSDC");
+  console.log("FakeUSDC is at: "+ FakeUSDC.address);
+  const FakeBTC = await deployer.deploy(ERC20, 18, "FakeBTC");
+  console.log("FakeBTC is at: "+ FakeBTC.address);
+  const FakeETH = await deployer.deploy(ERC20, 18, "FakeETH");
+  console.log("FakeETH is at: "+ FakeETH.address);
+
   const BTCUSDAgg = await deployer.deploy(AggregatorV3Mock);
   console.log("BTCUSDAgg is at: "+ BTCUSDAgg.address);
   const ETHUSDAgg = await deployer.deploy(AggregatorV3Mock);
   console.log("ETHUSDAgg is at: "+ ETHUSDAgg.address);
-  /* MOCK ABOVE */
-
-  const BTCProxyAddr = await deployer4.getContractAddress("FakeBTC");
-  const ETHProxyAddr = await deployer4.getContractAddress("FakeETH");
-
-  const BTCUSDMockFeed = await deployer.deploy(
-    MockChainLinkFeed, 
-    "BTC/USD",
-    BTCProxyAddr, //underlying address on the chain
-    BTCUSDAgg.address,//btc/usd feed mock or chainlink agg
-    timeProvider.address, //time provider address
-    0,//offset
-    [],
-    []
-  );
-  console.log("BTCUSDMockFeed is at: "+ BTCUSDMockFeed.address);
-
-  const ETHUSDMockFeed = await deployer.deploy(
-    MockChainLinkFeed, 
-    "ETH/USD", 
-    ETHProxyAddr, // underlying addrsss on the chain
-    ETHUSDAgg.address, //eth/usd feed mock or chainlink agg
-    timeProvider.address, //time provider address
-    0,//offset
-    [],
-    []
-  );
-  console.log("ETHUSDMockFeed is at: "+ ETHUSDMockFeed.address);
+  const USDCAgg = await deployer.deploy(AggregatorV3Mock);
+  console.log("USDCAgg is at: "+ USDCAgg.address);
 };
