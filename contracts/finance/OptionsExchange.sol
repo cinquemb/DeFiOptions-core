@@ -304,7 +304,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             if (oEi.isShort[i] == true) {
                 //sell options
                 if (oEx.vol > 0) {
-                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to, recipient);
+                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to, recipient, oEx.isRehypothicate, oEx.rehypothicationManager);
                     if (msg.sender == oEx.poolAddr){
                         //if the pool is the one writing the option to a user, transfer from exchange to user
                         IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
@@ -363,6 +363,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         oEx.vol = oEi.volume[index];
         oEx.isCovered = oEi.isCovered[index];
         oEx.poolAddr = oEi.poolAddrs[index];
+        oEx.isRehypothicate = oEi.isRehypothicated[index];
+        oEx.rehypothicationManager = oEi.rehypothicationManagers[index];
 
         return oEx;
     }
@@ -372,7 +374,9 @@ contract OptionsExchange is ERC20, ManagedContract {
         bool isCovered,
         uint volume,
         address to,
-        address recipient
+        address recipient,
+        bool isRehypothicate,
+        address rehypothicationManager
     ) private {
         address _tk = tokenAddress[symbol];
         IOptionToken tk = IOptionToken(_tk);
@@ -398,7 +402,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)
             );
-            vault.lock(recipient, _tk, volume);
+            vault.lock(recipient, _tk, volume, isRehypothicate, rehypothicationManager);
         }
         emit WriteOptions(_tk, recipient, to, volume);
     }

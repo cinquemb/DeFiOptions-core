@@ -18,6 +18,8 @@ contract UnderlyingVault is ManagedContract {
     using SafeMath for uint;
     using SignedSafeMath for int;
 
+    uint private fractionBase = 1e9;
+
     TimeProvider private time;
     IProtocolSettings private settings;
     ICreditProvider private creditProvider;
@@ -28,7 +30,15 @@ contract UnderlyingVault is ManagedContract {
     mapping(address => bool) private _isRehypothicate;
     mapping(address => mapping(address => uint)) private allocation;
     mapping(address => mapping(address => mapping(address => uint))) private _rehypothecationAllocation;//token->protocol->user->amount
-    mapping(address => mapping(address => uint)) private _activeUserRehypothicationProtocol;//token->user->active protocol
+    mapping(address => mapping(address => address)) private _activeUserRehypothicationProtocol;//token->user->active protocol
+
+    mapping(address => uint256) _totalSupply;
+
+    struct tsVars {
+        uint balR;
+        uint valR;
+        uint rBalR;
+    }
 
 
     event Lock(address indexed owner, address indexed token, uint value);
@@ -65,6 +75,36 @@ contract UnderlyingVault is ManagedContract {
         return allocation[owner][token];
     }
 
+    function totalSupply(address token) public view returns (uint) {
+        return _totalSupply[token];
+    }
+
+    function balanceOfRehypothicatedShares(address owner, address token, address rehypothicationManager) public view returns (uint) {
+        return _rehypothecationAllocation[token][rehypothicationManager][owner];
+    }
+
+    function addUnderlyingShareBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
+        _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].add(v);
+        _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].add(v);
+    }
+
+    function removeUnderlyingSharesBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
+        _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].sub(v);
+        _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].sub(v);
+    }
+
+    function totalSupplyRehypothicated(address token, address rehypothicationManager) public view returns (uint) {
+        return _totalSupplyRehypothicated[token][rehypothicationManager];
+    }
+
+    function addUnderlyingSupplyRehypothicated(address token, address rehypothicationManager, uint value) private {
+        _totalSupplyRehypothicated[token][rehypothicationManager] = _totalSupplyRehypothicated[token][rehypothicationManager].add(value);
+    }
+
+    function removeUnderlyingSupplyRehypothicated(address token, address rehypothicationManager, uint value) private {
+        _totalSupplyRehypothicated[token][rehypothicationManager] = _totalSupplyRehypothicated[token][rehypothicationManager].sub(value);
+    }
+
     function lock(address owner, address token, uint value, bool isRehypothicate, address rehypothicationManager) external {
 
         ensureCaller();
@@ -73,25 +113,27 @@ contract UnderlyingVault is ManagedContract {
         require(token != address(0), "invalid token");
 
         allocation[owner][token] = allocation[owner][token].add(value);
+        _totalSupply[token] = _totalSupply[token].add(value);
+
+        //TODO: CHECK VALID REHYPOTHICATION MANAGER
+        //TODO: CHECK THAT ONLY ONE MANAGER IS CURRENTLY IN USE
+        //TODO: UNSET MANAGER IF ALL SHARES ARE LIQUIDATED
 
         if (isRehypothicate == true) {
             _isRehypothicate[owner] = true;
             _activeUserRehypothicationProtocol[token][owner] = rehypothicationManager;
-            uint b0 = _totalSupplyRehypothicated[token][rehypothicationManager];
-            _totalSupplyRehypothicated[token][rehypothicationManager] = _totalSupplyRehypothicated[token][rehypothicationManager].add(value);
-            uint b1 = _totalSupplyRehypothicated[token][rehypothicationManager];
+            uint b0 = totalSupplyRehypothicated(token, rehypothicationManager);
+            addUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
+            uint b1 = totalSupplyRehypothicated(token, rehypothicationManager);
             uint p = b1.sub(b0).mul(fractionBase).div(b1);
             uint b = 1e3;
-            uint v = _totalSupplyRehypothicated[token][rehypothicationManager] > 0 ?
-                _totalSupplyRehypothicated[token][rehypothicationManager].mul(p).mul(b).div(fractionBase.sub(p)) : 
+            uint v = totalSupplyRehypothicated(token, rehypothicationManager) > 0 ?
+                totalSupplyRehypothicated(token, rehypothicationManager).mul(p).mul(b).div(fractionBase.sub(p)) : 
                 b1.mul(b);
             v = MoreMath.round(v, b);
 
-            addUnderlyingShareBalanceRehypothicated(owner, v, token);
-            _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].add(v);
-
-            //TODO: need to properly track total balance of token  - total balance not rehypothicated
-
+            addUnderlyingShareBalanceRehypothicated(owner, token, rehypothicationManager, v);
+            
         }
 
         emit Lock(owner, token, value);
@@ -141,11 +183,27 @@ contract UnderlyingVault is ManagedContract {
             );
             
             allocation[owner][token] = allocation[owner][token].sub(_in);
+            _totalSupply[token] = _totalSupply[token].sub(_in);
+
+            if (_isRehypothicate[owner] == true){
+                address rehypothicationManager = _activeUserRehypothicationProtocol[token][owner];
+
+                if (rehypothicationManager != address(0)) {
+                    tsVars memory tsv;
+                    tsv.balR = balanceOfRehypothicatedShares(owner, token, rehypothicationManager);
+                    tsv.valR = valueOfRehypothicatedShares(owner, token, rehypothicationManager);
+                    tsv.rBalR = _in.mul(tsv.balR).div(tsv.valR);
+
+                    removeUnderlyingSharesBalanceRehypothicated(owner, token, rehypothicationManager, tsv.rBalR);
+                    removeUnderlyingSupplyRehypothicated(token, rehypothicationManager, _in);
+                }
+            }
+
             emit Liquidate(owner, token, _in, _out);
         }
     }
 
-    function valueOfRehypothicatedShares(address ownr, adddress token, address rehypothicationManager) public view returns (uint) {
+    function valueOfRehypothicatedShares(address ownr, address token, address rehypothicationManager) public view returns (uint) {
         uint bal = _totalSupplyShareRehypothicated[token][rehypothicationManager];
         uint balOwnr = balanceOfRehypothicatedShares(ownr, token, rehypothicationManager);
         return uint(int(bal))
@@ -166,6 +224,8 @@ contract UnderlyingVault is ManagedContract {
         if (bal > 0) {
 
             allocation[owner][token] = bal.sub(value);
+            _totalSupply[token] = _totalSupply[token].sub(value);
+
             address underlying = UnderlyingFeed(feed).getUnderlyingAddr();
 
 
@@ -174,13 +234,9 @@ contract UnderlyingVault is ManagedContract {
 
                 if (rehypothicationManager != address(0)) {
                     uint balR = balanceOfRehypothicatedShares(owner, token, rehypothicationManager);
-                    //require(balR>=amount, "not enough bal");
-                    value = valueOfRehypothicatedShares(owner);
-                    //TODO: WITHDRAW value FROM MONEY MARKET IF NOT ENOUGH IN PROTOCOL?
-                    removeUnderlyingSharesBalanceRehypothicated(owner, balR, token);
-                    _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].sub(balR);
-                    _totalSupplyRehypothicated[token][rehypothicationManager].sub(value);
-                    //TODO: need to properly track total balance of token  - total balance not rehypothicated
+                    value = valueOfRehypothicatedShares(owner, token, rehypothicationManager);
+                    removeUnderlyingSharesBalanceRehypothicated(owner, token, rehypothicationManager, balR);
+                    removeUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
                 }
             }
 

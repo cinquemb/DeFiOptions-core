@@ -21,6 +21,8 @@ interface IOptionsExchange {
         uint vol;
         bool isCovered;
         address poolAddr;
+        bool isRehypothicate;
+        address rehypothicationManager;
         address[] _tokens;
         uint[] _uncovered;
         uint[] _holding;
@@ -33,6 +35,8 @@ interface IOptionsExchange {
         bool[] isCovered;
         address[] poolAddrs;
         address[] paymentTokens;
+        bool[] isRehypothicated;
+        address[] rehypothicationManagers;
     }
 
     function volumeBase() external view returns (uint);
