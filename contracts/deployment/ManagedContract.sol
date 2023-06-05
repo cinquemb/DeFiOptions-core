@@ -9,7 +9,7 @@ import "./Deployer.sol";
 contract ManagedContract {
 
     // ATTENTION: storage variable alignment
-    address private owner;
+    address internal owner;
     address private pendingOwner;
     address private implementation;
     uint private locked; // 1 = Initialized; 2 = Non upgradable

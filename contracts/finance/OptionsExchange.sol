@@ -61,7 +61,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     
     event WithdrawTokens(address indexed from, uint value);
-    event CreatePool(address indexed token, address indexed sender);
+    event CreatePool(address indexed token, address indexed sender, address indexed owner);
     event CreateSymbol(address indexed token, address indexed sender);
     event CreateDexFeed(address indexed feed, address indexed sender);
 
@@ -193,15 +193,15 @@ contract OptionsExchange is ERC20, ManagedContract {
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string calldata nameSuffix, string calldata symbolSuffix) external returns (address pool) {
+    function createPool(string calldata nameSuffix, string calldata symbolSuffix, bool _onlyMintToOwner, address _owner) external returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
-        pool = poolFactory.create(nameSuffix, symbolSuffix);
+        pool = poolFactory.create(nameSuffix, symbolSuffix, _onlyMintToOwner, _owner);
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
 
         poolSymbols.push(symbolSuffix);
-        emit CreatePool(pool, msg.sender);
+        emit CreatePool(pool, msg.sender, _owner);
         return pool;
     }
 

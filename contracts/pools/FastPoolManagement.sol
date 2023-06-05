@@ -110,7 +110,7 @@ contract FastPoolManagement {
 		poolAddr = IOptionsExchange(fpmOrder.optionsExchangeAddr).getPoolAddress(poolName);
 
 		if (poolAddr == address(0)) {
-			poolAddr = IOptionsExchange(fpmOrder.optionsExchangeAddr).createPool(poolName, poolName);
+			poolAddr = IOptionsExchange(fpmOrder.optionsExchangeAddr).createPool(poolName, poolName, false, address(0));
 		}
 
 		// deposit collateral?

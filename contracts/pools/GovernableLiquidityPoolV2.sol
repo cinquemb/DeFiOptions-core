@@ -49,10 +49,11 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     uint internal _hedgeThreshold;
 
     address private _hedgingManagerAddress;
+    bool private onlyMintToOwner;
     
     string[] private optSymbols;
 
-    constructor(string memory _nm, string memory _sb, address _deployAddr)
+    constructor(string memory _nm, string memory _sb, address _deployAddr, bool _onlyMintToOwner, address _owner)
         ERC20(string(abi.encodePacked(_name_prefix, _nm)))
         public
     {    
@@ -66,6 +67,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         tracker = IYieldTracker(Deployer(_deployAddr).getContractAddress("YieldTracker"));
         interpolator = IInterpolator(Deployer(_deployAddr).getContractAddress("Interpolator"));
         proposalManager = IProposalManager(Deployer(_deployAddr).getContractAddress("ProposalsManager"));
+        owner = _owner;
+        onlyMintToOwner = _onlyMintToOwner;
     }
 
     function setParameters(
@@ -158,11 +161,16 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
     }
 
     function depositTokens(address to, address token, uint value) override public {
+
+        if (onlyMintToOwner) {
+            require(to == owner, "bad ownr");
+        }
+
         (uint b0, int po) = getBalanceAndPayout();
         depositTokensInExchange(token, value);
         uint b1 = exchange.balanceOf(address(this));
         
-        tracker.push(int(b0).add(po), b1.sub(b0).toInt256());
+        //tracker.push(int(b0).add(po), b1.sub(b0).toInt256());
 
         int expBal = po.add(int(b1));
         uint p = b1.sub(b0).mul(fractionBase).div(uint(expBal));
@@ -188,17 +196,17 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         uint freeBal = calcFreeBalance();
 
         if (freeBal > 0) {
-            (uint b0, int po) = getBalanceAndPayout();
+            //(uint b0, int po) = getBalanceAndPayout();
             
             exchange.transferBalance(
                 msg.sender, 
                 (discountedValue <= freeBal) ? discountedValue : freeBal
             );
             
-            tracker.push(
+            /*tracker.push(
                 int(b0).add(po), 
                 -(((discountedValue <= freeBal) ? val : freeBal).toInt256())
-            );
+            );*/
         }
         
         removeBalance(msg.sender, amount);
