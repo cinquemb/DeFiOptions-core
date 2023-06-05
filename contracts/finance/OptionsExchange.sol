@@ -43,7 +43,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     mapping(address => uint) public collateral;
 
     mapping(address => IOptionsExchange.OptionData) private options;
-    mapping(address => IOptionsExchange.FeedData) private feeds;
+    mapping(address => IOptionsExchange.FeedData) private feeds;//DEPRICATED
     mapping(address => address[]) private book;
 
     mapping(string => address) private poolAddress;
@@ -161,11 +161,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         ensureFunds(msg.sender);
     }
 
-    function underlyingBalance(address owner, address _tk) external view returns (uint) {
-
-        return vault.balanceOf(owner, _tk);
-    }
-
     function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
 
         uint value;
@@ -194,13 +189,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         tk = optionTokenFactory.create(symbol, udlFeed);
         tokenAddress[symbol] = tk;
         options[tk] = opt;
-
-        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
-        uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
-        feeds[udlFeed] = IOptionsExchange.FeedData(
-            feed.calcLowerVolatility(uint(vol)).toUint120(),
-            feed.calcUpperVolatility(uint(vol)).toUint120()
-        );
 
         emit CreateSymbol(tk, msg.sender);
     }
@@ -522,10 +510,6 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     function burn(address owner, uint value, address _tk) external {
         IOptionToken(_tk).burn(owner, value);
-    }
-
-    function getExchangeFeeds(address udlFeed) external view returns (IOptionsExchange.FeedData memory) {
-        return feeds[udlFeed];
     }
 
     function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory) {

@@ -325,7 +325,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         private
         returns (uint value)
     {
-        IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
+        IOptionsExchange.FeedData memory fd = getFeedData(opt.udlFeed);
         address tkAddr = address(tk);
         uint volume = calcLiquidationVolume(owner, opt, tkAddr, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)

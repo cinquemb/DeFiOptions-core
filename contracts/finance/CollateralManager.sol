@@ -120,7 +120,7 @@ contract CollateralManager is BaseCollateralManager {
                 ).add(
                     int(
                         calcCollateral(
-                            exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
+                            getFeedData(cData.options[i].udlFeed).upperVol,
                             _uncovered[i],
                             cData.options[i]
                         ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
@@ -134,7 +134,7 @@ contract CollateralManager is BaseCollateralManager {
                 ).add(
                     int(
                         calcCollateral(
-                            exchange.getExchangeFeeds(cData.options[i].udlFeed).upperVol,
+                            getFeedData(cData.options[i].udlFeed).upperVol,
                             _uncovered[i],
                             cData.options[i]
                         )
@@ -237,7 +237,7 @@ contract CollateralManager is BaseCollateralManager {
                 ).add(
                     int(
                         calcCollateral(
-                            exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                            getFeedData(opt.udlFeed).upperVol,
                             _uncovered[i],
                             opt
                         ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
@@ -251,7 +251,7 @@ contract CollateralManager is BaseCollateralManager {
                 ).add(
                     int(
                         calcCollateral(
-                            exchange.getExchangeFeeds(opt.udlFeed).upperVol,
+                            getFeedData(opt.udlFeed).upperVol,
                             _uncovered[i],
                             opt
                         )
@@ -277,7 +277,7 @@ contract CollateralManager is BaseCollateralManager {
         uint volume
     ) override external view returns (uint)
     {
-        IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
+        IOptionsExchange.FeedData memory fd = getFeedData(opt.udlFeed);
         if (fd.lowerVol == 0 || fd.upperVol == 0) {
             fd = getFeedData(opt.udlFeed);
         }
