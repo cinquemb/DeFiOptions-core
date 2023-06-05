@@ -115,13 +115,19 @@ contract UnderlyingVault is ManagedContract {
         allocation[owner][token] = allocation[owner][token].add(value);
         _totalSupply[token] = _totalSupply[token].add(value);
 
-        //TODO: CHECK VALID REHYPOTHICATION MANAGER
-        //TODO: CHECK THAT ONLY ONE MANAGER IS CURRENTLY IN USE
-        //TODO: UNSET MANAGER IF ALL SHARES ARE LIQUIDATED
-
         if (isRehypothicate == true) {
             _isRehypothicate[owner] = true;
-            _activeUserRehypothicationProtocol[token][owner] = rehypothicationManager;
+
+            require(settings.isAllowedRehypothicationManager(rehypothicationManager) == true, "rehyM not allowed");
+
+            if (_activeUserRehypothicationProtocol[token][owner] != rehypothicationManager){
+                //needs to be null if diff
+                require(_activeUserRehypothicationProtocol[token][owner] == address(0), "rehyM already in use");
+            } else {
+                //is null addr, set
+                _activeUserRehypothicationProtocol[token][owner] = rehypothicationManager;
+            }
+
             uint b0 = totalSupplyRehypothicated(token, rehypothicationManager);
             addUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
             uint b1 = totalSupplyRehypothicated(token, rehypothicationManager);
@@ -196,6 +202,7 @@ contract UnderlyingVault is ManagedContract {
 
                     removeUnderlyingSharesBalanceRehypothicated(owner, token, rehypothicationManager, tsv.rBalR);
                     removeUnderlyingSupplyRehypothicated(token, rehypothicationManager, _in);
+                    checkAndResetRehypothicationManager(owner, token, rehypothicationManager);
                 }
             }
 
@@ -237,6 +244,7 @@ contract UnderlyingVault is ManagedContract {
                     value = valueOfRehypothicatedShares(owner, token, rehypothicationManager);
                     removeUnderlyingSharesBalanceRehypothicated(owner, token, rehypothicationManager, balR);
                     removeUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
+                    checkAndResetRehypothicationManager(owner, token, rehypothicationManager);
                 }
             }
 
@@ -245,6 +253,14 @@ contract UnderlyingVault is ManagedContract {
             IERC20_2(underlying).safeTransfer(owner, v);
             
             emit Release(owner, token, value);
+        }
+    }
+
+    function checkAndResetRehypothicationManager(address owner, address token, address rehypothicationManager) private {
+        uint balR = balanceOfRehypothicatedShares(owner, token, rehypothicationManager);
+        if (balR == 0) {
+            //unset rehyM
+            _activeUserRehypothicationProtocol[token][owner] = address(0);
         }
     }
 

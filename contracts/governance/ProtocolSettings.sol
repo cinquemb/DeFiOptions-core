@@ -36,6 +36,7 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => bool) private poolSellCreditTradeable;
     mapping(address => bool) private udlIncentiveBlacklist;
     mapping(address => bool) private hedgingManager;
+    mapping(address => bool) private rehypothicationManager;
     mapping(address => bool) private poolCustomLeverage;
     mapping(address => bool) private dexAggIncentiveBlacklist;
     mapping(address => address) private udlCollateralManager;
@@ -534,6 +535,18 @@ contract ProtocolSettings is ManagedContract {
     function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool) {
         return poolCustomLeverage[poolAddr];
     }
+
+    /* REHYPOTHICATION MANAGER SETTINGS */
+
+    function setAllowedRehypothicationManager(address rehyMngr, bool val) external {
+        ensureWritePrivilege();
+        rehypothicationManager[rehyMngr] = val;
+    }
+
+    function isAllowedRehypothicationManager(address rehyMngr) external view returns (bool) {
+            return rehypothicationManager[rehyMngr];
+    }
+
 
     function getPoolCreditTradeable(address poolAddr) external view returns (uint){
         if((poolBuyCreditTradeable[poolAddr] == true) || (poolSellCreditTradeable[poolAddr] == true)) {
