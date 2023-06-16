@@ -85,7 +85,7 @@ contract Base {
 
     function createTrader() internal returns (OptionsTrader) {
 
-        OptionsTrader td = new OptionsTrader(address(exchange), address(time), address(feed));
+        OptionsTrader td = new OptionsTrader(address(exchange), address(settings), address(time), address(feed));
         traders.push(address(td));
         return td;
     }

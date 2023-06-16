@@ -1,6 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "../../../contracts/finance/OptionsExchange.sol";
+import "../../../contracts/governance/ProtocolSettings.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/interfaces/TimeProvider.sol";
 import "../../../contracts/interfaces/UnderlyingFeed.sol";
@@ -12,18 +13,21 @@ contract OptionsTrader {
     OptionsExchange private exchange;
     CreditProvider private creditProvider;
     TimeProvider private time;
+    ProtocolSettings private settings;
     
     address private addr;
     address private feed;
     uint private volumeBase = 1e18;
     
-    constructor(address _exchange, address _credit_provider, address _time, address _feed) public {
+    constructor(address _exchange, address _protocol_settings, address _credit_provider, address _time, address _feed) public {
 
         exchange = OptionsExchange(_exchange);
         creditProvider = CreditProvider(_credit_provider);
+        settings = ProtocolSettings(_protocol_settings);
         time = TimeProvider(_time);
         addr = address(this);
         feed = _feed;
+
     }
     
     function balance() public view returns (uint) {
@@ -37,13 +41,23 @@ contract OptionsTrader {
     }
     
     function withdrawTokens() public {
-        
-        exchange.withdrawTokens(calcSurplus());
+        address[] memory tokens = settings.getAllowedTokens();        
+        uint[] memory amount = new uint[](1); 
+        amount[0] = calcSurplus();
+
+        address[] memory tokenArray = new address[](1); 
+        tokenArray[0] = tokens[0];
+        exchange.withdrawTokens(tokenArray, amount);
     }
     
     function withdrawTokens(uint amount) public {
-        
-        exchange.withdrawTokens(amount);
+        address[] memory tokens = settings.getAllowedTokens();
+        uint[] memory amountArray = new uint[](1); 
+        amountArray[0] = calcSurplus();
+
+        address[] memory tokenArray = new address[](1); 
+        tokenArray[0] = tokens[0];
+        exchange.withdrawTokens(tokenArray ,amountArray);
     }
 
     function writeOption(
@@ -66,6 +80,30 @@ contract OptionsTrader {
         public
         returns (address _tk)
     {
+        /*
+        IOptionsExchange.OpenExposureInputs memory oEi;
+
+        oEi.symbols = new string[](1);
+        oEi.volume = new uint[](1);
+        oEi.isShort = new bool[](1);
+        oEi.isCovered = new bool[](1);
+        oEi.poolAddrs = new address[](1);
+        oEi.paymentTokens = new address[](1);
+
+
+        oEi.symbols[0] = IOptionToken(_tk).symbol();
+        oEi.volume[0] = volume * volumeBase;
+        oEi.isShort[0] = true;
+        oEi.poolAddrs[0] = poolAddr;
+        //oEi.isCovered[0] = false; //expoliting default to save gas
+        //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
+
+
+        exchange.openExposure(
+            oEi,
+            address(this)
+        );*/
+
         _tk = exchange.writeOptions(
             feed,
             volume * volumeBase,
