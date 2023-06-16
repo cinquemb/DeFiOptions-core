@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
-import "truffle/DeployedAddresses.sol";
+//import "truffle/DeployedAddresses.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/OptionToken.sol";
@@ -51,10 +51,12 @@ contract Base {
     uint120[] x;
     uint120[] y;
     string symbol = "ETHM-EC-55e19-2592e3";
-    
+
+    Deployer deployer = new Deployer(address(0));
+
     function beforeEachDeploy() public {
 
-        Deployer deployer = Deployer(DeployedAddresses.Deployer());
+        //Deployer deployer = Deployer(DeployedAddresses.Deployer());
         deployer.reset();
         deployer.deploy(address(this));
         time = TimeProviderMock(deployer.getContractAddress("TimeProvider"));

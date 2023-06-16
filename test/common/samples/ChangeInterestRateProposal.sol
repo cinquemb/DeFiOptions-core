@@ -16,7 +16,7 @@ contract ChangeInterestRateProposal is Proposal {
         Proposal.Quorum _quorum,
         Proposal.VoteType  _voteType,
         uint expiresAt
-    ) public Proposal(_implementation, _govToken, _manager, _settings, _quorum, _voteType, expiresAt)
+    ) public Proposal(_implementation, _govToken, _manager, _settings, _quorum, _voteType, expiresAt) {}
     
     function setInterestRate(uint ir, uint b) public {
 

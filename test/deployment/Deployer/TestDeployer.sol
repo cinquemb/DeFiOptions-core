@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
-import "truffle/DeployedAddresses.sol";
+//import "truffle/DeployedAddresses.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../common/mock/ERC20Mock.sol";
 import "../../common/mock/EthFeedMock.sol";
@@ -10,6 +10,8 @@ import "../../common/mock/TimeProviderMock.sol";
 import "../../common/mock/UniswapV2RouterMock.sol";
 
 contract TestDeployer {
+
+    Deployer d_g = new Deployer(address(0));
 
     function testContractInitialization() public {
 
@@ -148,9 +150,7 @@ contract TestDeployer {
 
     function testMigrationInitialization() public {
 
-        Deployer d = Deployer(DeployedAddresses.Deployer());
-        
-        d.deploy();
+        d_g.deploy();
     }
 
     function getImplementation(Proxy p) private view returns (address) {

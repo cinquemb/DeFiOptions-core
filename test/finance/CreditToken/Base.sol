@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
-import "truffle/DeployedAddresses.sol";
+//import "truffle/DeployedAddresses.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/finance/CreditToken.sol";
@@ -27,9 +27,11 @@ contract Base {
     uint cBase = 1e8; // comparison base
     uint timeBase = 1 hours;
 
+    Deployer deployer = new Deployer(address(0));
+
+
     function beforeEachDeploy() public {
 
-        Deployer deployer = Deployer(DeployedAddresses.Deployer());
         deployer.reset();
         if (!deployer.hasKey("CreditIssuer")) {
             deployer.setContractAddress("CreditIssuer", address(new CreditHolder()));

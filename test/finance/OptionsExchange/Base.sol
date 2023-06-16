@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
-import "truffle/DeployedAddresses.sol";
+//import "truffle/DeployedAddresses.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/finance/CreditToken.sol";
@@ -44,10 +44,13 @@ contract Base {
     
     OptionsExchange.OptionType CALL = OptionsExchange.OptionType.CALL;
     OptionsExchange.OptionType PUT = OptionsExchange.OptionType.PUT;
+
+    Deployer deployer = new Deployer(address(0));
+
     
     function beforeEachDeploy() public {
 
-        Deployer deployer = Deployer(DeployedAddresses.Deployer());
+        //Deployer deployer = Deployer(DeployedAddresses.Deployer());
         deployer.reset();
         deployer.deploy(address(this));
         time = TimeProviderMock(deployer.getContractAddress("TimeProvider"));

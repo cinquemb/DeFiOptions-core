@@ -1,7 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
-import "truffle/DeployedAddresses.sol";
+//import "truffle/DeployedAddresses.sol";
 import "../../../contracts/feeds/ChainlinkFeed.sol";
 import "../../common/mock/AggregatorV3Mock.sol";
 import "../../common/mock/ERC20Mock.sol";
