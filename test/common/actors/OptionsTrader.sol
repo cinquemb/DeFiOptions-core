@@ -4,6 +4,8 @@ import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/interfaces/TimeProvider.sol";
 import "../../../contracts/interfaces/UnderlyingFeed.sol";
+import "../../../contracts/interfaces/IOptionsExchange.sol";
+import "../../../contracts/interfaces/IOptionToken.sol";
 
 contract OptionsTrader {
     
@@ -45,7 +47,7 @@ contract OptionsTrader {
     }
 
     function writeOption(
-        OptionsExchange.OptionType optType,
+        IOptionsExchange.OptionType optType,
         int strike, 
         uint timeTomaturity
     )
@@ -57,7 +59,7 @@ contract OptionsTrader {
 
     function writeOptions(
         uint volume,
-        OptionsExchange.OptionType optType,
+        IOptionsExchange.OptionType optType,
         int strike, 
         uint timeToMaturity
     )
@@ -81,12 +83,12 @@ contract OptionsTrader {
 
     function transferOptions(address to, address _tk, uint volume) public {
 
-        OptionToken(_tk).transfer(to, volume * volumeBase);
+        IOptionToken(_tk).transfer(to, volume * volumeBase);
     }
 
     function burnOptions(address _tk, uint volume) public {
 
-        OptionToken(_tk).burn(volume * volumeBase);
+        IOptionToken(_tk).burn(volume * volumeBase);
     }
     
     function calcCollateral() public view returns (uint) {

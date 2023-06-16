@@ -1,6 +1,8 @@
 pragma solidity >=0.6.0;
 
 import "../../../contracts/governance/Proposal.sol";
+import "../../../contracts/interfaces/IProposalWrapper.sol";
+import "../../../contracts/interfaces/IProtocolSettings.sol";
 
 contract ChangeInterestRateProposal is Proposal {
 
@@ -13,8 +15,8 @@ contract ChangeInterestRateProposal is Proposal {
         address _govToken,
         address _manager,
         address _settings,
-        Proposal.Quorum _quorum,
-        Proposal.VoteType  _voteType,
+        IProposalWrapper.Quorum _quorum,
+        IProposalWrapper.VoteType  _voteType,
         uint expiresAt
     ) public Proposal(_implementation, _govToken, _manager, _settings, _quorum, _voteType, expiresAt) {}
     

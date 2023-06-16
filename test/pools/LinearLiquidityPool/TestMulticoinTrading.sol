@@ -16,7 +16,7 @@ contract TestMulticoinTrading is Base {
 
     function beforeEach() public {
         
-        Deployer deployer = Deployer(DeployedAddresses.Deployer());
+        //Deployer deployer = Deployer(DeployedAddresses.Deployer());
 
         stablecoinA = erc20;
 

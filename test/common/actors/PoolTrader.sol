@@ -3,6 +3,7 @@ pragma solidity >=0.6.0;
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/interfaces/IERC20.sol";
 import "../../../contracts/interfaces/ILiquidityPool.sol";
+import "../../../contracts/interfaces/IOptionsExchange.sol";
 
 contract PoolTrader {
     
@@ -41,7 +42,7 @@ contract PoolTrader {
 
     function writeOptions(
         uint volume,
-        OptionsExchange.OptionType optType,
+        IOptionsExchange.OptionType optType,
         uint strike, 
         uint maturity
     )

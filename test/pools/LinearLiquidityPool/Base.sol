@@ -7,6 +7,7 @@ import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/OptionToken.sol";
 import "../../../contracts/pools/LinearLiquidityPool.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
+import "../../../contracts/interfaces/IOptionsExchange.sol";
 import "../../common/actors/PoolTrader.sol";
 import "../../common/mock/ERC20Mock.sol";
 import "../../common/mock/EthFeedMock.sol";
@@ -41,8 +42,8 @@ contract Base {
     PoolTrader bob;
     PoolTrader alice;
     
-    OptionsExchange.OptionType CALL = OptionsExchange.OptionType.CALL;
-    OptionsExchange.OptionType PUT = OptionsExchange.OptionType.PUT;
+    IOptionsExchange.OptionType CALL = IOptionsExchange.OptionType.CALL;
+    IOptionsExchange.OptionType PUT = IOptionsExchange.OptionType.PUT;
     
     LiquidityPool.Operation NONE = LiquidityPool.Operation.NONE;
     LiquidityPool.Operation BUY = LiquidityPool.Operation.BUY;

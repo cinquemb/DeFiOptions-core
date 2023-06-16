@@ -8,6 +8,7 @@ import "../../../contracts/finance/CreditToken.sol";
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/OptionToken.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
+import "../../../contracts/interfaces/IOptionsExchange.sol";
 import "../../common/actors/OptionsTrader.sol";
 import "../../common/mock/ERC20Mock.sol";
 import "../../common/mock/EthFeedMock.sol";
@@ -42,8 +43,8 @@ contract Base {
     OptionsTrader bob;
     OptionsTrader alice;
     
-    OptionsExchange.OptionType CALL = OptionsExchange.OptionType.CALL;
-    OptionsExchange.OptionType PUT = OptionsExchange.OptionType.PUT;
+    IOptionsExchange.OptionType CALL = IOptionsExchange.OptionType.CALL;
+    IOptionsExchange.OptionType PUT = IOptionsExchange.OptionType.PUT;
 
     Deployer deployer = new Deployer(address(0));
 

@@ -1,6 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "../../../contracts/governance/Proposal.sol";
+import "../../../contracts/interfaces/IProtocolSettings.sol";
 
 contract TransferBalanceProposal is Proposal {
 
@@ -18,7 +19,7 @@ contract TransferBalanceProposal is Proposal {
         return "Transfer Balance";
     }
 
-    function execute(ProtocolSettings settings) public override {
+    function execute(IProtocolSettings settings) public override {
         
         require(amount > 0, "amount not set");
         settings.transferBalance(address(this), amount);
