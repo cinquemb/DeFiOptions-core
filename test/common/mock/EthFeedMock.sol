@@ -59,4 +59,17 @@ contract EthFeedMock is ManagedContract, UnderlyingFeed {
 
         upperVol = vol * 5;
     }
+
+    function getDailyVolatilityCached(uint timespan) override external view returns (uint vol, bool cached) { uint vol; bool cached; }
+
+    function getPrivledgedPublisherKeeper() override external view returns (address) { return address(0); }
+
+    function getUnderlyingAggAddr() override external view returns (address) { return address(0); }
+    
+    function prefetchDailyPrice(uint roundId) override external {}
+    
+    function prefetchDailyVolatility(uint timespan) override external {}
+    
+    function prefetchSample() override external {}
+
 }

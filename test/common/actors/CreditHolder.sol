@@ -27,8 +27,8 @@ contract CreditHolder is ManagedContract {
         creditToken.transfer(to, amount);
     }
 
-    function requestWithdraw(uint value) public {
+    function requestWithdraw() public {
 
-        creditToken.requestWithdraw(value);
+        creditToken.requestWithdraw();
     }
 }

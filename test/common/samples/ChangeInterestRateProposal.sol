@@ -39,4 +39,6 @@ contract ChangeInterestRateProposal is Proposal {
         require(interestRate > 0, "interest rate value not set");
         settings.setDebtInterestRate(interestRate, interestRateBase);
     }
+
+    function executePool(IERC20 _llp) public override {}
 }

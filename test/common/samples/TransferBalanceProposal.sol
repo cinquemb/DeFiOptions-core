@@ -24,4 +24,6 @@ contract TransferBalanceProposal is Proposal {
         require(amount > 0, "amount not set");
         settings.transferBalance(address(this), amount);
     }
+
+    function executePool(IERC20 _llp) public override {}
 }
