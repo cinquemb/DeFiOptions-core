@@ -68,6 +68,8 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         collateralCallPeriod = 1 days;
     }
 
+    //TODO: collateralSkew(address underlying), need to access from vault, factor into calcCollateral calls
+
     function collateralSkew() private view returns (int) {
         // core across all collateral models
         /*
@@ -353,6 +355,16 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
                 uint256 creditingValue = value.mul(5).div(100);
                 creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
                 creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+
+                /*
+                    TODO: 
+                    - if no exchange dollar shortfall, but collateral shortfall still exists, 
+                        - dex swap (if shortage of stable coins)
+                            - use creditProvider stablecoins  to swap using defined swap path for collateral
+                                - see vault swap code
+                        - internal swap exchange (if surplus of stablecoins) dollars for liquidation amount? (Swap token debt for more exchange dollar debt)
+                        
+                */
             }
 
             if (volume > 0) {

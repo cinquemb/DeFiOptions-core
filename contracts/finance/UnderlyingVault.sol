@@ -33,6 +33,8 @@ contract UnderlyingVault is ManagedContract {
     mapping(address => mapping(address => address)) private _activeUserRehypothicationProtocol;//token->user->active protocol
 
     mapping(address => uint256) _totalSupply;
+    //todo, need to modify when creating
+    mapping(address => address) _underlyingCreditProvider;
 
     struct tsVars {
         uint balR;
@@ -77,6 +79,10 @@ contract UnderlyingVault is ManagedContract {
 
     function totalSupply(address token) public view returns (uint) {
         return _totalSupply[token];
+    }
+
+    function getUnderlyingCreditProvider(address token) public view returns (address) {
+        return _underlyingCreditProvider[token];
     }
 
     function balanceOfRehypothicatedShares(address owner, address token, address rehypothicationManager) public view returns (uint) {
@@ -246,6 +252,8 @@ contract UnderlyingVault is ManagedContract {
                     removeUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
                     checkAndResetRehypothicationManager(owner, token, rehypothicationManager);
                 }
+
+                //TODO: - issue erc20 collateral credit token for shortfall (when closing covered rehypothicated position) that can be redeemed for underlying
             }
 
             

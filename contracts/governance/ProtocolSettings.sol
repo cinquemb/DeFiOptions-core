@@ -547,6 +547,10 @@ contract ProtocolSettings is ManagedContract {
             return rehypothicationManager[rehyMngr];
     }
 
+    function createUnderlyingCreditManagement() external {
+        //TODO: initiliaze underlyingCrditProvider and underlyingCrdeditToken? create both here using manager interfaces
+    }
+
 
     function getPoolCreditTradeable(address poolAddr) external view returns (uint){
         if((poolBuyCreditTradeable[poolAddr] == true) || (poolSellCreditTradeable[poolAddr] == true)) {
