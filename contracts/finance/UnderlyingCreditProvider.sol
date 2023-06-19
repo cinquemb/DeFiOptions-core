@@ -5,6 +5,7 @@ import "../deployment/Deployer.sol";
 import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/ICreditToken.sol";
+import "../interfaces/UnderlyingFeed.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
@@ -25,8 +26,9 @@ contract UnderlyingCreditProvider {
     mapping(address => uint) private debtsDate;
     mapping(address => uint) private primeCallers;
 
-
+    address private vaultAddr;
     address private exchangeAddr;
+    address private udlAssetAddr;
 
     uint private _totalDebt;
     uint private _totalOwners;
@@ -48,13 +50,14 @@ contract UnderlyingCreditProvider {
 
     //TODO: needs to come from constructor
 
-    constructor(address _deployAddr, address _poolAddr) public {
+    constructor(address _deployAddr, address _udlFeedAddr) public {
         Deployer deployer = Deployer(_deployAddr);
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
-        address vaultAddr = deployer.getContractAddress("UnderlyingVault");
+        vaultAddr = deployer.getContractAddress("UnderlyingVault");
         address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
 
+        udlAssetAddr = UnderlyingFeed(_udlFeedAddr).getUnderlyingAddr();
         primeCallers[exchangeAddr] = 1;
         primeCallers[address(settings)] = 1;
         primeCallers[vaultAddr] = 1;
@@ -69,14 +72,8 @@ contract UnderlyingCreditProvider {
     }
 
     function totalTokenStock() external view returns (uint v) {
-        //TODO: needs to calculate based on vault balance for particular token
-
-        address[] memory tokens = settings.getAllowedTokens();
-        for (uint i = 0; i < tokens.length; i++) {
-            (uint r, uint b) = settings.getTokenRate(tokens[i]);
-            uint value = IERC20_2(tokens[i]).balanceOf(address(this));
-            v = v.add(value.mul(b).div(r));
-        }
+        //TODO: needs to calculate based on vault balance for particular token, minus whats is not available for rehypothocation
+        v = IERC20_2(udlAssetAddr).balanceOf(vaultAddr);
     }
 
     function totalAccruedFees() external view returns (uint) {

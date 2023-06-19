@@ -20,7 +20,6 @@ contract UnderlyingCreditToken is ERC20 {
 
     mapping(address => uint) private creditDates;
 
-    //TODO: set prefixes
     string private constant _name_prefix = "DeFi Options DAO Credit Token: ";
     string private constant _symbol_prefix = "DODv2-CDTK-";
 
@@ -28,8 +27,6 @@ contract UnderlyingCreditToken is ERC20 {
     string private _symbol;
 
     address private issuer;
-    address private headAddr;
-    address private tailAddr;
 
     uint private serial;
 
@@ -45,7 +42,7 @@ contract UnderlyingCreditToken is ERC20 {
     function initialize(address underlyingCreditProvider) external {
         require(msg.sender == address(settings), "init not allowed");
         creditProvider = ICreditProvider(underlyingCreditProvider);
-        issuer = address(creditProvider);
+        issuer = underlyingCreditProvider;
     }
 
     function name() override external view returns (string memory) {
@@ -74,7 +71,6 @@ contract UnderlyingCreditToken is ERC20 {
 
     function requestWithdraw() external {
         uint b = creditProvider.totalTokenStock();
-        //TODO: needs to come from vault
 
         require(b > 0, "CDTK: please wait to redeem");
         /*

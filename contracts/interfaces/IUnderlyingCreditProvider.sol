@@ -2,6 +2,7 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 interface IUnderlyingCreditProvider {
+    function initialize(address _udlCdtk) external;
     function addBalance(address to, address token, uint value) external;
     function addBalance(uint value) external;
     function balanceOf(address owner) external view returns (uint);

@@ -8,6 +8,7 @@ import "../interfaces/IUniswapV2Router01.sol";
 import "../interfaces/TimeProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../utils/Convert.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
@@ -58,6 +59,7 @@ contract UnderlyingVault is ManagedContract {
         callers[deployer.getContractAddress("OptionsExchange")] = 1;
         callers[deployer.getContractAddress("CollateralManager")] = 1;
         callers[deployer.getContractAddress("Incentivized")] = 1;
+        callers[address(settings)] = 1;
     }
 
 
@@ -70,6 +72,7 @@ contract UnderlyingVault is ManagedContract {
         callers[deployer.getContractAddress("OptionsExchange")] = 1;
         callers[deployer.getContractAddress("CollateralManager")] = 1;
         callers[deployer.getContractAddress("Incentivized")] = 1;
+        callers[address(settings)] = 1;
     }
 
     function balanceOf(address owner, address token) public view returns (uint) {
@@ -85,6 +88,12 @@ contract UnderlyingVault is ManagedContract {
         return _underlyingCreditProvider[token];
     }
 
+    function setUnderlyingCreditProvider(address token, address udlCreditProviderAddress) external {
+        ensureCaller();
+        require(udlCreditProviderAddress != address(0), "bad udlcdprov");
+        _underlyingCreditProvider[token] = udlCreditProviderAddress;
+    }
+
     function balanceOfRehypothicatedShares(address owner, address token, address rehypothicationManager) public view returns (uint) {
         return _rehypothecationAllocation[token][rehypothicationManager][owner];
     }
@@ -92,11 +101,15 @@ contract UnderlyingVault is ManagedContract {
     function addUnderlyingShareBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
         _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].add(v);
         _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].add(v);
+        //TODO: need to add balacne for user
+        //IUnderlyingCreditProvider(_underlyingCreditProvider[token]).addBalance();
     }
 
     function removeUnderlyingSharesBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
         _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].sub(v);
         _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].sub(v);
+        //TODO: need to remove balacne for user
+        //IUnderlyingCreditProvider(_underlyingCreditProvider[token]).removeBalance();
     }
 
     function totalSupplyRehypothicated(address token, address rehypothicationManager) public view returns (uint) {

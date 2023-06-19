@@ -25,9 +25,6 @@ contract CreditToken is ManagedContract, ERC20 {
     string private constant _symbol = "DODv2-CDTK";
 
     address private issuer;
-    address private headAddr;
-    address private tailAddr;
-
     uint private serial;
 
     constructor() ERC20(_name) public {

@@ -4,11 +4,10 @@ pragma experimental ABIEncoderV2;
 import "../deployment/Deployer.sol";
 import "../deployment/ManagedContract.sol";
 import "./UnderlyingCreditToken.sol";
+import "../interfaces/IERC20Details.sol";
+import "../interfaces/UnderlyingFeed.sol";
 
 contract UnderlyingCreditTokenFactory is ManagedContract {
-
-    address public orderBookAddr;
-    address public perpetualProxy;
 
     address private deployerAddress;
 
@@ -16,44 +15,24 @@ contract UnderlyingCreditTokenFactory is ManagedContract {
         address indexed hedgingManager,
         address indexed pool
     );
-
-    constructor(address _orderBookAddr, address _perpetualProxy) public {
-        orderBookAddr = _orderBookAddr;
-        perpetualProxy = _perpetualProxy;
-    }
     
     function initialize(Deployer deployer) override internal {
         deployerAddress = address(deployer);
     }
 
-    function getRemoteContractAddresses() external view returns (address, address) {
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("orderBookAddr()")));
-        bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("perpetualProxy()")));
-        
-        (, bytes memory returnedData) = getImplementation().staticcall(data);
-        (, bytes memory returnedData1) = getImplementation().staticcall(data1);
-
-        address obAddr = abi.decode(returnedData, (address));
-        address ppAddr = abi.decode(returnedData1, (address));
-
-        require(obAddr != address(0), "bad order book");
-        require(ppAddr != address(0), "bad perp proxy");
-
-        return (obAddr, ppAddr);
-    }
-
-    function create(address _poolAddr) external returns (address) {
+    function create(address _udlFeedAddr) external returns (address) {
         //cant use proxies unless all extenral addrs store here
         require(deployerAddress != address(0), "bad deployer addr");
+        address _udlAsset = UnderlyingFeed(_udlFeedAddr).getUnderlyingAddr();
         address hdgMngr = address(
             new UnderlyingCreditToken(
                 deployerAddress,
-                _poolAddr,
-                "token name",
-                "token symbol"
+                _udlAsset,
+                IERC20Details(_udlAsset).name(),
+                IERC20Details(_udlAsset).symbol()
             )
         );
-        emit NewUnderlyingCreditToken(hdgMngr, _poolAddr);
+        emit NewUnderlyingCreditToken(hdgMngr, _udlAsset);
         return hdgMngr;
     }
 }

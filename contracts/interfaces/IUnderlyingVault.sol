@@ -5,4 +5,6 @@ interface IUnderlyingVault {
     function liquidate(address owner, address token, address feed, uint amountOut) external returns (uint _in, uint _out);
     function release(address owner, address token, address feed, uint value) external;
     function lock(address owner, address token, uint value, bool isRehypothicate, address rehypothicationManage) external;
+    function getUnderlyingCreditProvider(address token) external view returns (address);
+    function setUnderlyingCreditProvider(address token, address udlCreditProviderAddress) external;
 }
