@@ -34,7 +34,6 @@ contract UnderlyingVault is ManagedContract {
     mapping(address => mapping(address => address)) private _activeUserRehypothicationProtocol;//token->user->active protocol
 
     mapping(address => uint256) _totalSupply;
-    //todo, need to modify when creating
     mapping(address => address) _underlyingCreditProvider;
 
     struct tsVars {
@@ -101,15 +100,11 @@ contract UnderlyingVault is ManagedContract {
     function addUnderlyingShareBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
         _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].add(v);
         _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].add(v);
-        //TODO: need to add balacne for user
-        //IUnderlyingCreditProvider(_underlyingCreditProvider[token]).addBalance();
     }
 
     function removeUnderlyingSharesBalanceRehypothicated(address owner, address token, address rehypothicationManager, uint v) private {
         _rehypothecationAllocation[token][rehypothicationManager][owner] = _rehypothecationAllocation[token][rehypothicationManager][owner].sub(v);
         _totalSupplyShareRehypothicated[token][rehypothicationManager] = _totalSupplyShareRehypothicated[token][rehypothicationManager].sub(v);
-        //TODO: need to remove balacne for user
-        //IUnderlyingCreditProvider(_underlyingCreditProvider[token]).removeBalance();
     }
 
     function totalSupplyRehypothicated(address token, address rehypothicationManager) public view returns (uint) {
@@ -149,6 +144,12 @@ contract UnderlyingVault is ManagedContract {
 
             uint b0 = totalSupplyRehypothicated(token, rehypothicationManager);
             addUnderlyingSupplyRehypothicated(token, rehypothicationManager, value);
+            //transfer tokens for rehypothication to credit provider
+            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).depositTokens(
+                owner,
+                token,
+                Convert.from18DecimalsBase(token, value)
+            );
             uint b1 = totalSupplyRehypothicated(token, rehypothicationManager);
             uint p = b1.sub(b0).mul(fractionBase).div(b1);
             uint b = 1e3;
@@ -198,6 +199,12 @@ contract UnderlyingVault is ManagedContract {
                 _stablecoin
             );
 
+            //NEED TO DO THIS BEFORE CALLING `swapUnderlyingForStablecoin` in order to make sure enough token in vault (by transfering all of the users balance to vault, then depositing back to user what was liquidated)
+            uint udlValB = IUnderlyingCreditProvider(_underlyingCreditProvider[token]).balanceOf(owner);
+            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).transferBalance(owner, address(this), udlValB);
+            //NOTE: SHOULD NEVER ANY CREDIT TOKENS BE ISSUED TO UDLVAULT?
+            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).withdrawTokens(address(this), udlValB);
+
             (_in, _out) = swapUnderlyingForStablecoin(
                 owner,
                 router,
@@ -206,9 +213,17 @@ contract UnderlyingVault is ManagedContract {
                 balance,
                 amountOut
             );
-            
+
+            uint udlValO = udlValB.sub(_in);
             allocation[owner][token] = allocation[owner][token].sub(_in);
             _totalSupply[token] = _totalSupply[token].sub(_in);
+
+            //send residual back to owner
+            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).depositTokens(
+                owner,
+                token,
+                Convert.from18DecimalsBase(token, udlValO)
+            );
 
             if (_isRehypothicate[owner] == true){
                 address rehypothicationManager = _activeUserRehypothicationProtocol[token][owner];
@@ -252,9 +267,6 @@ contract UnderlyingVault is ManagedContract {
             allocation[owner][token] = bal.sub(value);
             _totalSupply[token] = _totalSupply[token].sub(value);
 
-            address underlying = UnderlyingFeed(feed).getUnderlyingAddr();
-
-
             if (_isRehypothicate[owner] == true){
                 address rehypothicationManager = _activeUserRehypothicationProtocol[token][owner];
 
@@ -266,12 +278,12 @@ contract UnderlyingVault is ManagedContract {
                     checkAndResetRehypothicationManager(owner, token, rehypothicationManager);
                 }
 
-                //TODO: - issue erc20 collateral credit token for shortfall (when closing covered rehypothicated position) that can be redeemed for underlying
+                IUnderlyingCreditProvider(_underlyingCreditProvider[token]).withdrawTokens(owner, value);
+            } else {
+                address underlying = UnderlyingFeed(feed).getUnderlyingAddr();
+                uint v = Convert.from18DecimalsBase(underlying, value);
+                IERC20_2(underlying).safeTransfer(owner, v);
             }
-
-            
-            uint v = Convert.from18DecimalsBase(underlying, value);
-            IERC20_2(underlying).safeTransfer(owner, v);
             
             emit Release(owner, token, value);
         }

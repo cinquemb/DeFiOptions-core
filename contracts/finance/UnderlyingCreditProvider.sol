@@ -7,6 +7,7 @@ import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/ICreditToken.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../utils/MoreMath.sol";
+import "../utils/Convert.sol";
 import "../utils/SafeERC20.sol";
 import "../utils/SafeMath.sol";
 import "../utils/SignedSafeMath.sol";
@@ -48,8 +49,6 @@ contract UnderlyingCreditProvider {
 
     event AccrueFees(address indexed from, uint value);
 
-    //TODO: needs to come from constructor
-
     constructor(address _deployAddr, address _udlFeedAddr) public {
         Deployer deployer = Deployer(_deployAddr);
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
@@ -72,8 +71,8 @@ contract UnderlyingCreditProvider {
     }
 
     function totalTokenStock() external view returns (uint v) {
-        //TODO: needs to calculate based on vault balance for particular token, minus whats is not available for rehypothocation
-        v = IERC20_2(udlAssetAddr).balanceOf(vaultAddr);
+        uint value = IERC20_2(udlAssetAddr).balanceOf(address(this));
+        v = Convert.to18DecimalsBase(udlAssetAddr, value);
     }
 
     function totalAccruedFees() external view returns (uint) {
@@ -123,7 +122,6 @@ contract UnderlyingCreditProvider {
     }
     
     function depositTokens(address to, address token, uint value) external {
-        //TODO: where should this be called from? vault? collateral manager? rehypothication manager?
         IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
@@ -199,9 +197,8 @@ contract UnderlyingCreditProvider {
                 ensurePrimeCaller();
             }
             
-            (uint r, uint b) = settings.getTokenRate(token);
-            require(r != 0 && token != address(creditToken), "token not allowed");
-            value = value.mul(b).div(r);
+            require(token != address(creditToken), "token not allowed");
+            value = Convert.to18DecimalsBase(token, value);
             addBalance(to, value);
             emit TransferBalance(address(0), to, value);
         }
@@ -288,20 +285,20 @@ contract UnderlyingCreditProvider {
     }
 
     function transferTokens(address to, uint value) private {
-        //TODO: limit to underlying token when setup
         require(to != address(this) && to != address(creditToken), "invalid token transfer address");
 
-        address[] memory tokens = settings.getAllowedTokens();
-        for (uint i = 0; i < tokens.length && value > 0; i++) {
-            IERC20_2 t = IERC20_2(tokens[i]);
-            (uint r, uint b) = settings.getTokenRate(tokens[i]);
-            if (b != 0) {
-                uint v = MoreMath.min(value, t.balanceOf(address(this)).mul(b).div(r));
-                t.safeTransfer(to, v.mul(r).div(b));
-                emit WithdrawTokens(to, tokens[i], v.mul(r).div(b));
-                value = value.sub(v);
-            }
-        }
+        IERC20_2 t = IERC20_2(udlAssetAddr);
+
+        uint v = MoreMath.min(
+            value,
+            Convert.to18DecimalsBase(udlAssetAddr, t.balanceOf(address(this)))
+        );
+        t.safeTransfer(
+            to, 
+            Convert.from18DecimalsBase(udlAssetAddr, v)
+        );
+        emit WithdrawTokens(to, udlAssetAddr, Convert.from18DecimalsBase(udlAssetAddr, v));
+        value = value.sub(v);
         
         if (value > 0) {
             issueCreditTokens(to, value);

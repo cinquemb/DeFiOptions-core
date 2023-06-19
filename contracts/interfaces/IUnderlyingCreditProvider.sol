@@ -12,6 +12,7 @@ interface IUnderlyingCreditProvider {
     function getTotalBalance() external view returns (uint);
     function processPayment(address from, address to, uint value) external;
     function transferBalance(address from, address to, uint value) external;
+    function depositTokens(address to, address token, uint value) external;
     function withdrawTokens(address owner, uint value) external;
     function issueCredit(address to, uint value) external;
     function processEarlyLpWithdrawal(address to, uint credit) external;

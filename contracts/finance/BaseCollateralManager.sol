@@ -10,10 +10,14 @@ import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IOptionToken.sol";
 import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/IBaseCollateralManager.sol";
+import "../interfaces/IUniswapV2Router01.sol";
 import "../utils/SafeCast.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Decimal.sol";
+import "../utils/Convert.sol";
+import "../utils/SafeERC20.sol";
 
 abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManager {
 
@@ -21,6 +25,8 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     using SafeMath for uint;
     using SignedSafeMath for int;
     using Decimal for Decimal.D256;
+    using SafeERC20 for IERC20_2;
+
     
     IUnderlyingVault private vault;
     IProtocolSettings internal settings;
@@ -68,7 +74,51 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         collateralCallPeriod = 1 days;
     }
 
-    //TODO: collateralSkew(address underlying), need to access from vault, factor into calcCollateral calls
+    function collateralSkew(address underlyingFeed) private view returns (int) {
+        // core across all collateral models
+        /*
+            This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account;
+        */
+
+        address underlying = UnderlyingFeed(underlyingFeed).getUnderlyingAddr();
+        if (underlying == address(0)) {
+            return 0;
+        }
+        
+        (,int answer) = UnderlyingFeed(underlyingFeed).getLatestPrice();
+        address udlCdtp = vault.getUnderlyingCreditProvider(underlying);
+        int totalUnderlyingBalance = int(IUnderlyingCreditProvider(udlCdtp).totalTokenStock()); // underlying token balance
+        int totalUnderlyingCreditBalance = int(IUnderlyingCreditProvider(udlCdtp).getTotalBalance()); // credit balance
+        int totalOwners = int(creditProvider.getTotalOwners()).add(1);
+        //need to multiple by latest price of asset to normalize into exchange balance amount
+        int skew = totalUnderlyingCreditBalance.sub(totalUnderlyingBalance).mul(answer).div(int(_volumeBase));
+
+        // try to split between if short underlying tokens
+        return skew.div(totalOwners);  
+    }
+
+    function collateralSkewForPositionUnderlying(int coll, address underlyingFeed) internal view returns (int) {
+        // core across all collateral models, only apply residual
+        int modColl;
+        int skew = collateralSkew(underlyingFeed);
+        Decimal.D256 memory skewPct;
+        if (skew != 0){
+            skewPct = Decimal.ratio(uint(coll), MoreMath.abs(skew));
+        } else {
+            skewPct = Decimal.zero();
+        }
+
+        if (skewPct.greaterThanOrEqualTo(Decimal.one())) {
+            modColl = skew;
+        } else {
+            // shortag per addr exceeds underlying collateral reqs, only add percentage increase of underlying collateral reqs, never reduce collateral requirements for positions covered by underlying
+
+            int modSkew = int(Decimal.mul(skewPct, uint(coll)).asUint256());
+            modColl = (skew >= 0) ? modSkew : 0;
+        }
+
+        return modColl;
+    }
 
     function collateralSkew() private view returns (int) {
         // core across all collateral models
@@ -356,15 +406,45 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
                 creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
                 creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
 
-                /*
-                    TODO: 
-                    - if no exchange dollar shortfall, but collateral shortfall still exists, 
-                        - dex swap (if shortage of stable coins)
-                            - use creditProvider stablecoins  to swap using defined swap path for collateral
-                                - see vault swap code
-                        - internal swap exchange (if surplus of stablecoins) dollars for liquidation amount? (Swap token debt for more exchange dollar debt)
+                
+
+                if ((collateralSkew() <= 0) && (collateralSkew(opt.udlFeed) > 0)) {
+                    /*
+                        TODO: - if no exchange dollar shortfall, but collateral shortfall still exists, 
+                                - dex swap (if shortage of stable coins)
+                                    - use creditProvider stablecoins  to swap using defined swap path for collateral
+                                    - see vault swap code
                         
-                */
+                    */
+
+                    (address _router, address _stablecoin) = settings.getSwapRouterInfo();
+                    require(
+                        _router != address(0) && _stablecoin != address(0),
+                        "invalid swap router settings"
+                    );
+
+                    IUniswapV2Router01 router = IUniswapV2Router01(_router);
+                    (, int p) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
+
+                    address[] memory path = settings.getSwapPath(
+                        _stablecoin,
+                        UnderlyingFeed(opt.udlFeed).getUnderlyingAddr()
+                    );
+
+                    //TODO: transfer stables to collateral manager befoe swap
+                    /*
+                    (_in, _out) = swapStablecoinForUnderlying(
+                        owner,
+                        router,
+                        path,
+                        p,
+                        balance,
+                        amountOut
+                    );
+                    */
+                    //TODO: transfer underlying to underlying credit provider
+
+                }
             }
 
             if (volume > 0) {
@@ -405,6 +485,71 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         if (coll < 0)
             return 0;
         return uint(coll);
+    }
+
+    function swapUnderlyingForStablecoin(
+        address owner,
+        IUniswapV2Router01 router,
+        address[] memory path,
+        int price,
+        uint balance,
+        uint amountOut
+    )
+        private
+        returns (uint _in, uint _out)
+    {
+        require(path.length >= 2, "invalid swap path");
+        
+        (uint r, uint b) = settings.getTokenRate(path[path.length - 1]);
+
+        uint udlBalance = Convert.from18DecimalsBase(path[0], balance);
+        
+        uint amountInMax = getAmountInMax(
+            price,
+            amountOut,
+            path
+        );
+
+        if (amountInMax > udlBalance) {
+            amountOut = amountOut.mul(udlBalance).div(amountInMax);
+            amountInMax = udlBalance;
+        }
+
+        IERC20_2 tk = IERC20_2(path[0]);
+        if (tk.allowance(address(this), address(router)) > 0) {
+            tk.safeApprove(address(router), 0);
+        }
+        tk.safeApprove(address(router), amountInMax);
+
+        _out = amountOut;
+        _in = router.swapTokensForExactTokens(
+            amountOut.mul(r).div(b),
+            amountInMax,
+            path,
+            address(creditProvider),
+            settings.exchangeTime()
+        )[0];
+        _in = Convert.to18DecimalsBase(path[0], _in);
+
+        if (amountOut > 0) {
+            creditProvider.addBalance(owner, path[path.length - 1], amountOut.mul(r).div(b));
+        }
+    }
+
+    function getAmountInMax(
+        int price,
+        uint amountOut,
+        address[] memory path
+    )
+        private
+        view
+        returns (uint amountInMax)
+    {
+        uint8 d = IERC20Details(path[0]).decimals();
+        amountInMax = amountOut.mul(10 ** uint(d)).div(uint(price));
+        
+        (uint rTol, uint bTol) = settings.getSwapRouterTolerance();
+        amountInMax = amountInMax.mul(rTol).div(bTol);
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {

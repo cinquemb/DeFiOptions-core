@@ -126,6 +126,11 @@ contract CollateralManager is BaseCollateralManager {
                         ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
                     )
                 );
+
+                //apply coll reqs due to underlying asset shortage
+                cData.coll = cData.coll.add(
+                    collateralSkewForPositionUnderlying(cData.coll, cData.options[i].udlFeed).mul(int(cData.posDeltaNum[i])).div(int(cData.posDeltaDenom[i]))
+                );
             } else if ((_uncovered[i] > _holding[i])) {
                 cData.coll = cData.coll.add(
                     cData._iv[i].mul(
@@ -140,8 +145,11 @@ contract CollateralManager is BaseCollateralManager {
                         )
                     )
                 );
-            }
-            
+                //apply coll reqs due to underlying asset shortage
+                cData.coll = cData.coll.add(
+                    collateralSkewForPositionUnderlying(cData.coll, cData.options[i].udlFeed)
+                );
+            }   
         }
 
         return cData.coll;
@@ -243,6 +251,11 @@ contract CollateralManager is BaseCollateralManager {
                         ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
                     )
                 );
+
+                //apply coll reqs due to underlying asset shortage
+                cData.coll = cData.coll.add(
+                    collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed).mul(int(cData.posDeltaNum[i])).div(int(cData.posDeltaDenom[i]))
+                );
             } else if ((_uncovered[i] > _holding[i])) {
                 cData.coll = cData.coll.add(
                     _iv[i].mul(
@@ -256,6 +269,11 @@ contract CollateralManager is BaseCollateralManager {
                             opt
                         )
                     )
+                );
+
+                //apply coll reqs due to underlying asset shortage
+                cData.coll = cData.coll.add(
+                    collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed)
                 );
             }
         }
