@@ -61,6 +61,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint volume
     );
 
+    event DebtSwap(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint volume
+    );
+
     function initialize(Deployer deployer) virtual override internal {
 
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
@@ -406,44 +412,9 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
                 creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
                 creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
 
-                
-
                 if ((collateralSkew() <= 0) && (collateralSkew(opt.udlFeed) > 0)) {
-                    /*
-                        TODO: - if no exchange dollar shortfall, but collateral shortfall still exists, 
-                                - dex swap (if shortage of stable coins)
-                                    - use creditProvider stablecoins  to swap using defined swap path for collateral
-                                    - see vault swap code
-                        
-                    */
-
-                    (address _router, address _stablecoin) = settings.getSwapRouterInfo();
-                    require(
-                        _router != address(0) && _stablecoin != address(0),
-                        "invalid swap router settings"
-                    );
-
-                    IUniswapV2Router01 router = IUniswapV2Router01(_router);
-                    (, int p) = UnderlyingFeed(opt.udlFeed).getLatestPrice();
-
-                    address[] memory path = settings.getSwapPath(
-                        _stablecoin,
-                        UnderlyingFeed(opt.udlFeed).getUnderlyingAddr()
-                    );
-
-                    //TODO: transfer stables to collateral manager befoe swap
-                    /*
-                    (_in, _out) = swapStablecoinForUnderlying(
-                        owner,
-                        router,
-                        path,
-                        p,
-                        balance,
-                        amountOut
-                    );
-                    */
-                    //TODO: transfer underlying to underlying credit provider
-
+                    //swap underlying debt for stablecoin debt
+                    debtSwap(opt.udlFeed, creditingValue);
                 }
             }
 
@@ -487,8 +458,45 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         return uint(coll);
     }
 
-    function swapUnderlyingForStablecoin(
-        address owner,
+    function debtSwap(address udlFeed, uint256 creditingValue) private {
+        (address _router, address _stablecoin) = settings.getSwapRouterInfo();
+        require(
+            _router != address(0) && _stablecoin != address(0),
+            "invalid swap router settings"
+        );
+
+        IUniswapV2Router01 router = IUniswapV2Router01(_router);
+        (, int p) = UnderlyingFeed(udlFeed).getLatestPrice();
+        address underlying = UnderlyingFeed(udlFeed).getUnderlyingAddr();
+
+        address udlCdtp = vault.getUnderlyingCreditProvider(underlying);
+        uint256 totalUnderlyingBalance = IUnderlyingCreditProvider(udlCdtp).totalTokenStock(); // underlying token balance
+        uint256 totalUnderlyingCreditBalance = IUnderlyingCreditProvider(udlCdtp).getTotalBalance(); // credit balance
+
+        //NEED TO DO THIS BEFORE CALLING `swapStablecoinForUnderlying` in order to make sure enough stables in collateral manager
+        address[] memory tokensInOrder = new address[](1);
+        uint[] memory amountsOutInOrder = new uint[](1);
+        tokensInOrder[0] = _stablecoin;
+        amountsOutInOrder[0] = Convert.from18DecimalsBase(_stablecoin, creditingValue);
+        creditProvider.grantTokens(address(this), creditingValue, tokensInOrder, amountsOutInOrder);
+
+        swapStablecoinForUnderlying(
+            udlCdtp,
+            router,
+            settings.getSwapPath(
+                _stablecoin,
+                underlying
+            ),
+            p,
+            creditingValue, //how much stables we are willing to swap for underlying
+            totalUnderlyingCreditBalance.sub(totalUnderlyingBalance)//how much we are short underlying
+        );
+
+        emit DebtSwap(_stablecoin, underlying, creditingValue);
+    }
+
+    function swapStablecoinForUnderlying(
+        address udlCdtp,
         IUniswapV2Router01 router,
         address[] memory path,
         int price,
@@ -500,9 +508,9 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     {
         require(path.length >= 2, "invalid swap path");
         
-        (uint r, uint b) = settings.getTokenRate(path[path.length - 1]);
+        (uint r, uint b) = settings.getTokenRate(path[0]);
 
-        uint udlBalance = Convert.from18DecimalsBase(path[0], balance);
+        uint stableBalance = Convert.from18DecimalsBase(path[0], balance);
         
         uint amountInMax = getAmountInMax(
             price,
@@ -510,9 +518,9 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             path
         );
 
-        if (amountInMax > udlBalance) {
-            amountOut = amountOut.mul(udlBalance).div(amountInMax);
-            amountInMax = udlBalance;
+        if (amountInMax > stableBalance) {
+            amountOut = amountOut.mul(stableBalance).div(amountInMax);
+            amountInMax = stableBalance;
         }
 
         IERC20_2 tk = IERC20_2(path[0]);
@@ -526,13 +534,19 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             amountOut.mul(r).div(b),
             amountInMax,
             path,
-            address(creditProvider),
+            address(this),
             settings.exchangeTime()
         )[0];
         _in = Convert.to18DecimalsBase(path[0], _in);
 
-        if (amountOut > 0) {
-            creditProvider.addBalance(owner, path[path.length - 1], amountOut.mul(r).div(b));
+        //send residual stables and underlying back to owner
+        uint stableBal = tk.balanceOf(address(this));
+        uint udlBal = IERC20_2(path[1]).balanceOf(address(this));
+        if (stableBal > 0) {
+            IERC20_2(path[0]).safeTransfer(address(creditProvider), stableBal);
+        }
+        if (udlBal > 0) {
+            IERC20_2(path[1]).safeTransfer(udlCdtp, udlBal);
         }
     }
 
@@ -546,7 +560,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         returns (uint amountInMax)
     {
         uint8 d = IERC20Details(path[0]).decimals();
-        amountInMax = amountOut.mul(10 ** uint(d)).div(uint(price));
+        amountInMax = amountOut.mul(10 ** uint(d)).mul(uint(price));
         
         (uint rTol, uint bTol) = settings.getSwapRouterTolerance();
         amountInMax = amountInMax.mul(rTol).div(bTol);

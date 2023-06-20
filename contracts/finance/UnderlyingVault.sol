@@ -191,24 +191,19 @@ contract UnderlyingVault is ManagedContract {
                 "invalid swap router settings"
             );
 
-            IUniswapV2Router01 router = IUniswapV2Router01(_router);
             (, int p) = UnderlyingFeed(feed).getLatestPrice();
-
-            address[] memory path = settings.getSwapPath(
-                UnderlyingFeed(feed).getUnderlyingAddr(),
-                _stablecoin
-            );
 
             //NEED TO DO THIS BEFORE CALLING `swapUnderlyingForStablecoin` in order to make sure enough token in vault (by transfering all of the users balance to vault, then depositing back to user what was liquidated)
             uint udlValB = IUnderlyingCreditProvider(_underlyingCreditProvider[token]).balanceOf(owner);
-            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).transferBalance(owner, address(this), udlValB);
-            //NOTE: SHOULD NEVER ANY CREDIT TOKENS BE ISSUED TO UDLVAULT?
-            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).withdrawTokens(address(this), udlValB);
+            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).grantTokens(address(this), udlValB);
 
             (_in, _out) = swapUnderlyingForStablecoin(
                 owner,
-                router,
-                path,
+                IUniswapV2Router01(_router),
+                settings.getSwapPath(
+                    token,
+                    _stablecoin
+                ),
                 p,
                 balance,
                 amountOut
@@ -218,12 +213,10 @@ contract UnderlyingVault is ManagedContract {
             allocation[owner][token] = allocation[owner][token].sub(_in);
             _totalSupply[token] = _totalSupply[token].sub(_in);
 
-            //send residual back to owner
-            IUnderlyingCreditProvider(_underlyingCreditProvider[token]).depositTokens(
-                owner,
-                token,
-                Convert.from18DecimalsBase(token, udlValO)
-            );
+            //send residual back to cdtp
+            if (udlValO > 0) {
+                IERC20_2(token).safeTransfer(_underlyingCreditProvider[token], Convert.from18DecimalsBase(token, udlValO));
+            }
 
             if (_isRehypothicate[owner] == true){
                 address rehypothicationManager = _activeUserRehypothicationProtocol[token][owner];
