@@ -50,12 +50,12 @@ contract TestCoveredLiquidation is Base {
         uint b0 = underlying.balanceOf(address(this));
         Assert.equal(b0, 0, "underlying before liquidation");
 
-        exchange.liquidateOptions(_tk, address(this));
+        collateralManager.liquidateOptions(_tk, address(this));
 
         uint b1 = underlying.balanceOf(address(this));
         Assert.equal(b1, 2 * underlyingBase, "underlying after liquidation");
 
-        Assert.equal(exchange.calcCollateral(address(this)), 0, "writer final collateral");
+        Assert.equal(exchange.calcCollateral(address(this), true), 0, "writer final collateral");
         Assert.equal(alice.calcCollateral(), 0, "alice final collateral");
 
         Assert.equal(exchange.calcSurplus(address(this)), 0, "writer final surplus");
@@ -84,10 +84,10 @@ contract TestCoveredLiquidation is Base {
         feed.setPrice(ethInitialPrice + step);
 
         time.setTimeOffset(100 days);
-        exchange.liquidateOptions(_tk100, address(this));
+        collateralManager.liquidateOptions(_tk100, address(this));
         
         time.setTimeOffset(200 days);
-        exchange.liquidateOptions(_tk200, address(this));
+        collateralManager.liquidateOptions(_tk200, address(this));
     }
 
     function writeCovered(
@@ -101,12 +101,34 @@ contract TestCoveredLiquidation is Base {
         IERC20(
             UnderlyingFeed(feed).getUnderlyingAddr()
         ).approve(address(exchange), volume * volumeBase);
-        
-        _tk = exchange.writeCovered(
+
+        _tk = exchange.createSymbol(
             address(feed),
-            volume * volumeBase,
-            uint(strike),
-            time.getNow() + timeToMaturity,
+            IOptionsExchange.OptionType.CALL,
+            uint(strike), 
+            time.getNow() + timeToMaturity
+        );
+
+        IOptionsExchange.OpenExposureInputs memory oEi;
+
+        oEi.symbols = new string[](1);
+        oEi.volume = new uint[](1);
+        oEi.isShort = new bool[](1);
+        oEi.isCovered = new bool[](1);
+        oEi.poolAddrs = new address[](1);
+        oEi.paymentTokens = new address[](1);
+
+
+        oEi.symbols[0] = IOptionToken(_tk).symbol();
+        oEi.volume[0] = volume * volumeBase;
+        oEi.isShort[0] = true;
+        oEi.poolAddrs[0] = address(this);//poolAddr;
+        oEi.isCovered[0] = true;
+        //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
+
+
+        exchange.openExposure(
+            oEi,
             address(this)
         );
     }

@@ -12,11 +12,11 @@ contract TestCreditTokenWithdraw is Base {
 
         addErc20Stock(1 ether);
         
-        beta.requestWithdraw(10 finney);
+        beta.requestWithdraw();
         Assert.equal(creditToken.balanceOf(address(beta)), 10 finney, "beta credit");
         Assert.equal(erc20.balanceOf(address(beta)), 10 finney, "beta balance");
 
-        alpha.requestWithdraw(20 finney);
+        alpha.requestWithdraw();
         Assert.equal(creditToken.balanceOf(address(alpha)), 60 finney, "alpha credit");
         Assert.equal(erc20.balanceOf(address(alpha)), 20 finney, "alpha balance");
         
@@ -28,8 +28,8 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
-        alpha.requestWithdraw(20 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
 
         Assert.equal(creditToken.balanceOf(address(alpha)), 80 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 20 finney, "beta credit");
@@ -44,11 +44,10 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
-        alpha.requestWithdraw(20 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
 
         addErc20Stock(10 finney);
-        creditToken.processWithdraws(999);
         
         Assert.equal(creditToken.balanceOf(address(alpha)), 80 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 10 finney, "beta credit");
@@ -63,11 +62,10 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
-        alpha.requestWithdraw(20 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
 
         addErc20Stock(1 ether);        
-        creditToken.processWithdraws(999);
         
         Assert.equal(creditToken.balanceOf(address(alpha)), 60 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 10 finney, "beta credit");
@@ -82,11 +80,10 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
-        alpha.requestWithdraw(20 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
 
         addErc20Stock(1 ether);        
-        creditToken.processWithdraws(1);
         
         Assert.equal(creditToken.balanceOf(address(alpha)), 80 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 10 finney, "beta credit");
@@ -101,12 +98,11 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(20 finney);
-        alpha.requestWithdraw(20 finney);
-        beta.requestWithdraw(15 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
+        beta.requestWithdraw();
 
         addErc20Stock(1 ether);        
-        creditToken.processWithdraws(999);
         
         Assert.equal(creditToken.balanceOf(address(alpha)), 60 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 5 finney, "beta credit");
@@ -121,7 +117,7 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
+        beta.requestWithdraw();
 
         (bool success,) = address(beta).call(
             abi.encodePacked(
@@ -138,13 +134,12 @@ contract TestCreditTokenWithdraw is Base {
         issuer.issueTokens(address(alpha), 100 finney);
         alpha.transfer(address(beta), 20 finney);
         
-        beta.requestWithdraw(10 finney);
-        alpha.requestWithdraw(20 finney);
+        beta.requestWithdraw();
+        alpha.requestWithdraw();
 
         alpha.transfer(address(beta), 80 finney);
 
         addErc20Stock(1 ether);  
-        creditToken.processWithdraws(999);
         
         Assert.equal(creditToken.balanceOf(address(alpha)), 0 finney, "alpha credit");
         Assert.equal(creditToken.balanceOf(address(beta)), 90 finney, "beta credit");

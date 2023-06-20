@@ -19,7 +19,7 @@ contract TestCoveredOption is Base {
         Assert.equal(volumeBase, tk.balanceOf(address(this)), "tk balance");
         Assert.equal(volumeBase, tk.writtenVolume(address(this)), "tk writtenVolume");
         Assert.equal(0, tk.uncoveredVolume(address(this)), "tk uncoveredVolume");
-        Assert.equal(0, exchange.calcCollateral(address(this)), "exchange collateral");
+        Assert.equal(0, exchange.calcCollateral(address(this), true), "exchange collateral");
     }
     
     function testBurnCoveredCall() public {
@@ -36,7 +36,7 @@ contract TestCoveredOption is Base {
         Assert.equal(volumeBase, tk.writtenVolume(address(this)), "tk writtenVolume t0");
         Assert.equal(underlyingBase, underlying.balanceOf(address(this)), "underlying balance t0");
         Assert.equal(0, tk.uncoveredVolume(address(this)), "tk uncoveredVolume t0");
-        Assert.equal(0, exchange.calcCollateral(address(this)), "exchange collateral t0");
+        Assert.equal(0, exchange.calcCollateral(address(this), true), "exchange collateral t0");
 
         tk.burn(volumeBase);
         
@@ -44,7 +44,7 @@ contract TestCoveredOption is Base {
         Assert.equal(0, tk.writtenVolume(address(this)), "tk writtenVolume t1");
         Assert.equal(2 * underlyingBase, underlying.balanceOf(address(this)), "underlying balance t1");
         Assert.equal(0, tk.uncoveredVolume(address(this)), "tk uncoveredVolume t1");
-        Assert.equal(0, exchange.calcCollateral(address(this)), "exchange collateral t1");
+        Assert.equal(0, exchange.calcCollateral(address(this), true), "exchange collateral t1");
     }
 
     function testBurnCollateral() public {
@@ -64,18 +64,18 @@ contract TestCoveredOption is Base {
             address(this)
         );
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct20, "writer collateral t0");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct20, "writer collateral t0");
 
         underlying.reset(address(this));
         underlying.issue(address(this), 2 * underlyingBase);
 
         address _tk2 = writeCovered(2, ethInitialPrice, 10 days);
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct20, "writer collateral t1");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct20, "writer collateral t1");
 
         OptionToken(_tk1).burn(volumeBase / 2);
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct20 / 2, "writer collateral t2");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct20 / 2, "writer collateral t2");
 
         OptionToken(_tk2).burn(volumeBase);
 
@@ -103,7 +103,7 @@ contract TestCoveredOption is Base {
             address(this)
         );
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct20, "writer collateral t0");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct20, "writer collateral t0");
 
         underlying.reset(address(this));
         underlying.issue(address(this), 2 * underlyingBase);
@@ -122,18 +122,18 @@ contract TestCoveredOption is Base {
         feed.setPrice(ethInitialPrice + step);
         time.setTimeOffset(10 days);
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct10, "writer collateral t1");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct10, "writer collateral t1");
 
         exchange.liquidateOptions(_tk2, address(this));
         tk.redeem(address(alice));
 
-        Assert.equal(exchange.calcCollateral(address(this)), ct10, "writer collateral t2");
+        Assert.equal(exchange.calcCollateral(address(this), true), ct10, "writer collateral t2");
 
         time.setTimeOffset(20 days);
 
         exchange.liquidateOptions(_tk1, address(this));
 
-        Assert.equal(exchange.calcCollateral(address(this)), 0, "writer collateral t3");
+        Assert.equal(exchange.calcCollateral(address(this), true), 0, "writer collateral t3");
         Assert.equal(exchange.calcSurplus(address(this)), ct20, "writer final surplus");
     }
 

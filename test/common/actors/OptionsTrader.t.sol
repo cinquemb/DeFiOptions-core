@@ -5,6 +5,7 @@ import "../../../contracts/governance/ProtocolSettings.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/interfaces/TimeProvider.sol";
 import "../../../contracts/interfaces/UnderlyingFeed.sol";
+import "../../../contracts/interfaces/ICollateralManager.sol";
 import "../../../contracts/interfaces/IOptionsExchange.sol";
 import "../../../contracts/interfaces/IOptionToken.sol";
 
@@ -14,15 +15,17 @@ contract OptionsTrader {
     CreditProvider private creditProvider;
     TimeProvider private time;
     ProtocolSettings private settings;
+    ICollateralManager private collateralManager;
     
     address private addr;
     address private feed;
     uint private volumeBase = 1e18;
     
-    constructor(address _exchange, address _protocol_settings, address _credit_provider, address _time, address _feed) public {
+    constructor(address _exchange, address _protocol_settings, address _credit_provider, address _collateral_manager, address _time, address _feed) public {
 
         exchange = OptionsExchange(_exchange);
         creditProvider = CreditProvider(_credit_provider);
+        collateralManager = ICollateralManager(_collateral_manager);
         settings = ProtocolSettings(_protocol_settings);
         time = TimeProvider(_time);
         addr = address(this);
@@ -80,7 +83,14 @@ contract OptionsTrader {
         public
         returns (address _tk)
     {
-        /*
+
+        _tk = exchange.createSymbol(
+            feed,
+            optType,
+            uint(strike), 
+            time.getNow() + timeToMaturity
+        );
+
         IOptionsExchange.OpenExposureInputs memory oEi;
 
         oEi.symbols = new string[](1);
@@ -94,7 +104,7 @@ contract OptionsTrader {
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
-        oEi.poolAddrs[0] = poolAddr;
+        oEi.poolAddrs[0] = address(this);//poolAddr;
         //oEi.isCovered[0] = false; //expoliting default to save gas
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 
@@ -102,21 +112,12 @@ contract OptionsTrader {
         exchange.openExposure(
             oEi,
             address(this)
-        );*/
-
-        _tk = exchange.writeOptions(
-            feed,
-            volume * volumeBase,
-            optType,
-            uint(strike),
-            time.getNow() + timeToMaturity,
-            address(this)
         );
     }
 
     function liquidateOptions(address _tk) public {
         
-        exchange.liquidateOptions(_tk, address(this));
+        collateralManager.liquidateOptions(_tk, address(this));
     }
 
     function transferOptions(address to, address _tk, uint volume) public {
@@ -131,7 +132,7 @@ contract OptionsTrader {
     
     function calcCollateral() public view returns (uint) {
         
-        return exchange.calcCollateral(addr);
+        return exchange.calcCollateral(addr, true);
     }
     
     function calcSurplus() public view returns (uint) {

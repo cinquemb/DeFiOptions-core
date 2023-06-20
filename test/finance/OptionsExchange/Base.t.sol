@@ -5,6 +5,7 @@ import "truffle/Assert.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../../contracts/finance/CreditProvider.sol";
 import "../../../contracts/finance/CreditToken.sol";
+import "../../../contracts/finance/CollateralManager.sol";
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/OptionToken.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
@@ -39,6 +40,7 @@ contract Base {
     CreditProvider creditProvider;
     CreditToken creditToken;
     OptionsExchange exchange;
+    CollateralManager collateralManager;
     
     OptionsTrader bob;
     OptionsTrader alice;
@@ -62,6 +64,7 @@ contract Base {
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
         router = deployer.getContractAddress("SwapRouter");
+        collateralManager = CollateralManager(deployer.getContractAddress("CollateralManager"));
 
         erc20.reset();
 
@@ -85,7 +88,7 @@ contract Base {
 
     function createTrader() internal returns (OptionsTrader) {
 
-        OptionsTrader td = new OptionsTrader(address(exchange), address(settings), address(time), address(feed));
+        OptionsTrader td = new OptionsTrader(address(exchange), address(settings), address(collateralManager), address(creditProvider), address(time), address(feed));
         traders.push(address(td));
         return td;
     }
@@ -98,17 +101,27 @@ contract Base {
     }
 
     function getBookLength() internal view returns (uint total) {
-
+    /*
+        returns (
+            string memory symbols,
+            address[] memory tokens,
+            uint[] memory holding,
+            uint[] memory written,
+            uint[] memory uncovered,
+            int[] memory iv,
+            address[] memory underlying
+        )
+    */
         total = 0;
         for (uint i = 0; i < traders.length; i++) {
-            (,,uint[] memory holding,,) = exchange.getBook(traders[i]);
+            (,,uint[] memory holding,,,,) = exchange.getBook(traders[i]);
             total += holding.length;
         }
     }
 
     function liquidateAndRedeem(address _tk) internal {
 
-        exchange.liquidateExpired(_tk, traders);
+        collateralManager.liquidateExpired(_tk, traders);
         OptionToken(_tk).redeem(traders);
     }
 }

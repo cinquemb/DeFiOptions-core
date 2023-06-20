@@ -18,6 +18,7 @@ contract TestFeedDeployment is Base {
         feed = new ChainlinkFeed(
             "ETH/USD",
             address(0),
+            address(0),
             address(mock), 
             address(time),
             0,
@@ -51,6 +52,7 @@ contract TestFeedDeployment is Base {
 
         feed = new ChainlinkFeed(
             "ETH/USD",
+            address(0),
             address(0),
             address(mock), 
             address(time),
