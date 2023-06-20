@@ -90,6 +90,7 @@ contract UnderlyingVault is ManagedContract {
     function setUnderlyingCreditProvider(address token, address udlCreditProviderAddress) external {
         ensureCaller();
         require(udlCreditProviderAddress != address(0), "bad udlcdprov");
+        require(_underlyingCreditProvider[token] == address(0), "existing udlcdprov");
         _underlyingCreditProvider[token] = udlCreditProviderAddress;
     }
 
