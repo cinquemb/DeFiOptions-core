@@ -8,17 +8,6 @@ contract ChangeInterestRateProposal is Proposal {
 
     uint interestRate;
     uint interestRateBase;
-
-
-    constructor(
-        address _implementation,
-        address _govToken,
-        address _manager,
-        address _settings,
-        IProposalWrapper.Quorum _quorum,
-        IProposalWrapper.VoteType  _voteType,
-        uint expiresAt
-    ) public Proposal(_implementation, _govToken, _manager, _settings, _quorum, _voteType, expiresAt) {}
     
     function setInterestRate(uint ir, uint b) public {
 

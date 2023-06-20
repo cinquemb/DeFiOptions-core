@@ -53,9 +53,9 @@ contract Base {
         settings.setAllowedToken(address(erc20), 1, 1);
         govToken.setChildChainManager(address(this));
 
-        alpha = new ShareHolder(address(govToken), address(manager));
-        beta = new ShareHolder(address(govToken), address(manager));
-        gama = new ShareHolder(address(govToken), address(manager));
+        alpha = new ShareHolder(address(settings), address(govToken), address(manager));
+        beta = new ShareHolder(address(settings), address(govToken), address(manager));
+        gama = new ShareHolder(address(settings), address(govToken), address(manager));
         
         govToken.deposit(address(alpha), abi.encode(1 ether));
         alpha.delegateTo(address(alpha));

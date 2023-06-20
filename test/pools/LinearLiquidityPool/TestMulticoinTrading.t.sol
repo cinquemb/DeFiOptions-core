@@ -30,8 +30,8 @@ contract TestMulticoinTrading is Base {
 
         addSymbol();
 
-        (optionBuyPrice,) = pool.queryBuy(symbol);
-        (optionSellPrice,) = pool.querySell(symbol);
+        (optionBuyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
+        (optionSellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
 
         emit LogUint("0.optionBuyPrice is", optionBuyPrice);
         emit LogUint("0.optionSellPrice is", optionSellPrice);
@@ -56,9 +56,9 @@ contract TestMulticoinTrading is Base {
 
         stablecoinA.issue(address(this), amount);
         stablecoinA.approve(address(pool), amount);
-        pool.depositTokens(address(userA), address(stablecoinA), amount);
+        IGovernableLiquidityPool(pool).depositTokens(address(userA), address(stablecoinA), amount);
 
-        Assert.equal(pool.balanceOf(address(userA)), amount, "userA stablecoinA after deposit");
+        Assert.equal(IERC20(pool).balanceOf(address(userA)), amount, "userA stablecoinA after deposit");
         emit LogUint("1.balanceOf(pool) userA deposit", exchange.balanceOf(address(pool)));
         uint volume = 1 * volumeBase;
 
@@ -114,9 +114,9 @@ contract TestMulticoinTrading is Base {
 
         stablecoinA.issue(address(this), amount);
         stablecoinA.approve(address(pool), amount);
-        pool.depositTokens(address(userA), address(stablecoinA), amount);
+        IGovernableLiquidityPool(pool).depositTokens(address(userA), address(stablecoinA), amount);
 
-        Assert.equal(pool.balanceOf(address(userA)), amount, "userA stablecoinA after deposit");
+        Assert.equal(IERC20(pool).balanceOf(address(userA)), amount, "userA stablecoinA after deposit");
         emit LogUint("2.balanceOf(pool) userA deposit", exchange.balanceOf(address(pool)));
         
         // Trader B deposits the amount of P/2 Stablecoins B in the OptionsExchange
@@ -196,10 +196,10 @@ contract TestMulticoinTrading is Base {
 
         stablecoinA.issue(address(this), amount);
         stablecoinA.approve(address(pool), amount);
-        pool.depositTokens(address(userA), address(stablecoinA), amount);
+        IGovernableLiquidityPool(pool).depositTokens(address(userA), address(stablecoinA), amount);
         pool_total = amount;
 
-        Assert.equal(pool.balanceOf(address(userA)), pool_total, "userA stablecoinA after deposit");
+        Assert.equal(IERC20(pool).balanceOf(address(userA)), pool_total, "userA stablecoinA after deposit");
         emit LogUint("3.balanceOf(pool) userA deposit", exchange.balanceOf(address(pool)));
 
         // Trader A deposits the amount of 3*P/4 Stablecoins B in the LiquidityPool
@@ -208,10 +208,10 @@ contract TestMulticoinTrading is Base {
 
         stablecoinB.issue(address(this), amount);
         stablecoinB.approve(address(pool), amount);
-        pool.depositTokens(address(userA), address(stablecoinB), amount);
+        IGovernableLiquidityPool(pool).depositTokens(address(userA), address(stablecoinB), amount);
         pool_total = pool_total + amount * decimals_diff;
 
-        Assert.equal(pool.balanceOf(address(userA)), pool_total, "userA stablecoinB after deposit");
+        Assert.equal(IERC20(pool).balanceOf(address(userA)), pool_total, "userA stablecoinB after deposit");
         emit LogUint("3.balanceOf(pool) userA deposit", exchange.balanceOf(address(pool)));
 
         // Trader B deposits the amount of 10*P Stablecoins C in the OptionsExchange
@@ -238,7 +238,7 @@ contract TestMulticoinTrading is Base {
 
         // Trader B sells his option to the LiquidityPool
         uint volume = 1 * volumeBase;
-        (uint sellPrice,) = pool.querySell(symbol);
+        (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         userB.sellToPool(symbol, sellPrice, volume);
         emit LogUint("3.balanceOf(ex) userB selltopool", exchange.balanceOf(address(userB)));
         emit LogUint("3.userB surplus before liquidate", exchange.calcSurplus(address(userB)));
@@ -248,7 +248,7 @@ contract TestMulticoinTrading is Base {
         feed.setPrice(int(test_strike - step));
         time.setTimeOffset(30 days);
         
-        exchange.liquidateOptions(_tk, address(userB));
+        collateralManager.liquidateOptions(_tk, address(userB));
         emit LogUint("3.userB surplus after liquidate", exchange.calcSurplus(address(userB)));
 
         // Trader B withdraws all his exchange balance

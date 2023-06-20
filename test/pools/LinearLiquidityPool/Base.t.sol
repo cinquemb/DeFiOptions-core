@@ -5,9 +5,10 @@ import "truffle/Assert.sol";
 import "../../../contracts/deployment/Deployer.sol";
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/finance/OptionToken.sol";
-import "../../../contracts/pools/LinearLiquidityPool.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
 import "../../../contracts/interfaces/IOptionsExchange.sol";
+import "../../../contracts/interfaces/IGovernableLiquidityPool.sol";
+import "../../../contracts/finance/CollateralManager.sol";
 import "../../common/actors/PoolTrader.t.sol";
 import "../../common/mock/ERC20Mock.t.sol";
 import "../../common/mock/EthFeedMock.t.sol";
@@ -36,8 +37,9 @@ contract Base {
 
     ProtocolSettings settings;
     OptionsExchange exchange;
+    CollateralManager collateralManager;
 
-    LinearLiquidityPool pool;
+    address pool;
     
     PoolTrader bob;
     PoolTrader alice;
@@ -45,9 +47,9 @@ contract Base {
     IOptionsExchange.OptionType CALL = IOptionsExchange.OptionType.CALL;
     IOptionsExchange.OptionType PUT = IOptionsExchange.OptionType.PUT;
     
-    LiquidityPool.Operation NONE = LiquidityPool.Operation.NONE;
-    LiquidityPool.Operation BUY = LiquidityPool.Operation.BUY;
-    LiquidityPool.Operation SELL = LiquidityPool.Operation.SELL;
+    IGovernableLiquidityPool.Operation NONE = IGovernableLiquidityPool.Operation.NONE;
+    IGovernableLiquidityPool.Operation BUY = IGovernableLiquidityPool.Operation.BUY;
+    IGovernableLiquidityPool.Operation SELL = IGovernableLiquidityPool.Operation.SELL;
 
     uint120[] x;
     uint120[] y;
@@ -66,19 +68,20 @@ contract Base {
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
         pool = exchange.createPool("DEFAULT", "TEST");
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
+        collateralManager = CollateralManager(deployer.getContractAddress("CollateralManager"));
 
         erc20.reset();
 
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
 
-        //TODO: agent needs to deposit in pool and create proposal for this
-        pool.setParameters(
-            spread,
+        IGovernableLiquidityPool(pool).setParameters(
             reserveRatio,
             withdrawFee,
-            uint(-1), // unlimited capacity
-            90 days
+            time.getNow() + 90 days,
+            10,
+            address(0),
+            1000e18
         );
 
         feed.setPrice(ethInitialPrice);
@@ -95,7 +98,7 @@ contract Base {
         
         erc20.issue(address(this), value);
         erc20.approve(address(pool), value);
-        pool.depositTokens(to, address(erc20), value);
+        IGovernableLiquidityPool(pool).depositTokens(to, address(erc20), value);
     }
 
     function applyBuySpread(uint v) internal view returns (uint) {
@@ -116,7 +119,7 @@ contract Base {
 
         //TODO: agent needs to deposit in pool and create proposal for this, need to specify spread
         
-        pool.addSymbol(
+        IGovernableLiquidityPool(pool).addSymbol(
             address(feed),
             strike,
             maturity,

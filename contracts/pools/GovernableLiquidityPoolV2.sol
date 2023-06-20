@@ -79,7 +79,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         address _hmngr,
         uint _ht
     )
-        external
+        override external
     {
         ensureCaller();
         reserveRatio = _reserveRatio;
@@ -122,7 +122,7 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
         uint120[] calldata y,
         uint[3] calldata bsStockSpread
     )
-        external
+        override external
     {
         ensureCaller();
         require(x.length > 0 && x.length.mul(2) == y.length && _mt < maturity, "bad x/y or _mt");

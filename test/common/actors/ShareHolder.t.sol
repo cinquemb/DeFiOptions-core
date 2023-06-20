@@ -4,17 +4,20 @@ import "../../../contracts/governance/GovToken.sol";
 import "../../../contracts/governance/Proposal.sol";
 import "../../../contracts/governance/ProposalsManager.sol";
 import "../../../contracts/governance/ProposalWrapper.sol";
+import "../../../contracts/governance/ProtocolSettings.sol";
 
 contract ShareHolder {
     
     GovToken govToken;
     ProposalsManager manager;
     address payable addr;
+    ProtocolSettings settings;
     
-    constructor(address _govToken, address _mgr) public {
+    constructor(address _settings, address _govToken, address _mgr) public {
         addr = address(uint160(address(this)));
         govToken = GovToken(_govToken);
         manager = ProposalsManager(_mgr);
+        settings = ProtocolSettings(_settings);
     }
     
     fallback() external payable { }
@@ -39,7 +42,7 @@ contract ShareHolder {
         returns (uint id, ProposalWrapper wrapper)
     {    
         address w;
-        (id, w) = manager.registerProposal(address(p), quorum, expiresAt);
+        (id, w) = manager.registerProposal(address(settings), address(p), quorum, ProposalWrapper.VoteType.PROTOCOL_SETTINGS, expiresAt);
         wrapper = ProposalWrapper(w);
     }
 
