@@ -3,14 +3,14 @@ pragma experimental ABIEncoderV2;
 
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/interfaces/IERC20.sol";
-import "../../../contracts/interfaces/ILiquidityPool.sol";
+import "../../../contracts/interfaces/IGovernableLiquidityPool.sol";
 import "../../../contracts/interfaces/IOptionsExchange.sol";
 
 contract PoolTrader {
     
     IERC20 private erc20;
     OptionsExchange private exchange;
-    ILiquidityPool private pool;
+    IGovernableLiquidityPool private pool;
     
     address private addr;
     address private feed;
@@ -20,7 +20,7 @@ contract PoolTrader {
 
         erc20 = IERC20(_erc20);
         exchange = OptionsExchange(_exchange);
-        pool = ILiquidityPool(_pool);
+        pool = IGovernableLiquidityPool(_pool);
         addr = address(this);
         feed = _feed;
     }
@@ -70,7 +70,7 @@ contract PoolTrader {
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
-        oEi.poolAddrs[0] = address(this);//poolAddr;
+        oEi.poolAddrs[0] = address(pool);//poolAddr;
         //oEi.isCovered[0] = false; //expoliting default to save gas
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 

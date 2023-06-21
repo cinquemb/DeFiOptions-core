@@ -124,17 +124,22 @@ contract Base {
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
 
-        erc20.issue(address(this), 1e18);
-        erc20.approve(pool, 1e18);
-        IGovernableLiquidityPool(pool).depositTokens(address(this), address(erc20), 1e18);
+        erc20.issue(address(this), 1000e18);
+        erc20.approve(pool, 1000e18);
+        IGovernableLiquidityPool(pool).depositTokens(address(this), address(erc20), 1000e18);
 
 
         //initialize proposal manager with set parameters propsoal data
         SimplePoolManagementProposal pp = new SimplePoolManagementProposal();
         pp.setExecutionBytes(
-            abi.encodePacked(
-                bytes4(keccak256("setParameters(uint, uint, uint, uint , address, uint)")),
-                abi.encode(reserveRatio, withdrawFee,  time.getNow() + 90 days, 10, address(0), 1000e18)
+            abi.encodeWithSelector(
+                bytes4(keccak256("setParameters(uint256,uint256,uint256,uint256,address,uint256)")),
+                reserveRatio,
+                withdrawFee,
+                time.getNow() + 90 days,
+                10,
+                address(0),
+                1000e18
             )
         );
         //registered proposal
@@ -147,12 +152,14 @@ contract Base {
             IProposalManager.VoteType.POOL_SETTINGS,
             time.getNow() + 2 days
         );
+        //    function registerProposal(address addr, address poolAddress, Quorum quorum, VoteType voteType, uint expiresAt ) external returns (uint id, address wp);
+
         
         //vote on proposal
         IProposalWrapper(proposalWrapperAddr).castVote(true);
         //close proposal
         IProposalWrapper(proposalWrapperAddr).close();
-        IGovernableLiquidityPool(pool).withdraw(1e18);
+        IGovernableLiquidityPool(pool).withdraw(1000e18);
 
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
@@ -206,23 +213,49 @@ contract Base {
             100 * volumeBase, // buy stock
             200 * volumeBase,  // sell stock
             spread
-        ];
-
-        //TODO: agent needs to deposit in pool and create proposal for this, need to specify spread
-        
-        IGovernableLiquidityPool(pool).addSymbol(
-            address(feed),
-            strike,
-            maturity,
-            CALL,
-            time.getNow(),
-            time.getNow() + 1 days,
-            x,
-            y,
-            bsStockSpread
-        );
+        ];        
 
         exchange.createSymbol(address(feed), CALL, strike, maturity);
+
+        erc20.issue(address(this), 1000e18);
+        erc20.approve(pool, 1000e18);
+        IGovernableLiquidityPool(pool).depositTokens(address(this), address(erc20), 1000e18);
+
+
+        //initialize proposal manager with set parameters propsoal data
+        SimplePoolManagementProposal pp = new SimplePoolManagementProposal();
+        pp.setExecutionBytes(
+            abi.encodeWithSelector(
+                bytes4(keccak256("addSymbol(address,uint,uint,IOptionsExchange.OptionType,uint,uint,uint120[],uint120[],uint[3])")),
+                address(feed),
+                strike,
+                maturity,
+                CALL,
+                time.getNow(),
+                time.getNow() + 1 days,
+                x,
+                y,
+                bsStockSpread
+            )
+        );
+        //registered proposal
+        (uint pid, address proposalWrapperAddr) = IProposalManager(
+            deployer.getContractAddress("ProposalsManager")
+        ).registerProposal(
+            address(pp),
+            pool,
+            IProposalManager.Quorum.QUADRATIC,
+            IProposalManager.VoteType.POOL_SETTINGS,
+            time.getNow() + 2 days
+        );
+        //    function registerProposal(address addr, address poolAddress, Quorum quorum, VoteType voteType, uint expiresAt ) external returns (uint id, address wp);
+
+        
+        //vote on proposal
+        IProposalWrapper(proposalWrapperAddr).castVote(true);
+        //close proposal
+        IProposalWrapper(proposalWrapperAddr).close();
+        IGovernableLiquidityPool(pool).withdraw(1000e18);
     }
 
     function calcCollateralUnit() internal view returns (uint) {

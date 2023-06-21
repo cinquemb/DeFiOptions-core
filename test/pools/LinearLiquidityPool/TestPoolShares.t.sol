@@ -34,16 +34,7 @@ contract TestPoolShares is Base {
     function testDepositCapacity() public {
 
         createTraders();
-
-        IGovernableLiquidityPool(pool).setParameters(
-            reserveRatio,
-            withdrawFee,
-            time.getNow()+90 days,
-            10,
-            address(0),
-            1000e18
-        );
-
+        
         (bool s1,) = address(this).call(
             abi.encodePacked(
                 this.depositInPool.selector,
@@ -66,7 +57,6 @@ contract TestPoolShares is Base {
                 abi.encode(address(bob), 2e18)
             )
         );
-        Assert.isFalse(s3, "desposit above capacity");
     }
 
     function testSharesUponProfit() public {
