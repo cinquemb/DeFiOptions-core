@@ -16,9 +16,9 @@ contract TestPoolVolumes is Base {
         depositInPool(address(bob), 10 * cUnit);
         erc20.issue(address(alice), 5 * cUnit);
 
-        (uint p1, uint v1) = pool.queryBuy(symbol);
+        (uint p1, uint v1) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         alice.buyFromPool(symbol, p1, v1 / 2);
-        (, uint v2) = pool.queryBuy(symbol);
+        (, uint v2) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
 
         Assert.equal(v2, v1 / 2 + err, "volume after buying");
     }
@@ -34,9 +34,9 @@ contract TestPoolVolumes is Base {
         depositInPool(address(bob), 10 * cUnit);
         erc20.issue(address(alice), 5 * cUnit);
 
-        (uint p1, uint v1) = pool.queryBuy(symbol);
+        (uint p1, uint v1) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         alice.buyFromPool(symbol, p1, v1);
-        (, uint v2) = pool.queryBuy(symbol);
+        (, uint v2) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
 
         Assert.equal(v2, 0, "volume after buying");
     }
@@ -53,10 +53,10 @@ contract TestPoolVolumes is Base {
         erc20.issue(address(alice), 10 * cUnit);
         alice.depositInExchange(10 * cUnit);
 
-        (uint p1, uint v1) = pool.querySell(symbol);
+        (uint p1, uint v1) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         alice.writeOptions(10, CALL, strike, maturity);
         alice.sellToPool(symbol, p1, v1 / 2);
-        (, uint v2) = pool.querySell(symbol);
+        (, uint v2) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
 
         Assert.equal(v2, v1 / 2 + err, "volume after selling");
     }
@@ -73,10 +73,10 @@ contract TestPoolVolumes is Base {
         erc20.issue(address(alice), 10 * cUnit);
         alice.depositInExchange(10 * cUnit);
 
-        (uint p1, uint v1) = pool.querySell(symbol);
+        (uint p1, uint v1) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         alice.writeOptions(10, CALL, strike, maturity);
         alice.sellToPool(symbol, p1, v1);
-        (, uint v2) = pool.querySell(symbol);
+        (, uint v2) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
 
         Assert.equal(v2, 0, "volume after selling");
     }
@@ -92,19 +92,19 @@ contract TestPoolVolumes is Base {
         depositInPool(address(bob), 10 * cUnit);
         erc20.issue(address(alice), 5 * cUnit);
 
-        (uint p1, uint v1) = pool.queryBuy(symbol);
+        (uint p1, uint v1) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         alice.buyFromPool(symbol, p1, v1 / 2);
-        (, uint v2) = pool.queryBuy(symbol);
+        (, uint v2) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
 
         Assert.equal(v2, v1 / 2 + err, "volume after buying");
 
         erc20.issue(address(bob), 100 * cUnit);
         bob.depositInExchange(100 * cUnit);
 
-        (uint p3, uint v3) = pool.querySell(symbol);
+        (uint p3, uint v3) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         bob.writeOptions(100, CALL, strike, maturity);
         bob.sellToPool(symbol, p3, v3);
-        (, uint v4) = pool.querySell(symbol);
+        (, uint v4) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
 
         Assert.equal(v4, 0, "volume after selling");
     }

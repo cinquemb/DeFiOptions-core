@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/interfaces/IERC20.sol";

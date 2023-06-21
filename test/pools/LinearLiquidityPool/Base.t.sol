@@ -53,6 +53,7 @@ contract Base {
 
     uint120[] x;
     uint120[] y;
+    uint[3] bsStockSpread;
     string symbol = "ETHM-EC-55e19-2592e3";
 
     Deployer deployer = new Deployer(address(0));
@@ -66,7 +67,7 @@ contract Base {
         feed = EthFeedMock(deployer.getContractAddress("UnderlyingFeed"));
         settings = ProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = OptionsExchange(deployer.getContractAddress("OptionsExchange"));
-        pool = exchange.createPool("DEFAULT", "TEST");
+        pool = exchange.createPool("DEFAULT", "TEST", false, address(0));
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
         collateralManager = CollateralManager(deployer.getContractAddress("CollateralManager"));
 
@@ -111,10 +112,31 @@ contract Base {
 
     function addSymbol() internal {
 
+        /*
+
+            function addSymbol(
+                address udlFeed,
+                uint strike,
+                uint _mt,
+                IOptionsExchange.OptionType optType,
+                uint t0,
+                uint t1,
+                uint120[] calldata x,
+                uint120[] calldata y,
+                uint[3] calldata bsStockSpread
+
+        */
+
         x = [400e18, 450e18, 500e18, 550e18, 600e18, 650e18, 700e18];
         y = [
             30e18,  40e18,  50e18,  50e18, 110e18, 170e18, 230e18,
             25e18,  35e18,  45e18,  45e18, 105e18, 165e18, 225e18
+        ];
+
+        bsStockSpread = [
+            100 * volumeBase, // buy stock
+            200 * volumeBase,  // sell stock
+            spread
         ];
 
         //TODO: agent needs to deposit in pool and create proposal for this, need to specify spread
@@ -128,8 +150,7 @@ contract Base {
             time.getNow() + 1 days,
             x,
             y,
-            100 * volumeBase, // buy stock
-            200 * volumeBase  // sell stock
+            bsStockSpread
         );
 
         exchange.createSymbol(address(feed), CALL, strike, maturity);

@@ -17,21 +17,21 @@ contract TestPoolWithdrawal is Base {
         
         depositInPool(address(bob), 100 * vBase);
 
-        Assert.equal(pool.valueOf(address(bob)), 100 * vBase, "bob initial pool value");
+        Assert.equal(IGovernableLiquidityPool(pool).valueOf(address(bob)), 100 * vBase, "bob initial pool value");
         Assert.equal(exchange.balanceOf(address(bob)), 0, "bob initial exchange balance");
         Assert.equal(exchange.balanceOf(address(pool)), 100 * vBase, "pool initial exchange balance");
 
         depositInPool(address(alice), 100 * vBase);
 
-        uint bal = pool.balanceOf(address(bob));
-        uint total1 = pool.totalSupply();
+        uint bal = IERC20_2(pool).balanceOf(address(bob));
+        uint total1 = IERC20_2(pool).totalSupply();
 
         bob.withdrawFromPool();
 
-        uint total2 = pool.totalSupply();
+        uint total2 = IERC20_2(pool).totalSupply();
 
         Assert.equal(total1, total2 + bal, "pool total supply");
-        Assert.equal(pool.valueOf(address(bob)), 0, "bob final pool value");
+        Assert.equal(IGovernableLiquidityPool(pool).valueOf(address(bob)), 0, "bob final pool value");
         Assert.equal(exchange.balanceOf(address(bob)), 97 * vBase, "bob final exchange balance");
         Assert.equal(exchange.balanceOf(address(pool)), 103 * vBase, "pool final exchange balance");
     }
@@ -49,16 +49,16 @@ contract TestPoolWithdrawal is Base {
         depositInExchangeToPool(200 * vBase);
         
         time.setTimeOffset(365 days);
-        MoreAssert.equal(pool.yield(365 days), 1200 * vBase, cBase, "initial yield");
+        MoreAssert.equal(IGovernableLiquidityPool(pool).yield(365 days), 1200 * vBase, cBase, "initial yield");
 
         depositInPool(address(alice), 1000 * vBase);
         bob.withdrawFromPool();
 
-        Assert.equal(pool.valueOf(address(bob)), 0, "bob final pool value");
+        Assert.equal(IGovernableLiquidityPool(pool).valueOf(address(bob)), 0, "bob final pool value");
         Assert.equal(exchange.balanceOf(address(bob)), 1164 * vBase, "bob final exchange balance");
         Assert.equal(exchange.balanceOf(address(pool)), 1036 * vBase, "pool final exchange balance");
 
-        MoreAssert.equal(pool.yield(365 days), 12432 * 1e5, cBase, "final yield");
+        MoreAssert.equal(IGovernableLiquidityPool(pool).yield(365 days), 12432 * 1e5, cBase, "final yield");
     }
 
     function depositInExchangeToPool(uint value) private {

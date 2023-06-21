@@ -94,7 +94,7 @@ contract TestQueryPool is Base {
     )
         private
     {    
-        (uint ps, uint vs) = pool.queryBuy(symbol);
+        (uint ps, uint vs) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         Assert.equal(ps, expectPrice, message);
         Assert.equal(vs, expectedVolume, message);
     }
@@ -106,7 +106,7 @@ contract TestQueryPool is Base {
     )
         private
     {    
-        (uint ps, uint vs) = pool.querySell(symbol);
+        (uint ps, uint vs) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         Assert.equal(ps, expectPrice, message);
         Assert.equal(vs, expectedVolume, message);
     }

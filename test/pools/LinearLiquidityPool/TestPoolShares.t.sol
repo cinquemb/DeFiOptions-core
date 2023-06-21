@@ -1,6 +1,7 @@
 pragma solidity >=0.6.0;
 
 import "truffle/Assert.sol";
+import "../../../contracts/finance/RedeemableToken.sol";
 import "../../common/utils/MoreAssert.t.sol";
 import "./Base.t.sol";
 
@@ -16,30 +17,31 @@ contract TestPoolShares is Base {
 
         depositInPool(address(bob), 10 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 10 * vBase, "bob shares t0");
-        Assert.equal(pool.balanceOf(address(alice)), 0, "alice shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 10 * vBase, "bob shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 0, "alice shares t0");
 
         depositInPool(address(bob), 5 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 15 * vBase, "bob shares t1");
-        Assert.equal(pool.balanceOf(address(alice)), 0, "alice shares t1");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 15 * vBase, "bob shares t1");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 0, "alice shares t1");
 
         depositInPool(address(alice), 2 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 15 * vBase, "bob shares t2");
-        Assert.equal(pool.balanceOf(address(alice)), 2 * vBase, "alice shares t2");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 15 * vBase, "bob shares t2");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 2 * vBase, "alice shares t2");
     }
 
     function testDepositCapacity() public {
 
         createTraders();
 
-        pool.setParameters(
-            spread,
+        IGovernableLiquidityPool(pool).setParameters(
             reserveRatio,
             withdrawFee,
-            1000e18, // 1k capacity
-            90 days
+            time.getNow()+90 days,
+            10,
+            address(0),
+            1000e18
         );
 
         (bool s1,) = address(this).call(
@@ -77,15 +79,15 @@ contract TestPoolShares is Base {
 
         depositInPool(address(bob), 10 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 20 * vBase, "bob shares t0");
-        Assert.equal(pool.balanceOf(address(alice)), 0, "alice shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 20 * vBase, "bob shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 0, "alice shares t0");
 
         depositInExchangeToPool(10 * vBase); // fake profit
 
         depositInPool(address(alice), 2 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 20 * vBase, "bob shares t1");
-        Assert.equal(pool.balanceOf(address(alice)), 1333333, "alice shares t1");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 20 * vBase, "bob shares t1");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 1333333, "alice shares t1");
     }
 
     function testSharesUponExpectedPayout() public {
@@ -96,26 +98,26 @@ contract TestPoolShares is Base {
 
         depositInPool(address(bob), 10 * vBase);
         
-        Assert.equal(pool.balanceOf(address(bob)), 10 * vBase, "bob shares t0");
-        Assert.equal(pool.balanceOf(address(alice)), 0, "alice shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 10 * vBase, "bob shares t0");
+        Assert.equal(IERC20_2(pool).balanceOf(address(alice)), 0, "alice shares t0");
 
         addSymbol();
-        (uint buyPrice,) = pool.queryBuy(symbol);
+        (uint buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         erc20.issue(address(alice), buyPrice);
         alice.buyFromPool(symbol, buyPrice, volumeBase);
         feed.setPrice(ethInitialPrice + 100e18); // force pool loss
 
-        (buyPrice,) = pool.queryBuy(symbol);
-        (uint sellPrice,) = pool.querySell(symbol);
+        (buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
+        (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         int fairPrice = int(buyPrice + sellPrice) / 2;
         Assert.equal(exchange.calcExpectedPayout(address(pool)), -fairPrice, "expected payout");
 
         depositInPool(address(alice), 100e18);
         
         uint totalFunds = exchange.balanceOf(address(pool)) - uint(fairPrice);
-        uint expected = pool.totalSupply() * 100e18 / totalFunds;
-        Assert.equal(pool.balanceOf(address(bob)), 10 * vBase, "bob shares t1");
-        MoreAssert.equal(pool.balanceOf(address(alice)), expected, cBase, "alice shares t1");
+        uint expected = IERC20_2(pool).totalSupply() * 100e18 / totalFunds;
+        Assert.equal(IERC20_2(pool).balanceOf(address(bob)), 10 * vBase, "bob shares t1");
+        MoreAssert.equal(IERC20_2(pool).balanceOf(address(alice)), expected, cBase, "alice shares t1");
     }
 
     function testRedeemIndividualAddresses() public {
@@ -142,8 +144,8 @@ contract TestPoolShares is Base {
         Assert.equal(exchange.balanceOf(addr[8]), 0, "addr[8] balance");
 
         time.setFixedTime(90 days);
-        pool.redeem(addr[4]);
-        pool.redeem(addr[8]);
+        RedeemableToken(pool).redeem(addr[4]);
+        RedeemableToken(pool).redeem(addr[8]);
 
         Assert.equal(exchange.balanceOf(address(pool)), 210 * vBase, "pool balance");
         Assert.equal(exchange.balanceOf(addr[4]), 30 * vBase, "addr[4] balance");
@@ -181,7 +183,7 @@ contract TestPoolShares is Base {
         Assert.equal(exchange.balanceOf(addr[8]), 0, "addr[8] balance");
 
         time.setFixedTime(90 days);
-        pool.redeem(addr);
+        RedeemableToken(pool).redeem(addr);
 
         Assert.equal(exchange.balanceOf(address(pool)), 0, "pool balance");
         Assert.equal(exchange.balanceOf(addr[0]), 30 * vBase, "addr[0] balance");
