@@ -50,7 +50,8 @@ contract Base {
     ProposalWrapper.Quorum SIMPLE_MAJORITY = ProposalWrapper.Quorum.SIMPLE_MAJORITY;
     Deployer deployer;
 
-    function beforeEachDeploy() public {
+    //function beforeEachDeploy() public {
+    function setUp() public {
 
         deployer = new Deployer(address(this));
         deployer.setContractAddress("ProtocolSettings", address(new ProtocolSettings(true)));

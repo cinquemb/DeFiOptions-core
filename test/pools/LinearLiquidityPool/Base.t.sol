@@ -1,4 +1,5 @@
 pragma solidity >=0.6.0;
+pragma experimental ABIEncoderV2;
 
 import "truffle/Assert.sol";
 //import "truffle/DeployedAddresses.sol";
@@ -12,6 +13,7 @@ import "../../../contracts/finance/UnderlyingVault.sol";
 import "../../../contracts/finance/Incentivized.sol";
 import "../../../contracts/finance/OptionTokenFactory.sol";
 import "../../../contracts/finance/PendingExposureRouter.sol";
+import "../../../contracts/finance/YieldTracker.sol";
 
 import "../../../contracts/feeds/DEXFeedFactory.sol";
 import "../../../contracts/pools/LinearLiquidityPoolFactory.sol";
@@ -33,6 +35,9 @@ import "../../common/mock/ERC20Mock.t.sol";
 import "../../common/mock/EthFeedMock.t.sol";
 import "../../common/mock/TimeProviderMock.t.sol";
 import "../../common/mock/UniswapV2RouterMock.t.sol";
+import "../../common/samples/SimplePoolManagementProposal.t.sol";
+
+
 
 contract Base {
     
@@ -77,7 +82,8 @@ contract Base {
 
     Deployer deployer;
 
-    function beforeEachDeploy() public {
+    //function beforeEachDeploy() public {
+    function setUp() public {
 
         Deployer deployer = new Deployer(address(this));
         deployer.setContractAddress("ProtocolSettings", address(new ProtocolSettings(true)));
@@ -95,6 +101,7 @@ contract Base {
         deployer.setContractAddress("UnderlyingCreditProviderFactory", address(new UnderlyingCreditProviderFactory()));
         deployer.setContractAddress("UnderlyingCreditTokenFactory", address(new UnderlyingCreditTokenFactory()));
         deployer.setContractAddress("LinearLiquidityPoolFactory", address(new LinearLiquidityPoolFactory()));
+        deployer.setContractAddress("YieldTracker", address(new YieldTracker()));
         deployer.setContractAddress("DEXFeedFactory", address(new DEXFeedFactory()));
         deployer.setContractAddress("Interpolator", address(new LinearAnySlopeInterpolator()));
         deployer.setContractAddress("PendingExposureRouter", address(new PendingExposureRouter()));
@@ -117,14 +124,35 @@ contract Base {
         settings.setAllowedToken(address(erc20), 1, 1);
         settings.setUdlFeed(address(feed), 1);
 
-        IGovernableLiquidityPool(pool).setParameters(
-            reserveRatio,
-            withdrawFee,
-            time.getNow() + 90 days,
-            10,
-            address(0),
-            1000e18
+        erc20.issue(address(this), 1e18);
+        erc20.approve(pool, 1e18);
+        IGovernableLiquidityPool(pool).depositTokens(address(this), address(erc20), 1e18);
+
+
+        //initialize proposal manager with set parameters propsoal data
+        SimplePoolManagementProposal pp = new SimplePoolManagementProposal();
+        pp.setExecutionBytes(
+            abi.encodePacked(
+                bytes4(keccak256("setParameters(uint, uint, uint, uint , address, uint)")),
+                abi.encode(reserveRatio, withdrawFee,  time.getNow() + 90 days, 10, address(0), 1000e18)
+            )
         );
+        //registered proposal
+        (uint pid, address proposalWrapperAddr) = IProposalManager(
+            deployer.getContractAddress("ProposalsManager")
+        ).registerProposal(
+            address(pp),
+            pool,
+            IProposalManager.Quorum.QUADRATIC,
+            IProposalManager.VoteType.POOL_SETTINGS,
+            time.getNow() + 2 days
+        );
+        
+        //vote on proposal
+        IProposalWrapper(proposalWrapperAddr).castVote(true);
+        //close proposal
+        IProposalWrapper(proposalWrapperAddr).close();
+        IGovernableLiquidityPool(pool).withdraw(1e18);
 
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
