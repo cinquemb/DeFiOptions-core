@@ -10,8 +10,8 @@ contract UnderlyingCreditProviderFactory is ManagedContract {
     address private deployerAddress;
 
     event NewUnderlyingCreditProvider(
-        address indexed hedgingManager,
-        address indexed pool
+        address indexed udlcdtp,
+        address indexed udlfeed
     );
 
     function initialize(Deployer deployer) override internal {
@@ -21,13 +21,13 @@ contract UnderlyingCreditProviderFactory is ManagedContract {
     function create(address _udlFeedAddr) external returns (address) {
         //cant use proxies unless all extenral addrs store here
         require(deployerAddress != address(0), "bad deployer addr");
-        address hdgMngr = address(
+        address udlcdtp = address(
             new UnderlyingCreditProvider(
                 deployerAddress,
                 _udlFeedAddr
             )
         );
-        emit NewUnderlyingCreditProvider(hdgMngr, _udlFeedAddr);
-        return hdgMngr;
+        emit NewUnderlyingCreditProvider(udlcdtp, _udlFeedAddr);
+        return udlcdtp;
     }
 }

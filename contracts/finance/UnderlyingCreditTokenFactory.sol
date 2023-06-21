@@ -12,8 +12,8 @@ contract UnderlyingCreditTokenFactory is ManagedContract {
     address private deployerAddress;
 
     event NewUnderlyingCreditToken(
-        address indexed hedgingManager,
-        address indexed pool
+        address indexed udlcdtk,
+        address indexed udlAsset
     );
     
     function initialize(Deployer deployer) override internal {
@@ -24,15 +24,14 @@ contract UnderlyingCreditTokenFactory is ManagedContract {
         //cant use proxies unless all extenral addrs store here
         require(deployerAddress != address(0), "bad deployer addr");
         address _udlAsset = UnderlyingFeed(_udlFeedAddr).getUnderlyingAddr();
-        address hdgMngr = address(
+        address udlcdtk = address(
             new UnderlyingCreditToken(
                 deployerAddress,
-                _udlAsset,
                 IERC20Details(_udlAsset).name(),
                 IERC20Details(_udlAsset).symbol()
             )
         );
-        emit NewUnderlyingCreditToken(hdgMngr, _udlAsset);
-        return hdgMngr;
+        emit NewUnderlyingCreditToken(udlcdtk, _udlAsset);
+        return udlcdtk;
     }
 }

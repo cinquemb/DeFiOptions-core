@@ -30,8 +30,8 @@ contract UnderlyingCreditToken is ERC20 {
 
     uint private serial;
 
-    constructor(address _deployAddr, address _poolAddr, string memory _nm, string memory _sm) ERC20(string(abi.encodePacked(_name_prefix, _nm))) public {
-        DOMAIN_SEPARATOR = ERC20(address(this)).DOMAIN_SEPARATOR();
+    constructor(address _deployAddr, string memory _nm, string memory _sm) ERC20(string(abi.encodePacked(_name_prefix, _nm))) public {
+        //DOMAIN_SEPARATOR = ERC20(address(this)).DOMAIN_SEPARATOR();
         Deployer deployer = Deployer(_deployAddr);
 
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));

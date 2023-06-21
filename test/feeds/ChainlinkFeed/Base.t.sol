@@ -22,7 +22,8 @@ abstract contract Base {
     int price;
     bool cached;
 
-    function beforeEachDeploy() public {
+    //function beforeEachDeploy() public {
+    function setUp() public {
 
         time = new TimeProviderMock();
 
