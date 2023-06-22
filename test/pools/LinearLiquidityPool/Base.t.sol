@@ -77,8 +77,9 @@ contract Base {
 
     uint120[] x;
     uint120[] y;
-    uint[3] bsStockSpread;
+    uint256[3] bsStockSpread;
     string symbol = "ETHM-EC-55e19-2592e3";
+    address symbolAddr;
 
     Deployer deployer;
 
@@ -150,7 +151,7 @@ contract Base {
             pool,
             IProposalManager.Quorum.QUADRATIC,
             IProposalManager.VoteType.POOL_SETTINGS,
-            time.getNow() + 2 days
+            time.getNow() + 1 hours
         );
         //    function registerProposal(address addr, address poolAddress, Quorum quorum, VoteType voteType, uint expiresAt ) external returns (uint id, address wp);
 
@@ -164,7 +165,8 @@ contract Base {
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
 
-        exchange.createSymbol(address(feed), CALL, strike, maturity);
+        symbolAddr = exchange.createSymbol(address(feed), CALL, strike, maturity);
+        symbol = IOptionToken(symbolAddr).symbol();
     }
 
     function createTraders() public {
@@ -190,21 +192,6 @@ contract Base {
 
     function addSymbol() internal {
 
-        /*
-            REVERTING
-            function addSymbol(
-                address udlFeed,
-                uint strike,
-                uint _mt,
-                IOptionsExchange.OptionType optType,
-                uint t0,
-                uint t1,
-                uint120[] calldata x,
-                uint120[] calldata y,
-                uint[3] calldata bsStockSpread
-
-        */
-
         x = [400e18, 450e18, 500e18, 550e18, 600e18, 650e18, 700e18];
         y = [
             30e18,  40e18,  50e18,  50e18, 110e18, 170e18, 230e18,
@@ -226,9 +213,10 @@ contract Base {
         SimplePoolManagementProposal pp = new SimplePoolManagementProposal();
         pp.setExecutionBytes(
             abi.encodeWithSelector(
-                bytes4(
-                    keccak256("addSymbol(address,uint256,uint256,IOptionsExchange.OptionType,uint256,uint256,uint120[],uint120[],uint[3])")
-                ),
+                //bytes4(
+                //    keccak256("addSymbol(address,uint256,uint256,IOptionsExchange.OptionType,uint256,uint256,uint120[],uint120[],uint256[3])")
+                //),
+                IGovernableLiquidityPool(pool).addSymbol.selector,
                 address(feed),
                 strike,
                 maturity,
@@ -249,7 +237,7 @@ contract Base {
             pool,
             IProposalManager.Quorum.QUADRATIC,
             IProposalManager.VoteType.POOL_SETTINGS,
-            time.getNow() + 1 days
+            time.getNow() + 1 hours
         );        
         //vote on proposal
         IProposalWrapper(proposalWrapperAddr).castVote(true);
@@ -271,6 +259,6 @@ contract Base {
 
     function createPoolTrader(address stablecoinAddr) internal returns (PoolTrader) {
 
-        return new PoolTrader(stablecoinAddr, address(exchange), address(pool), address(feed));  
+        return new PoolTrader(stablecoinAddr, address(exchange), address(pool), address(feed), symbol);  
     }
 }

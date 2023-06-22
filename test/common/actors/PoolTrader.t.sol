@@ -15,14 +15,16 @@ contract PoolTrader {
     address private addr;
     address private feed;
     uint private volumeBase = 1e18;
+    string symbol;
     
-    constructor(address _erc20, address _exchange, address _pool, address _feed) public {
+    constructor(address _erc20, address _exchange, address _pool, address _feed, string memory _symbol) public {
 
         erc20 = IERC20(_erc20);
         exchange = OptionsExchange(_exchange);
         pool = IGovernableLiquidityPool(_pool);
         addr = address(this);
         feed = _feed;
+        symbol= _symbol;
     }
     
     function balance() external view returns (uint) {
@@ -50,13 +52,6 @@ contract PoolTrader {
         public
         returns (address _tk)
     {
-        _tk = exchange.createSymbol(
-            feed,
-            optType,
-            strike, 
-            maturity
-        );
-
         IOptionsExchange.OpenExposureInputs memory oEi;
 
         oEi.symbols = new string[](1);
@@ -67,7 +62,7 @@ contract PoolTrader {
         oEi.paymentTokens = new address[](1);
 
 
-        oEi.symbols[0] = IOptionToken(_tk).symbol();
+        oEi.symbols[0] = symbol;
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
         oEi.poolAddrs[0] = address(pool);//poolAddr;

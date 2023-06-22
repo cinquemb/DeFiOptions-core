@@ -28,7 +28,7 @@ contract TestPoolTrading is Base {
         Assert.equal(exchange.balanceOf(address(pool)), value, "pool balance");
         Assert.equal(exchange.balanceOf(address(alice)), 0, "alice balance");
         
-        OptionToken tk = OptionToken(addr);
+        OptionToken tk = OptionToken(symbolAddr);
         Assert.equal(tk.balanceOf(address(bob)), 0, "bob options");
         Assert.equal(tk.balanceOf(address(alice)), volume, "alice options");
         Assert.equal(tk.writtenVolume(address(pool)), volume, "pool written volume");
@@ -96,8 +96,7 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         alice.depositInExchange(5 * cUnit);
-        address _tk = alice.writeOptions(2, CALL, strike, maturity);
-        OptionToken tk = OptionToken(_tk);
+        OptionToken tk = OptionToken(symbolAddr);
 
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         uint volume = 2 * volumeBase;
@@ -105,7 +104,7 @@ contract TestPoolTrading is Base {
 
         Assert.equal(tk.balanceOf(address(alice)), volume, "alice options before sell");
         Assert.equal(tk.balanceOf(address(pool)), 0, "pool options before sell");
-
+        address _tk = alice.writeOptions(2, CALL, strike, maturity);
         alice.sellToPool(symbol, sellPrice, volume);
 
         Assert.equal(tk.balanceOf(address(alice)), 0, "alice options after sell");
@@ -186,7 +185,7 @@ contract TestPoolTrading is Base {
         (uint buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         address addr = alice.buyFromPool(symbol, buyPrice, volume);
         
-        OptionToken tk = OptionToken(addr);
+        OptionToken tk = OptionToken(symbolAddr);
         Assert.equal(tk.totalSupply(), volume, "token initial supply");
         
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
@@ -214,8 +213,8 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         alice.depositInExchange(2 * cUnit);
-        address _tk = alice.writeOptions(2, CALL, strike, maturity);
-        OptionToken tk = OptionToken(_tk);
+        alice.writeOptions(2, CALL, strike, maturity);
+        OptionToken tk = OptionToken(symbolAddr);
 
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         alice.sellToPool(symbol, sellPrice, volume);
