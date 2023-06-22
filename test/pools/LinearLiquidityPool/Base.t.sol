@@ -85,7 +85,7 @@ contract Base {
     //function beforeEachDeploy() public {
     function setUp() public {
 
-        Deployer deployer = new Deployer(address(this));
+        deployer = new Deployer(address(this));
         deployer.setContractAddress("ProtocolSettings", address(new ProtocolSettings(true)));
         deployer.setContractAddress("TimeProvider", address(new TimeProviderMock()));
         deployer.setContractAddress("CreditProvider", address(new CreditProvider()));
@@ -163,6 +163,8 @@ contract Base {
 
         feed.setPrice(ethInitialPrice);
         time.setFixedTime(0);
+
+        exchange.createSymbol(address(feed), CALL, strike, maturity);
     }
 
     function createTraders() public {
@@ -215,18 +217,18 @@ contract Base {
             spread
         ];        
 
-        exchange.createSymbol(address(feed), CALL, strike, maturity);
-
         erc20.issue(address(this), 1000e18);
         erc20.approve(pool, 1000e18);
         IGovernableLiquidityPool(pool).depositTokens(address(this), address(erc20), 1000e18);
 
 
-        //initialize proposal manager with set parameters propsoal data
+        //initialize proposal manager with addSymbol propsoal data
         SimplePoolManagementProposal pp = new SimplePoolManagementProposal();
         pp.setExecutionBytes(
             abi.encodeWithSelector(
-                bytes4(keccak256("addSymbol(address,uint,uint,IOptionsExchange.OptionType,uint,uint,uint120[],uint120[],uint[3])")),
+                bytes4(
+                    keccak256("addSymbol(address,uint256,uint256,IOptionsExchange.OptionType,uint256,uint256,uint120[],uint120[],uint[3])")
+                ),
                 address(feed),
                 strike,
                 maturity,
@@ -238,6 +240,7 @@ contract Base {
                 bsStockSpread
             )
         );
+
         //registered proposal
         (uint pid, address proposalWrapperAddr) = IProposalManager(
             deployer.getContractAddress("ProposalsManager")
@@ -246,7 +249,7 @@ contract Base {
             pool,
             IProposalManager.Quorum.QUADRATIC,
             IProposalManager.VoteType.POOL_SETTINGS,
-            time.getNow() + 2 days
+            time.getNow() + 1 days
         );        
         //vote on proposal
         IProposalWrapper(proposalWrapperAddr).castVote(true);
