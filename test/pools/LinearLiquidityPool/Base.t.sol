@@ -243,7 +243,6 @@ contract Base {
         IProposalWrapper(proposalWrapperAddr).castVote(true);
         //close proposal
         IProposalWrapper(proposalWrapperAddr).close();
-        IGovernableLiquidityPool(pool).withdraw(1000e18);
     }
 
     function calcCollateralUnit() internal view returns (uint) {
