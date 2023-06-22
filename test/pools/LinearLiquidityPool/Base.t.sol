@@ -189,7 +189,7 @@ contract Base {
     function addSymbol() internal {
 
         /*
-
+            REVERTING
             function addSymbol(
                 address udlFeed,
                 uint strike,
@@ -247,10 +247,7 @@ contract Base {
             IProposalManager.Quorum.QUADRATIC,
             IProposalManager.VoteType.POOL_SETTINGS,
             time.getNow() + 2 days
-        );
-        //    function registerProposal(address addr, address poolAddress, Quorum quorum, VoteType voteType, uint expiresAt ) external returns (uint id, address wp);
-
-        
+        );        
         //vote on proposal
         IProposalWrapper(proposalWrapperAddr).castVote(true);
         //close proposal
