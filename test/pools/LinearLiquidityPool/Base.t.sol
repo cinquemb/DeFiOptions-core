@@ -110,6 +110,8 @@ contract Base {
         deployer.setContractAddress("UnderlyingFeed", address(new EthFeedMock()));
         deployer.setContractAddress("SwapRouter", address(new UniswapV2RouterMock()));
         deployer.setContractAddress("StablecoinA", address(new ERC20Mock(18)), false);
+        deployer.setContractAddress("StablecoinB", address(new ERC20Mock(9)), false);
+        deployer.setContractAddress("StablecoinC", address(new ERC20Mock(6)), false);
         deployer.deploy(address(this));
 
         time = TimeProviderMock(deployer.getContractAddress("TimeProvider"));

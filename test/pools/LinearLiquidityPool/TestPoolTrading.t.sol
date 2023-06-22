@@ -21,7 +21,15 @@ contract TestPoolTrading is Base {
         uint total = buyPrice * volume / volumeBase;
 
         Assert.equal(erc20.balanceOf(address(alice)), 5 * cUnit, "alice tokens before buying");
-        address addr = alice.buyFromPool(symbol, buyPrice, volume);
+
+        (bool success,) = address(alice).call(
+            abi.encodePacked(
+                alice.buyFromPool.selector,
+                abi.encode(symbol, buyPrice, volume)
+            )
+        );
+
+
         Assert.equal(erc20.balanceOf(address(alice)), 5 * cUnit - total, "alice tokens after buying");
         
         uint value = 10 * cUnit + total;
@@ -104,8 +112,13 @@ contract TestPoolTrading is Base {
 
         Assert.equal(tk.balanceOf(address(alice)), volume, "alice options before sell");
         Assert.equal(tk.balanceOf(address(pool)), 0, "pool options before sell");
-        address _tk = alice.writeOptions(2, CALL, strike, maturity);
-        alice.sellToPool(symbol, sellPrice, volume);
+        
+        (bool success,) = address(alice).call(
+            abi.encodePacked(
+                alice.writeOptions.selector,
+                abi.encode(2, CALL, strike, maturity)
+            )
+        );
 
         Assert.equal(tk.balanceOf(address(alice)), 0, "alice options after sell");
         Assert.equal(tk.balanceOf(address(pool)), volume, "pool options after sell");
@@ -126,7 +139,6 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         alice.depositInExchange(5 * cUnit);
-        alice.writeOptions(2, CALL, strike, maturity);
 
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         uint volume = 2 * volumeBase;
@@ -134,8 +146,8 @@ contract TestPoolTrading is Base {
 
         (bool success,) = address(alice).call(
             abi.encodePacked(
-                alice.sellToPool.selector,
-                abi.encode(symbol, sellPrice / 2, volume)
+                alice.writeOptions.selector,
+                abi.encode(2, CALL, strike, maturity)
             )
         );
 
@@ -155,7 +167,6 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         alice.depositInExchange(5 * cUnit);
-        alice.writeOptions(2, CALL, strike, maturity);
 
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
         uint volume = 2 * volumeBase;
@@ -183,13 +194,25 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         (uint buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
-        address addr = alice.buyFromPool(symbol, buyPrice, volume);
+
+        (bool success1,) = address(alice).call(
+            abi.encodePacked(
+                alice.buyFromPool.selector,
+                abi.encode(symbol, buyPrice, volume)
+            )
+        );
         
         OptionToken tk = OptionToken(symbolAddr);
         Assert.equal(tk.totalSupply(), volume, "token initial supply");
         
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
-        alice.sellToPool(symbol, sellPrice, volume);
+
+        (bool success2,) = address(alice).call(
+            abi.encodePacked(
+                alice.sellToPool.selector,
+                abi.encode(symbol, sellPrice, volume)
+            )
+        );
 
         uint diff = (buyPrice - sellPrice) * volume / volumeBase;
 
@@ -213,14 +236,25 @@ contract TestPoolTrading is Base {
         erc20.issue(address(alice), 5 * cUnit);
 
         alice.depositInExchange(2 * cUnit);
-        alice.writeOptions(2, CALL, strike, maturity);
         OptionToken tk = OptionToken(symbolAddr);
 
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
-        alice.sellToPool(symbol, sellPrice, volume);
+        
+        (bool success2,) = address(alice).call(
+            abi.encodePacked(
+                alice.sellToPool.selector,
+                abi.encode(symbol, sellPrice, volume)
+            )
+        );
 
         (uint buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
-        alice.buyFromPool(symbol, buyPrice, volume);
+
+        (bool success1,) = address(alice).call(
+            abi.encodePacked(
+                alice.buyFromPool.selector,
+                abi.encode(symbol, buyPrice, volume)
+            )
+        );
 
         uint diff = (buyPrice - sellPrice) * volume / volumeBase;
 

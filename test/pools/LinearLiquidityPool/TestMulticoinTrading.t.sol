@@ -67,9 +67,14 @@ contract TestMulticoinTrading is Base {
         decimals_diff = 1e9;
         stablecoinB.issue(address(userB), volume * optionBuyPrice / decimals_diff);
 
-        address addr_B = userB.buyFromPool(symbol, optionBuyPrice, volume);
+        address(userB).call(
+            abi.encodePacked(
+                userB.buyFromPool.selector,
+                abi.encode(symbol, optionBuyPrice, volume)
+            )
+        );
         
-        OptionToken tk_B = OptionToken(addr_B);
+        OptionToken tk_B = OptionToken(symbolAddr);
         Assert.equal(tk_B.balanceOf(address(userB)), volume, "userB options");
         emit LogUint("1.balanceOf(pool) after userB buy", exchange.balanceOf(address(pool)));
 
@@ -78,8 +83,13 @@ contract TestMulticoinTrading is Base {
         decimals_diff = 1e12;
         stablecoinC.issue(address(userC), volume * optionBuyPrice / decimals_diff);
 
-        address addr_C = userC.buyFromPool(symbol, optionBuyPrice, volume);
-        OptionToken tk_C = OptionToken(addr_C);
+        address(userC).call(
+            abi.encodePacked(
+                userC.buyFromPool.selector,
+                abi.encode(symbol, optionBuyPrice, volume)
+            )
+        );
+        OptionToken tk_C = OptionToken(symbolAddr);
         Assert.equal(tk_C.balanceOf(address(userC)), volume, "userC options");
 
         emit LogUint("1.balanceOf(pool) after userC buy",exchange.balanceOf(address(pool)));
@@ -158,9 +168,14 @@ contract TestMulticoinTrading is Base {
         decimals_diff = 1e9;
         stablecoinB.issue(address(userB), volume * optionBuyPrice / decimals_diff);
 
-        address addr = userB.buyFromPool(symbol, optionBuyPrice, volume);
+        address(userB).call(
+            abi.encodePacked(
+                userB.buyFromPool.selector,
+                abi.encode(symbol, optionBuyPrice, volume)
+            )
+        );
         
-        OptionToken tk = OptionToken(addr);
+        OptionToken tk = OptionToken(symbolAddr);
         Assert.equal(tk.balanceOf(address(userB)), volume, "userB options");
         emit LogUint("2.balanceOf(pool) after userB buy", exchange.balanceOf(address(pool)));
         
@@ -233,13 +248,19 @@ contract TestMulticoinTrading is Base {
 
         // Trader B writes an option in the OptionsExchange
         uint test_strike = 550e18;
-        address _tk = userB.writeOptions(1, CALL, test_strike, 30 days);
         emit LogUint("3.balanceOf(ex) userB write", exchange.balanceOf(address(userB)));
 
         // Trader B sells his option to the LiquidityPool
         uint volume = 1 * volumeBase;
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
-        userB.sellToPool(symbol, sellPrice, volume);
+
+        address(userB).call(
+            abi.encodePacked(
+                userB.sellToPool.selector,
+                abi.encode(symbol, sellPrice, volume)
+            )
+        );
+
         emit LogUint("3.balanceOf(ex) userB selltopool", exchange.balanceOf(address(userB)));
         emit LogUint("3.userB surplus before liquidate", exchange.calcSurplus(address(userB)));
 
@@ -248,7 +269,7 @@ contract TestMulticoinTrading is Base {
         feed.setPrice(int(test_strike - step));
         time.setTimeOffset(30 days);
         
-        collateralManager.liquidateOptions(_tk, address(userB));
+        collateralManager.liquidateOptions(symbolAddr, address(userB));
         emit LogUint("3.userB surplus after liquidate", exchange.calcSurplus(address(userB)));
 
         // Trader B withdraws all his exchange balance
