@@ -14,29 +14,6 @@ contract TestMulticoinTrading is Base {
     uint optionBuyPrice;
     uint optionSellPrice;
 
-    function beforeEach() public {
-        
-        //Deployer deployer = Deployer(DeployedAddresses.Deployer());
-
-        stablecoinA = erc20;
-
-        stablecoinB = ERC20Mock(deployer.getContractAddress("StablecoinB"));
-        stablecoinB.reset();
-        settings.setAllowedToken(address(stablecoinB), 1, 1e9);
-
-        stablecoinC = ERC20Mock(deployer.getContractAddress("StablecoinC"));
-        stablecoinC.reset();
-        settings.setAllowedToken(address(stablecoinC), 1, 1e12);
-
-        addSymbol();
-
-        (optionBuyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
-        (optionSellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
-
-        emit LogUint("0.optionBuyPrice is", optionBuyPrice);
-        emit LogUint("0.optionSellPrice is", optionSellPrice);
-    }
-
 /* testBuyWithMultipleCoins
 
     Initialize the LiquidityPool
@@ -46,6 +23,18 @@ contract TestMulticoinTrading is Base {
     Verify that all options were issued correctly and that the liquidity pool balance is 22*P
 */
     function testBuyWithMultipleCoins() public {
+
+        stablecoinA = erc20;
+        stablecoinB = ERC20Mock(deployer.getContractAddress("StablecoinB"));
+        stablecoinC = ERC20Mock(deployer.getContractAddress("StablecoinC"));
+
+        addSymbol();
+
+        (optionBuyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
+        (optionSellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
+
+        //emit LogUint("0.optionBuyPrice is", optionBuyPrice);
+        //emit LogUint("0.optionSellPrice is", optionSellPrice);
 
         uint decimals_diff = 0;
 
@@ -112,6 +101,18 @@ contract TestMulticoinTrading is Base {
     Verify that the option was issued correctly and that the liquidity pool balance is 21*P
 */
     function testBuyWithCombinationOfCoins() public {
+
+        stablecoinA = erc20;
+        stablecoinB = ERC20Mock(deployer.getContractAddress("StablecoinB"));
+        stablecoinC = ERC20Mock(deployer.getContractAddress("StablecoinC"));
+
+        addSymbol();
+
+        (optionBuyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
+        (optionSellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
+
+        emit LogUint("0.optionBuyPrice is", optionBuyPrice);
+        emit LogUint("0.optionSellPrice is", optionSellPrice);
 
         uint decimals_diff = 0;
         uint amount = 0;
@@ -201,6 +202,18 @@ contract TestMulticoinTrading is Base {
 */
     function testSellAndWithdrawCombinationOfCoins() public {
 
+        stablecoinA = erc20;
+        stablecoinB = ERC20Mock(deployer.getContractAddress("StablecoinB"));
+        stablecoinC = ERC20Mock(deployer.getContractAddress("StablecoinC"));
+
+        addSymbol();
+
+        (optionBuyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
+        (optionSellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
+
+        emit LogUint("0.optionBuyPrice is", optionBuyPrice);
+        emit LogUint("0.optionSellPrice is", optionSellPrice);
+
         uint decimals_diff = 0;
         uint amount = 0;
         uint pool_total = 0;
@@ -254,12 +267,15 @@ contract TestMulticoinTrading is Base {
         uint volume = 1 * volumeBase;
         (uint sellPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, false);
 
-        address(userB).call(
+        
+        (bool success,) = address(userB).call(
             abi.encodePacked(
                 userB.sellToPool.selector,
                 abi.encode(symbol, sellPrice, volume)
             )
         );
+
+        Assert.equal(success,true, "userB sold to pool");
 
         emit LogUint("3.balanceOf(ex) userB selltopool", exchange.balanceOf(address(userB)));
         emit LogUint("3.userB surplus before liquidate", exchange.calcSurplus(address(userB)));
@@ -269,6 +285,7 @@ contract TestMulticoinTrading is Base {
         feed.setPrice(int(test_strike - step));
         time.setTimeOffset(30 days);
         
+        //not working here
         collateralManager.liquidateOptions(symbolAddr, address(userB));
         emit LogUint("3.userB surplus after liquidate", exchange.calcSurplus(address(userB)));
 

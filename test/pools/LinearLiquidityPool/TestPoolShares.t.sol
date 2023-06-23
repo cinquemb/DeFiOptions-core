@@ -94,7 +94,14 @@ contract TestPoolShares is Base {
         addSymbol();
         (uint buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);
         erc20.issue(address(alice), buyPrice);
-        alice.buyFromPool(symbol, buyPrice, volumeBase);
+
+        (bool success,) = address(alice).call(
+            abi.encodePacked(
+                alice.buyFromPool.selector,
+                abi.encode(symbol, buyPrice, volumeBase)
+            )
+        );
+
         feed.setPrice(ethInitialPrice + 100e18); // force pool loss
 
         (buyPrice,) = IGovernableLiquidityPool(pool).queryBuy(symbol, true);

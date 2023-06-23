@@ -21,7 +21,11 @@ contract TestCastVote is Base {
 
         (uint ir1, uint b1,) = settings.getDebtInterestRate();
 
-        w.close();
+        (bool success,) = address(w).call(
+            abi.encodePacked(
+                w.close.selector
+            )
+        );
         
         Assert.isTrue(w.getStatus() == ProposalWrapper.Status.APPROVED, "proposal APPROVED");
 

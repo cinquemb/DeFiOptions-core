@@ -122,10 +122,15 @@ contract Base {
         erc20 = ERC20Mock(deployer.getContractAddress("StablecoinA"));
         collateralManager = CollateralManager(deployer.getContractAddress("CollateralManager"));
 
-        erc20.reset();
+        //erc20.reset();
 
         settings.setAllowedToken(address(erc20), 1, 1);
+        settings.setAllowedToken(deployer.getContractAddress("StablecoinB"), 1, 1e9);
+        settings.setAllowedToken(deployer.getContractAddress("StablecoinC"), 1, 1e12);
+
         settings.setUdlFeed(address(feed), 1);
+
+        
 
         erc20.issue(address(this), 1000e18);
         erc20.approve(pool, 1000e18);
