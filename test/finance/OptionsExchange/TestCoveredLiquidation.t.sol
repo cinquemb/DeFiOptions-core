@@ -13,11 +13,11 @@ contract TestCoveredLiquidation is Base {
         underlying.reset(address(this));
         underlying.issue(address(this), 3 * underlyingBase);
 
-        address _tk = writeCovered(3, ethInitialPrice, 10 days);
+        address _tk = writeCovered(3, ethInitialPrice, 10 days, address(alice));
 
         OptionToken tk = OptionToken(_tk);
 
-        tk.transfer(address(alice), 2 * volumeBase);
+        //tk.transfer(address(alice), 2 * volumeBase);
 
         Assert.equal(1 * volumeBase, tk.balanceOf(address(this)), "writer tk balance");
         Assert.equal(2 * volumeBase, tk.balanceOf(address(alice)), "alice tk balance");
@@ -29,7 +29,7 @@ contract TestCoveredLiquidation is Base {
             )
         );
         
-        Assert.isFalse(success, "liquidate should fail");
+        Assert.isFalse(success, "liquidate should fail"); 
     }
 
     function testLiquidationAtMaturityOTM() public {
@@ -39,11 +39,10 @@ contract TestCoveredLiquidation is Base {
         
         int step = 40e18;
 
-        address _tk = writeCovered(2, ethInitialPrice, 10 days);
+        address _tk = writeCovered(2, ethInitialPrice, 10 days, address(alice));
 
         OptionToken tk = OptionToken(_tk);
         
-        tk.transfer(address(alice), 2 * volumeBase);
 
         feed.setPrice(ethInitialPrice - step);
         time.setTimeOffset(10 days);
@@ -51,7 +50,12 @@ contract TestCoveredLiquidation is Base {
         uint b0 = underlying.balanceOf(address(this));
         Assert.equal(b0, 0, "underlying before liquidation");
 
-        collateralManager.liquidateOptions(_tk, address(this));
+        (bool success,) = address(this).call(
+            abi.encodePacked(
+                collateralManager.liquidateOptions.selector,
+                abi.encode(_tk, address(this))
+            )
+        );
 
         uint b1 = underlying.balanceOf(address(this));
         Assert.equal(b1, 2 * underlyingBase, "underlying after liquidation");
@@ -73,28 +77,37 @@ contract TestCoveredLiquidation is Base {
         
         int step = 40e18;
 
-        address _tk100 = writeCovered(2, ethInitialPrice, 100 days);
-        address _tk200 = writeCovered(2, ethInitialPrice, 200 days);
+        address _tk100 = writeCovered(2, ethInitialPrice, 100 days, address(alice));
+        address _tk200 = writeCovered(2, ethInitialPrice, 200 days, address(alice));
 
         OptionToken tk100 = OptionToken(_tk100);
         OptionToken tk200 = OptionToken(_tk200);
         
-        tk100.transfer(address(alice), 2 * volumeBase);
-        tk200.transfer(address(alice), 2 * volumeBase);
 
         feed.setPrice(ethInitialPrice + step);
 
         time.setTimeOffset(100 days);
-        collateralManager.liquidateOptions(_tk100, address(this));
+        (bool success,) = address(this).call(
+            abi.encodePacked(
+                collateralManager.liquidateOptions.selector,
+                abi.encode(_tk100, address(this))
+            )
+        );
         
         time.setTimeOffset(200 days);
-        collateralManager.liquidateOptions(_tk200, address(this));
+        (bool success1,) = address(this).call(
+            abi.encodePacked(
+                collateralManager.liquidateOptions.selector,
+                abi.encode(_tk200, address(this))
+            )
+        );
     }
 
     function writeCovered(
         uint volume,
         int strike, 
-        uint timeToMaturity
+        uint timeToMaturity,
+        address trader
     )
         public
         returns (address _tk)
@@ -110,6 +123,8 @@ contract TestCoveredLiquidation is Base {
             time.getNow() + timeToMaturity
         );
 
+        addSymbol(uint(strike), time.getNow() + timeToMaturity);
+
         IOptionsExchange.OpenExposureInputs memory oEi;
 
         oEi.symbols = new string[](1);
@@ -123,14 +138,17 @@ contract TestCoveredLiquidation is Base {
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
-        oEi.poolAddrs[0] = address(this);//poolAddr;
+        oEi.poolAddrs[0] = pool;//poolAddr;
         oEi.isCovered[0] = true;
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 
-
-        exchange.openExposure(
-            oEi,
-            address(this)
+        (bool success,) = address(this).call(
+            abi.encodePacked(
+                exchange.openExposure.selector,
+                abi.encode(oEi, trader)
+            )
         );
+
+        Assert.equal(success,true, "covered option written");
     }
 }

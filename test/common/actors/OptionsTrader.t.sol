@@ -9,6 +9,7 @@ import "../../../contracts/interfaces/UnderlyingFeed.sol";
 import "../../../contracts/interfaces/ICollateralManager.sol";
 import "../../../contracts/interfaces/IOptionsExchange.sol";
 import "../../../contracts/interfaces/IOptionToken.sol";
+import "../../../contracts/interfaces/IGovernableLiquidityPool.sol";
 
 contract OptionsTrader {
     
@@ -17,17 +18,19 @@ contract OptionsTrader {
     TimeProvider private time;
     ProtocolSettings private settings;
     ICollateralManager private collateralManager;
-    
+    IGovernableLiquidityPool private pool;
+
     address private addr;
     address private feed;
     uint private volumeBase = 1e18;
     
-    constructor(address _exchange, address _protocol_settings, address _credit_provider, address _collateral_manager, address _time, address _feed) public {
+    constructor(address _exchange, address _pool, address _protocol_settings, address _credit_provider, address _collateral_manager, address _time, address _feed) public {
 
         exchange = OptionsExchange(_exchange);
         creditProvider = CreditProvider(_credit_provider);
         collateralManager = ICollateralManager(_collateral_manager);
         settings = ProtocolSettings(_protocol_settings);
+        pool = IGovernableLiquidityPool(_pool);
         time = TimeProvider(_time);
         addr = address(this);
         feed = _feed;

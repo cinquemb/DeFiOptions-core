@@ -34,10 +34,10 @@ contract TestExchangeDeposit is Base {
         depositTokens(address(bob), 1500 * vBase);
 
         address _tk1 = bob.writeOption(CALL, ethInitialPrice - step, 10 days);
-        bob.transferOptions(address(alice), _tk1, 1);
+        //bob.transferOptions(address(alice), _tk1, 1);
 
         address _tk2 = bob.writeOption(CALL, ethInitialPrice + step, 10 days);
-        bob.transferOptions(address(alice), _tk2, 1);
+        //bob.transferOptions(address(alice), _tk2, 1);
 
         uint ct1 = MoreMath.sqrtAndMultiply(10, upperVol) + uint(step);
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);

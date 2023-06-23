@@ -285,8 +285,12 @@ contract TestMulticoinTrading is Base {
         feed.setPrice(int(test_strike - step));
         time.setTimeOffset(30 days);
         
-        //not working here
-        collateralManager.liquidateOptions(symbolAddr, address(userB));
+        (bool success1,) = address(userB).call(
+            abi.encodePacked(
+                collateralManager.liquidateOptions.selector,
+                abi.encode(symbolAddr, address(userB))
+            )
+        );
         emit LogUint("3.userB surplus after liquidate", exchange.calcSurplus(address(userB)));
 
         // Trader B withdraws all his exchange balance

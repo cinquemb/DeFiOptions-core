@@ -208,6 +208,8 @@ contract TestCoveredOption is Base {
             time.getNow() + timeToMaturity
         );
 
+        addSymbol(uint(strike), time.getNow() + timeToMaturity);
+
         IOptionsExchange.OpenExposureInputs memory oEi;
 
         oEi.symbols = new string[](1);
@@ -221,14 +223,17 @@ contract TestCoveredOption is Base {
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
-        oEi.poolAddrs[0] = address(this);//poolAddr;
+        oEi.poolAddrs[0] = pool;//poolAddr;
         oEi.isCovered[0] = true;
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 
-
-        exchange.openExposure(
-            oEi,
-            address(this)
+        (bool success,) = address(this).call(
+            abi.encodePacked(
+                exchange.openExposure.selector,
+                abi.encode(oEi, address(this))
+            )
         );
+
+        Assert.equal(success,true, "covered option written");
     }
 }
