@@ -1,6 +1,6 @@
 # DeFiOptions
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/TCGV/DeFiOptions/CI)
+[![Github Actions][gha-badge]][gha]
 
 V2 of Experimental DeFi options trading smart contracts enabling long and short positions for call and put tokenized, collateralized, cash settable european style options.
 
