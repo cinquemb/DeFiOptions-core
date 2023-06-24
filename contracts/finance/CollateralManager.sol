@@ -65,27 +65,7 @@ contract CollateralManager is BaseCollateralManager {
                 for (uint j = 0; j < _tokens.length; j++) {
                     address udlTemp = cData.rawUnderlyings[j];
                     if (udlTemp == cData.udlAddr){
-                        int256 delta = 0;
-                        uint256 absDelta = 0;
-
-                        if (_uncovered[j] > 0) {
-                            // short this option, thus mult by -1
-                            delta = calcDelta(
-                                cData.options[j],
-                                _uncovered[j]
-                            ).mul(-1);
-                            absDelta = MoreMath.abs(delta);
-                        }
-
-                        if (_holding[j] > 0) {
-                            // long thus does not need to be modified
-                            delta = calcDelta(
-                                cData.options[j],
-                                _holding[j]
-                            );
-                            absDelta = MoreMath.abs(delta);
-                        }
-                        
+                        (int256 delta, uint256 absDelta) = internalDeltaSum(cData.options[j], _uncovered[j], _holding[j]);
                         cData.totalDelta = cData.totalDelta.add(delta);
                         cData.totalAbsDelta = cData.totalAbsDelta.add(absDelta);
                     }
@@ -112,44 +92,7 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            if ((cData.posDeltaDenom[i] > 0) && (_uncovered[i] > _holding[i])) {
-                cData.coll = cData.coll.add(
-                    cData._iv[i].mul(
-                        int(_uncovered[i]).sub(int(_holding[i]))
-                    )
-                ).add(
-                    int(
-                        calcCollateral(
-                            getFeedData(cData.options[i].udlFeed).upperVol,
-                            _uncovered[i],
-                            cData.options[i]
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
-                    )
-                );
-
-                //apply coll reqs due to underlying asset shortage
-                cData.coll = cData.coll.add(
-                    collateralSkewForPositionUnderlying(cData.coll, cData.options[i].udlFeed).mul(int(cData.posDeltaNum[i])).div(int(cData.posDeltaDenom[i]))
-                );
-            } else if ((_uncovered[i] > _holding[i])) {
-                cData.coll = cData.coll.add(
-                    cData._iv[i].mul(
-                        int(_uncovered[i]).sub(int(_holding[i]))
-                    )
-                ).add(
-                    int(
-                        calcCollateral(
-                            getFeedData(cData.options[i].udlFeed).upperVol,
-                            _uncovered[i],
-                            cData.options[i]
-                        )
-                    )
-                );
-                //apply coll reqs due to underlying asset shortage
-                cData.coll = cData.coll.add(
-                    collateralSkewForPositionUnderlying(cData.coll, cData.options[i].udlFeed)
-                );
-            }   
+            cData.coll = sumCollateralCosts(cData, cData.options[i], cData._iv, _uncovered, _holding, i);
         }
 
         return cData.coll;
@@ -190,27 +133,7 @@ contract CollateralManager is BaseCollateralManager {
                 
                 for (uint j = 0; j < _tokens.length; j++) {
                     if (_underlying[j] == cData.udlAddr){
-                        int256 delta;
-                        uint256 absDelta;
-
-                        if (_uncovered[j] > 0) {
-                            // net short this option, thus mult by -1
-                            delta = calcDelta(
-                                opt,
-                                _uncovered[j]
-                            ).mul(-1);
-                            absDelta = MoreMath.abs(delta);
-                        }
-
-                        if (_holding[j] > 0) {
-                            // net long thus does not need to be modified
-                            delta = calcDelta(
-                                opt,
-                                _holding[j]
-                            );
-                            absDelta = MoreMath.abs(delta);
-                        }
-                        
+                        (int256 delta, uint256 absDelta) = internalDeltaSum(opt, _uncovered[j], _holding[j]);
                         cData.totalDelta = cData.totalDelta.add(delta);
                         cData.totalAbsDelta = cData.totalAbsDelta.add(absDelta);
                     }
@@ -237,46 +160,72 @@ contract CollateralManager is BaseCollateralManager {
                 }
             }
 
-            if ((cData.posDeltaDenom[i] > 0) && (_uncovered[i] > _holding[i])) {
-                cData.coll = cData.coll.add(
-                    _iv[i].mul(
-                        int(_uncovered[i]).sub(int(_holding[i]))
-                    )
-                ).add(
-                    int(
-                        calcCollateral(
-                            getFeedData(opt.udlFeed).upperVol,
-                            _uncovered[i],
-                            opt
-                        ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
-                    )
-                );
-
-                //apply coll reqs due to underlying asset shortage
-                cData.coll = cData.coll.add(
-                    collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed).mul(int(cData.posDeltaNum[i])).div(int(cData.posDeltaDenom[i]))
-                );
-            } else if ((_uncovered[i] > _holding[i])) {
-                cData.coll = cData.coll.add(
-                    _iv[i].mul(
-                        int(_uncovered[i]).sub(int(_holding[i]))
-                    )
-                ).add(
-                    int(
-                        calcCollateral(
-                            getFeedData(opt.udlFeed).upperVol,
-                            _uncovered[i],
-                            opt
-                        )
-                    )
-                );
-
-                //apply coll reqs due to underlying asset shortage
-                cData.coll = cData.coll.add(
-                    collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed)
-                );
-            }
+            cData.coll = sumCollateralCosts(cData, opt, _iv, _uncovered, _holding, i);
         }
+        return cData.coll;
+    }
+
+    function internalDeltaSum(IOptionsExchange.OptionData memory opt, uint _uncovered, uint _holding) private view returns (int delta, uint256 absDelta){
+        if (_uncovered > 0) {
+            // net short this option, thus mult by -1
+            delta = calcDelta(
+                opt,
+                _uncovered
+            ).mul(-1);
+            absDelta = MoreMath.abs(delta);
+        }
+
+        if (_holding > 0) {
+            // net long thus does not need to be modified
+            delta = calcDelta(
+                opt,
+                _holding
+            );
+            absDelta = MoreMath.abs(delta);
+        }
+    }
+
+    function sumCollateralCosts(CollateralData memory cData, IOptionsExchange.OptionData memory opt, int[] memory _iv, uint[] memory _uncovered, uint[] memory _holding, uint i) private view returns (int){
+        if ((cData.posDeltaDenom[i] > 0) && (_uncovered[i] > _holding[i])) {
+            cData.coll = cData.coll.add(
+                _iv[i].mul(
+                    int(_uncovered[i]).sub(int(_holding[i]))
+                )
+            ).add(
+                int(
+                    calcCollateral(
+                        getFeedData(opt.udlFeed).upperVol,
+                        _uncovered[i],
+                        opt
+                    ).mul(cData.posDeltaNum[i]).div(cData.posDeltaDenom[i])
+                )
+            );
+
+            //apply coll reqs due to underlying asset shortage
+            cData.coll = cData.coll.add(
+                collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed).mul(int(cData.posDeltaNum[i])).div(int(cData.posDeltaDenom[i]))
+            );
+        } else if ((_uncovered[i] > _holding[i])) {
+            cData.coll = cData.coll.add(
+                _iv[i].mul(
+                    int(_uncovered[i]).sub(int(_holding[i]))
+                )
+            ).add(
+                int(
+                    calcCollateral(
+                        getFeedData(opt.udlFeed).upperVol,
+                        _uncovered[i],
+                        opt
+                    )
+                )
+            );
+
+            //apply coll reqs due to underlying asset shortage
+            cData.coll = cData.coll.add(
+                collateralSkewForPositionUnderlying(cData.coll, opt.udlFeed)
+            );
+        }
+
         return cData.coll;
     }
 
@@ -316,40 +265,8 @@ contract CollateralManager is BaseCollateralManager {
         IOptionsExchange.OptionData memory opt,
         uint volume
     ) public view returns (int256){
-        /* 
-            - rfr == 0% assumption
-            - (1 / (sigma * sqrt(T - t))) * (ln(S/k) + (((sigma**2) / 2) * ((T-t)))) == d1
-                - underlying price S
-                - strike price K
-        */
-
+        (,, int256 d1) = calcDeltaInternal(opt);
         int256 delta;
-
-        uint256 one_year = 60 * 60 * 24 * 365;
-
-        uint256 volPeriod = settings.getVolatilityPeriod();
-        
-        // using exchange 90 day window
-        uint256 price = uint256(getUdlPrice(opt));
-        uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).mul(10).div(price); //vol
-        int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
-
-        //giv expired options no delta
-        if (uint256(opt.maturity) < settings.exchangeTime()){
-            return 0;
-        }
-        uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
-
-        int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
-
-        int256 d1n = int256((MoreMath.pow(sigma, 2).div(_volumeBase)).mul(dt).div(2).div(_volumeBase));
-        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)).mul(1e9).div(_volumeBase));//div(_sqrtBase)
-
-        int256 d1 = (ln_price_div_strike.add(
-            d1n
-        )).mul(int256(_volumeBase)).div(
-            d1d
-        );
 
         if (opt._type == IOptionsExchange.OptionType.PUT) {
             // -1 * norm_cdf(-d1) == put_delta
@@ -361,7 +278,6 @@ contract CollateralManager is BaseCollateralManager {
         }
 
         require((-1e18 <= delta) && (delta <= 1e18), "delta out of range");
-
         return delta.mul(int256(volume)).div(int256(_volumeBase));
     }
 
@@ -369,6 +285,19 @@ contract CollateralManager is BaseCollateralManager {
         IOptionsExchange.OptionData memory opt,
         uint volume
     ) public view returns (int256){
+        (uint256 price, int256 d1d, int256 d1) = calcDeltaInternal(opt);
+
+        int256 gamma = MoreMath.pdf(d1).mul(int256(_volumeBase)).div(
+            int256(price.mul(uint256(d1d)).div(_volumeBase))
+        );
+
+        //require((-1e18 <= gamma) && (gamma <= 1e18), "gamma out of range");
+        return gamma.mul(int256(volume)).div(int256(_volumeBase));
+    }
+
+    function calcDeltaInternal(
+        IOptionsExchange.OptionData memory opt
+    ) private view returns (uint256 price, int256 d1d, int256 d1){
         /* 
             - rfr == 0% assumption
             - (1 / (sigma * sqrt(T - t))) * (ln(S/k) + (((sigma**2) / 2) * ((T-t)))) == d1
@@ -376,40 +305,30 @@ contract CollateralManager is BaseCollateralManager {
                 - strike price K
         */
 
-
         uint256 one_year = 60 * 60 * 24 * 365;
-        
         uint256 volPeriod = settings.getVolatilityPeriod();
         
         // using exchange 90 day window
-        uint256 price = uint256(getUdlPrice(opt));
+        price = uint256(getUdlPrice(opt));
         uint256 sigma = UnderlyingFeed(opt.udlFeed).getDailyVolatility(volPeriod).mul(_volumeBase).mul(3).mul(10).div(price); //vol
         int256 price_div_strike = int256(price).mul(int256(_volumeBase)).div(int256(opt.strike));//need to multiply by volume base to get a number in base 1e18 decimals
 
         //giv expired options no delta
         if (uint256(opt.maturity) < settings.exchangeTime()){
-            return 0;
+            return (price,0,0);
         }
         uint256 dt = (uint256(opt.maturity).sub(settings.exchangeTime())).mul(_volumeBase).div(one_year); //dt relative to a year;
 
         int256 ln_price_div_strike = MoreMath.ln(price_div_strike);
 
         int256 d1n = int256((MoreMath.pow(sigma, 2).div(_volumeBase)).mul(dt).div(2).div(_volumeBase));
-        int256 d1d = int256(sigma.mul(MoreMath.sqrt(dt)).mul(1e9).div(_volumeBase));//div(_sqrtBase)
+        d1d = int256(sigma.mul(MoreMath.sqrt(dt)).mul(1e9).div(_volumeBase));//div(_sqrtBase)
 
-        int256 d1 = (ln_price_div_strike.add(
+        d1 = (ln_price_div_strike.add(
             d1n
         )).mul(int256(_volumeBase)).div(
             d1d
         );
-
-        int256 gamma = MoreMath.pdf(d1).mul(int256(_volumeBase)).div(
-            int256(price.mul(uint256(d1d)).div(_volumeBase))
-        );
-
-        //require((-1e18 <= gamma) && (gamma <= 1e18), "gamma out of range");
-
-        return gamma.mul(int256(volume)).div(int256(_volumeBase));
     }
 
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {

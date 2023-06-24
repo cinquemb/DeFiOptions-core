@@ -177,7 +177,7 @@ contract CreditProvider is ManagedContract {
     function grantTokens(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         
         ensurePrimeCaller();
-        burnDebtAndTransferTokensByPreference(owner, value, tokensInOrder, amountsOutInOrder);
+        burnDebtAndTransferTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
     }
 
     function calcDebt(address addr) public view returns (uint debt) {

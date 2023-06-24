@@ -6,6 +6,8 @@ import "../governance/ProtocolSettings.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/ICreditToken.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IUniswapV2Router01.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Convert.sol";
 import "../utils/SafeERC20.sol";
@@ -29,6 +31,7 @@ contract UnderlyingCreditProvider {
 
     address private vaultAddr;
     address private exchangeAddr;
+    address private exchangeCreditProviderAddr;
     address private udlAssetAddr;
 
     uint private _totalDebt;
@@ -55,6 +58,7 @@ contract UnderlyingCreditProvider {
         exchangeAddr = deployer.getContractAddress("OptionsExchange");
         vaultAddr = deployer.getContractAddress("UnderlyingVault");
         address collateralManagerAddr = deployer.getContractAddress("CollateralManager");
+        exchangeCreditProviderAddr = deployer.getContractAddress("CreditProvider");
 
         udlAssetAddr = UnderlyingFeed(_udlFeedAddr).getUnderlyingAddr();
         primeCallers[exchangeAddr] = 1;
@@ -313,6 +317,59 @@ contract UnderlyingCreditProvider {
         }
         creditToken.issue(to, value);
         emit WithdrawTokens(to, address(creditToken), value);
+    }
+
+    function swapStablecoinForUnderlying(
+        address udlCdtp,
+        address[] calldata path,
+        int price,
+        uint balance,
+        uint amountOut
+    ) external {
+        (address _router, address _stablecoin) = settings.getSwapRouterInfo();
+        require(
+            _router != address(0) && _stablecoin != address(0) && path.length >= 2,
+            "invalid swap router settings/ or path"
+        );
+
+        (uint amountOut, uint amountInMax) = filterSwapVals(balance, price, path);
+
+        IERC20_2 tk = IERC20_2(path[0]);
+        if (tk.allowance(address(this), _router) > 0) {
+            tk.safeApprove(_router, 0);
+        }
+        tk.safeApprove(_router, amountInMax);
+
+        IUniswapV2Router01(_router).swapTokensForExactTokens(
+            amountOut,
+            amountInMax,
+            path,
+            address(this),
+            settings.exchangeTime()
+        );
+
+        //send residual stables back to owner
+        uint stableBal = tk.balanceOf(address(this));
+        if (stableBal > 0) {
+            IERC20_2(path[0]).safeTransfer(exchangeCreditProviderAddr, stableBal);
+        }
+    }
+
+    function filterSwapVals(uint balance, int price, address[] memory path) private view returns (uint amountOut, uint amountInMax) {
+        (uint r, uint b) = settings.getTokenRate(path[0]);
+        uint stableBalance = Convert.from18DecimalsBase(path[0], balance);
+        amountInMax = IUnderlyingVault(vaultAddr).getAmountInMaxInv(
+            price,
+            amountOut,
+            path
+        );
+
+        if (amountInMax > stableBalance) {
+            amountOut = amountOut.mul(stableBalance).div(amountInMax);
+            amountInMax = stableBalance;
+        }
+
+        amountOut = amountOut.mul(r).div(b);
     }
 
     function ensureCaller(address addr) external view {

@@ -427,23 +427,16 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     
         // takes custom collateral requirements and applies exchange level normalizations   
         int coll = calcCollateralInternal(owner, is_regular);
-        
-        coll = collateralSkewForPosition(coll);
-        coll = coll.div(int(_volumeBase));
-
-        if (is_regular == false) {
-            return uint(coll);
-        }
-
-        if (coll < 0)
-            return 0;
-        return uint(coll);
+        return baseCalcCollateral(coll, is_regular);
     }
 
     function calcNetCollateral(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular) override public view returns (uint) {     
         // takes custom collateral requirements and applies exchange level normalizations on prospective positions
         int coll = calcNetCollateralInternal(_tokens, _uncovered, _holding, is_regular);
-        
+        return baseCalcCollateral(coll, is_regular);
+    }
+
+    function baseCalcCollateral(int coll, bool is_regular) private view returns (uint) {
         coll = collateralSkewForPosition(coll);
         coll = coll.div(int(_volumeBase));
 
@@ -457,13 +450,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     }
 
     function debtSwap(address udlFeed, uint256 creditingValue) private {
-        (address _router, address _stablecoin) = settings.getSwapRouterInfo();
-        require(
-            _router != address(0) && _stablecoin != address(0),
-            "invalid swap router settings"
-        );
-
-        IUniswapV2Router01 router = IUniswapV2Router01(_router);
+        (, address _stablecoin) = settings.getSwapRouterInfo();
         (, int p) = UnderlyingFeed(udlFeed).getLatestPrice();
         address underlying = UnderlyingFeed(udlFeed).getUnderlyingAddr();
 
@@ -471,16 +458,15 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint256 totalUnderlyingBalance = IUnderlyingCreditProvider(udlCdtp).totalTokenStock(); // underlying token balance
         uint256 totalUnderlyingCreditBalance = IUnderlyingCreditProvider(udlCdtp).getTotalBalance(); // credit balance
 
-        //NEED TO DO THIS BEFORE CALLING `swapStablecoinForUnderlying` in order to make sure enough stables in collateral manager
+        //NEED TO DO THIS BEFORE CALLING `swapStablecoinForUnderlying` in order to make sure enough stables in udlCdtp
         address[] memory tokensInOrder = new address[](1);
         uint[] memory amountsOutInOrder = new uint[](1);
         tokensInOrder[0] = _stablecoin;
         amountsOutInOrder[0] = Convert.from18DecimalsBase(_stablecoin, creditingValue);
-        creditProvider.grantTokens(address(this), creditingValue, tokensInOrder, amountsOutInOrder);
+        creditProvider.grantTokens(address(udlCdtp), creditingValue, tokensInOrder, amountsOutInOrder);
 
-        swapStablecoinForUnderlying(
+        IUnderlyingCreditProvider(udlCdtp).swapStablecoinForUnderlying(
             udlCdtp,
-            router,
             settings.getSwapPath(
                 _stablecoin,
                 underlying
@@ -491,60 +477,6 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         );
 
         emit DebtSwap(_stablecoin, underlying, creditingValue);
-    }
-
-    function swapStablecoinForUnderlying(
-        address udlCdtp,
-        IUniswapV2Router01 router,
-        address[] memory path,
-        int price,
-        uint balance,
-        uint amountOut
-    )
-        private returns (uint _in, uint _out)
-    {
-        require(path.length >= 2, "invalid swap path");
-        
-        (uint r, uint b) = settings.getTokenRate(path[0]);
-
-        uint stableBalance = Convert.from18DecimalsBase(path[0], balance);
-        
-        uint amountInMax = vault.getAmountInMaxInv(
-            price,
-            amountOut,
-            path
-        );
-
-        if (amountInMax > stableBalance) {
-            amountOut = amountOut.mul(stableBalance).div(amountInMax);
-            amountInMax = stableBalance;
-        }
-
-        IERC20_2 tk = IERC20_2(path[0]);
-        if (tk.allowance(address(this), address(router)) > 0) {
-            tk.safeApprove(address(router), 0);
-        }
-        tk.safeApprove(address(router), amountInMax);
-
-        _out = amountOut;
-        _in = router.swapTokensForExactTokens(
-            amountOut.mul(r).div(b),
-            amountInMax,
-            path,
-            address(this),
-            settings.exchangeTime()
-        )[0];
-        _in = Convert.to18DecimalsBase(path[0], _in);
-
-        //send residual stables and underlying back to owner
-        uint stableBal = tk.balanceOf(address(this));
-        uint udlBal = IERC20_2(path[1]).balanceOf(address(this));
-        if (stableBal > 0) {
-            IERC20_2(path[0]).safeTransfer(address(creditProvider), stableBal);
-        }
-        if (udlBal > 0) {
-            IERC20_2(path[1]).safeTransfer(udlCdtp, udlBal);
-        }
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {
