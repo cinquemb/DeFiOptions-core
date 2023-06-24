@@ -356,6 +356,22 @@ contract UnderlyingVault is ManagedContract {
         amountInMax = amountInMax.mul(rTol).div(bTol);
     }
 
+    function getAmountInMaxInv(
+        int price,
+        uint amountOut,
+        address[] memory path
+    )
+        public
+        view
+        returns (uint amountInMax)
+    {
+        uint8 d = IERC20Details(path[0]).decimals();
+        amountInMax = amountOut.mul(10 ** uint(d)).mul(uint(price));
+        
+        (uint rTol, uint bTol) = settings.getSwapRouterTolerance();
+        amountInMax = amountInMax.mul(rTol).div(bTol);
+    }
+
     function ensureCaller() private view {
         
         require(callers[msg.sender] == 1, "Vault: unauthorized caller");

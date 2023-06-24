@@ -270,7 +270,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         return int(price).div(2);
     }
 
-    function getFeedData(address udlFeed) override public view returns (IOptionsExchange.FeedData memory fd) {
+    function getFeedData(address udlFeed) internal view returns (IOptionsExchange.FeedData memory fd) {
         UnderlyingFeed feed = UnderlyingFeed(udlFeed);
 
         uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
@@ -342,8 +342,6 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
             value = liquidateBeforeMaturity(owner, opt, tk, written, iv);
         }
     }
-
-
 
     function liquidateAfterMaturity(
         address owner,
@@ -503,8 +501,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint balance,
         uint amountOut
     )
-        private
-        returns (uint _in, uint _out)
+        private returns (uint _in, uint _out)
     {
         require(path.length >= 2, "invalid swap path");
         
@@ -512,7 +509,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
         uint stableBalance = Convert.from18DecimalsBase(path[0], balance);
         
-        uint amountInMax = getAmountInMax(
+        uint amountInMax = vault.getAmountInMaxInv(
             price,
             amountOut,
             path
@@ -548,22 +545,6 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         if (udlBal > 0) {
             IERC20_2(path[1]).safeTransfer(udlCdtp, udlBal);
         }
-    }
-
-    function getAmountInMax(
-        int price,
-        uint amountOut,
-        address[] memory path
-    )
-        private
-        view
-        returns (uint amountInMax)
-    {
-        uint8 d = IERC20Details(path[0]).decimals();
-        amountInMax = amountOut.mul(10 ** uint(d)).mul(uint(price));
-        
-        (uint rTol, uint bTol) = settings.getSwapRouterTolerance();
-        amountInMax = amountInMax.mul(rTol).div(bTol);
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {

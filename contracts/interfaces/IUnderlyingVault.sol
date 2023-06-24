@@ -7,4 +7,5 @@ interface IUnderlyingVault {
     function lock(address owner, address token, uint value, bool isRehypothicate, address rehypothicationManage) external;
     function getUnderlyingCreditProvider(address token) external view returns (address);
     function setUnderlyingCreditProvider(address token, address udlCreditProviderAddress) external;
+    function getAmountInMaxInv(int price, uint amountOut, address[] calldata path) external view returns (uint amountInMax);
 }

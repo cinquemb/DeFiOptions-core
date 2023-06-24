@@ -104,8 +104,8 @@ abstract contract GovernableLiquidityPoolV2 is ManagedContract, RedeemableToken,
 
     function redeemAllowed() override public view returns (bool) {
         
-        //return block.timestamp >= maturity; //FOR DEPLOYMENTS
-        return settings.exchangeTime() >= maturity;//FOR TESTS
+        return block.timestamp >= maturity; //FOR DEPLOYMENTS
+        //return settings.exchangeTime() >= maturity;//FOR TESTS
     }
 
     function yield(uint dt) override external view returns (uint) {
