@@ -9,10 +9,8 @@ import "./Base.t.sol";
 contract TestCoveredLiquidation is Base {
     
     function testLiquidationBeforeAllowed() public {
-        
         underlying.reset(address(this));
         underlying.issue(address(this), 3 * underlyingBase);
-
         address _tk = writeCovered(3, ethInitialPrice, 10 days, address(alice));
 
         OptionToken tk = OptionToken(_tk);
@@ -29,7 +27,7 @@ contract TestCoveredLiquidation is Base {
             )
         );
         
-        Assert.isFalse(success, "liquidate should fail"); 
+        Assert.isFalse(success, "liquidate should fail");
     }
 
     function testLiquidationAtMaturityOTM() public {

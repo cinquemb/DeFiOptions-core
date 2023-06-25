@@ -19,13 +19,13 @@ contract TestOptionTrading is Base {
         uint ct10 = MoreMath.sqrtAndMultiply(10, upperVol);
 
         depositTokens(address(bob), ct10);
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
         bob.transferOptions(address(alice), _tk1, 1);
 
         time.setTimeOffset(5 days);
 
         depositTokens(address(alice), ct10);
-        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days, pool);
         alice.transferOptions(address(bob), _tk2, 1);
         
         int step = ethInitialPrice;
@@ -54,13 +54,13 @@ contract TestOptionTrading is Base {
 
         uint ct = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), ct);
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
         bob.transferOptions(address(alice), _tk1, 1);
 
         time.setTimeOffset(5 days);
 
         depositTokens(address(alice), ct);
-        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days, pool);
         alice.transferOptions(address(bob), _tk2, 1);
         
         int step = ethInitialPrice;
@@ -94,13 +94,13 @@ contract TestOptionTrading is Base {
         uint ct10 = MoreMath.sqrtAndMultiply(10, upperVol);
 
         depositTokens(address(bob), ct10);
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
         bob.transferOptions(address(alice), _tk1, 1);
 
         time.setTimeOffset(5 days);
 
         depositTokens(address(alice), ct10);
-        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days, pool);
         alice.transferOptions(address(bob), _tk2, 1);
         
         int step = 4 * ethInitialPrice;
@@ -138,13 +138,13 @@ contract TestOptionTrading is Base {
 
         uint ct = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), ct);
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk1 = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
         bob.transferOptions(address(alice), _tk1, 1);
 
         time.setTimeOffset(5 days);
 
         depositTokens(address(alice), ct);
-        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk2 = alice.writeOption(CALL, ethInitialPrice, 10 days, pool);
         alice.transferOptions(address(bob), _tk2, 1);
         
         int step = 4 * ethInitialPrice;
@@ -190,16 +190,16 @@ contract TestOptionTrading is Base {
         depositTokens(address(bob), ct);
         depositTokens(address(alice), ct);
 
-        address _tk1 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        address _tk1 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         bob.transferOptions(address(alice), _tk1, 100);
 
-        bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         bob.transferOptions(address(alice), _tk1, 100);
 
-        bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         bob.transferOptions(address(alice), _tk1, 100);
 
-        address _tk2 = alice.writeOptions(300, CALL, ethInitialPrice, 30 days);
+        address _tk2 = alice.writeOptions(300, CALL, ethInitialPrice, 30 days, pool);
         alice.transferOptions(address(bob), _tk2, 300);
 
         OptionToken tk = OptionToken(_tk1);

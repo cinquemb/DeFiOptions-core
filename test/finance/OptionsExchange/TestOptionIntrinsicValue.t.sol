@@ -11,7 +11,7 @@ contract TestOptionIntrinsicValue is Base {
 
         int step = 30e18;
         depositTokens(address(bob), upperVol);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days, pool);
         bob.transferOptions(address(alice), _tk, 1);
 
         feed.setPrice(ethInitialPrice - step);
@@ -30,7 +30,7 @@ contract TestOptionIntrinsicValue is Base {
 
         int step = 40e18;
         depositTokens(address(bob), upperVol);
-        address _tk = bob.writeOption(PUT, ethInitialPrice, 1 days);
+        address _tk = bob.writeOption(PUT, ethInitialPrice, 1 days, pool);
         bob.transferOptions(address(alice), _tk, 1);
 
         feed.setPrice(ethInitialPrice - step);
@@ -49,7 +49,7 @@ contract TestOptionIntrinsicValue is Base {
 
         uint ct1 = MoreMath.sqrtAndMultiply(30, upperVol);
         depositTokens(address(bob), ct1);
-        bob.writeOption(CALL, ethInitialPrice, 30 days);
+        bob.writeOption(CALL, ethInitialPrice, 30 days, pool);
         MoreAssert.equal(bob.calcCollateral(), ct1, cBase, "collateral at 30d");
 
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);
@@ -72,12 +72,12 @@ contract TestOptionIntrinsicValue is Base {
 
         depositTokens(address(bob), 1500 * vBase);
 
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice - step, 10 days);
+        address _tk1 = bob.writeOption(CALL, ethInitialPrice - step, 10 days, pool);
         bob.transferOptions(address(alice), _tk1, 1);
         uint ct1 = MoreMath.sqrtAndMultiply(10, upperVol) + uint(step);
         MoreAssert.equal(bob.calcCollateral(), ct1, cBase, "collateral ITM");
 
-        address _tk2 = bob.writeOption(CALL, ethInitialPrice + step, 10 days);
+        address _tk2 = bob.writeOption(CALL, ethInitialPrice + step, 10 days, pool);
         bob.transferOptions(address(alice), _tk2, 1);
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);
         MoreAssert.equal(bob.calcCollateral(), ct1 + ct2, cBase, "collateral OTM");

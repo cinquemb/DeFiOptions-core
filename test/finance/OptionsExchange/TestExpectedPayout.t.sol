@@ -11,7 +11,7 @@ contract TestExpectedPayout is Base {
         int step = 30e18;
         depositTokens(address(bob), upperVol);
 
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days, pool);
         bob.transferOptions(address(alice), _tk, 1);
 
         feed.setPrice(ethInitialPrice - step);
@@ -32,10 +32,10 @@ contract TestExpectedPayout is Base {
         int step = 30e18;
         depositTokens(address(bob), 15 * upperVol);
         
-        address _tk1 = bob.writeOptions(3, CALL, ethInitialPrice, 5 days);
+        address _tk1 = bob.writeOptions(3, CALL, ethInitialPrice, 5 days, pool);
         bob.transferOptions(address(alice), _tk1, 3);
         
-        address _tk2 = bob.writeOption(PUT, ethInitialPrice + step, 5 days);
+        address _tk2 = bob.writeOption(PUT, ethInitialPrice + step, 5 days, pool);
         bob.transferOptions(address(alice), _tk2, 1);
 
         feed.setPrice(ethInitialPrice - step);

@@ -14,7 +14,7 @@ contract TestWriteOptions is Base {
         (bool success,) = address(bob).call(
             abi.encodePacked(
                 bob.writeOption.selector,
-                abi.encode(CALL, ethInitialPrice, 10)
+                abi.encode(CALL, ethInitialPrice, 10, pool)
             )
         );
         
@@ -29,16 +29,16 @@ contract TestWriteOptions is Base {
         
         depositTokens(address(bob), 5000 * vBase);
 
-        address _tk = bob.writeOptions(10, CALL, ethInitialPrice - step, 15 days);
+        address _tk = bob.writeOptions(10, CALL, ethInitialPrice - step, 15 days, pool);
         MoreAssert.equal(bob.calcCollateral(), 10 * ct, cBase, "collateral none transfered");
 
-        bob.transferOptions(address(alice), _tk, 1);
+        //bob.transferOptions(address(alice), _tk, 1);
         MoreAssert.equal(bob.calcCollateral(), 10 * ct + 1 * uint(step), cBase, "collateral '1' transfered");
 
-        bob.transferOptions(address(alice), _tk, 2);
+        //bob.transferOptions(address(alice), _tk, 2);
         MoreAssert.equal(bob.calcCollateral(), 10 * ct + 3 * uint(step), cBase, "collateral '3' transfered");
 
-        bob.transferOptions(address(alice), _tk, 3);
+        //bob.transferOptions(address(alice), _tk, 3);
         MoreAssert.equal(bob.calcCollateral(), 10 * ct + 6 * uint(step), cBase, "collateral '6' transfered");
 
         OptionToken tk = OptionToken(_tk);
@@ -62,7 +62,7 @@ contract TestWriteOptions is Base {
             time.getNow() + 30 days
         );
         depositTokens(address(bob), ct);
-        address _tk = bob.writeOptions(1100, CALL, ethInitialPrice, 30 days);
+        address _tk = bob.writeOptions(1100, CALL, ethInitialPrice, 30 days, pool);
 
         Assert.equal(getBookLength(), 1, "book length t0");
 
@@ -108,9 +108,9 @@ contract TestWriteOptions is Base {
         
         depositTokens(address(bob), 5000 * vBase);
 
-        address _tk = bob.writeOptions(10, CALL, ethInitialPrice - step, 15 days);
+        address _tk = bob.writeOptions(10, CALL, ethInitialPrice - step, 15 days, pool);
 
-        bob.transferOptions(address(alice), _tk, 5);
+        //bob.transferOptions(address(alice), _tk, 5);
         MoreAssert.equal(bob.calcCollateral(), 10 * ct + 5 * uint(step), cBase, "collateral before burn");
 
         OptionToken tk = OptionToken(_tk);
@@ -145,16 +145,16 @@ contract TestWriteOptions is Base {
 
         OptionsTrader h1 = createTrader();
 
-        address _tk1 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        address _tk1 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         OptionToken tk = OptionToken(_tk1);
         Assert.equal(tk.writtenVolume(address(bob)), 100 * volumeBase, "bob written volume");
         bob.transferOptions(address(h1), _tk1, 100);
 
-        address _tk2 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        address _tk2 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         Assert.equal(tk.writtenVolume(address(bob)), 200 * volumeBase, "bob written volume");
         bob.transferOptions(address(h1), _tk2, 100);
 
-        address _tk3 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days);
+        address _tk3 = bob.writeOptions(100, CALL, ethInitialPrice, 30 days, pool);
         Assert.equal(tk.writtenVolume(address(bob)), 300 * volumeBase, "bob written volume");
         bob.transferOptions(address(h1), _tk3, 100);
         

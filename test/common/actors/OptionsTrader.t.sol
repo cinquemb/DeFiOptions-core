@@ -70,19 +70,21 @@ contract OptionsTrader {
     function writeOption(
         IOptionsExchange.OptionType optType,
         int strike, 
-        uint timeTomaturity
+        uint timeTomaturity,
+        address pool
     )
         public
         returns (address _tk)
     {
-        _tk = writeOptions(1, optType, strike, timeTomaturity);
+        _tk = writeOptions(1, optType, strike, timeTomaturity, pool);
     }
 
     function writeOptions(
         uint volume,
         IOptionsExchange.OptionType optType,
         int strike, 
-        uint timeToMaturity
+        uint timeToMaturity,
+        address pool
     )
         public
         returns (address _tk)
@@ -108,7 +110,7 @@ contract OptionsTrader {
         oEi.symbols[0] = IOptionToken(_tk).symbol();
         oEi.volume[0] = volume * volumeBase;
         oEi.isShort[0] = true;
-        oEi.poolAddrs[0] = address(this);//poolAddr;
+        oEi.poolAddrs[0] = pool;//poolAddr;
         //oEi.isCovered[0] = false; //expoliting default to save gas
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 

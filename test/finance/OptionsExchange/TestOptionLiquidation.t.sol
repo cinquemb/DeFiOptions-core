@@ -12,7 +12,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
 
         bob.transferOptions(address(alice), _tk, 1);
             
@@ -32,7 +32,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
 
         bob.transferOptions(address(alice), _tk, 1);
 
@@ -62,7 +62,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
 
         bob.transferOptions(address(alice), _tk, 1);
 
@@ -93,7 +93,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
 
         bob.transferOptions(address(alice), _tk, 1);
 
@@ -112,7 +112,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(CALL, ethInitialPrice, 10 days, pool);
         
         bob.transferOptions(address(alice), _tk, 1);
 
@@ -136,7 +136,7 @@ contract TestOptionLiquidation is Base {
 
         uint mu = MoreMath.sqrtAndMultiply(10, upperVol);
         depositTokens(address(bob), mu);
-        address _tk = bob.writeOption(PUT, ethInitialPrice, 10 days);
+        address _tk = bob.writeOption(PUT, ethInitialPrice, 10 days, pool);
         
         bob.transferOptions(address(alice), _tk, 1);
 
