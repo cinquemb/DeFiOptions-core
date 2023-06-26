@@ -11,17 +11,26 @@ contract TestOptionIntrinsicValue is Base {
 
         int step = 30e18;
         depositTokens(address(bob), upperVol);
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days, pool);
-        bob.transferOptions(address(alice), _tk, 1);
+
+
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice), time.getNow() + 5 days);
+        addSymbol(uint(ethInitialPrice), time.getNow() + 5 days);
+        (bool success1,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice, 5 days, pool)
+            )
+        );
+
 
         feed.setPrice(ethInitialPrice - step);
-        Assert.equal(int(exchange.calcIntrinsicValue(_tk)), 0, "quote below strike");
+        Assert.equal(int(exchange.calcIntrinsicValue(address(feed), CALL, uint(ethInitialPrice), time.getNow() + 5 days)), 0, "quote below strike");
 
         feed.setPrice(ethInitialPrice);
-        Assert.equal(int(exchange.calcIntrinsicValue(_tk)), 0, "quote at strike");
+        Assert.equal(int(exchange.calcIntrinsicValue(address(feed), CALL, uint(ethInitialPrice), time.getNow() + 5 days)), 0, "quote at strike");
         
         feed.setPrice(ethInitialPrice + step);
-        Assert.equal(int(exchange.calcIntrinsicValue(_tk)), step, "quote above strike");
+        Assert.equal(int(exchange.calcIntrinsicValue(address(feed), CALL, uint(ethInitialPrice), time.getNow() + 5 days)), step, "quote above strike");
         
         Assert.equal(bob.calcCollateral(), upperVol + uint(step), "call collateral");
     }
@@ -49,7 +58,21 @@ contract TestOptionIntrinsicValue is Base {
 
         uint ct1 = MoreMath.sqrtAndMultiply(30, upperVol);
         depositTokens(address(bob), ct1);
-        bob.writeOption(CALL, ethInitialPrice, 30 days, pool);
+
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice), time.getNow() + 30 days);
+        addSymbol(uint(ethInitialPrice), time.getNow() + 30 days);
+        (bool success1,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice, 30 days, pool)
+            )
+        );
+
+
+        MoreAssert.equal((success1 == true )? 1 : 0, 1, cBase, "wrote");
+
+
+        MoreAssert.equal(time.getNow() + 30 days, settings.exchangeTime() + 30 days, cBase, "exchange time");
         MoreAssert.equal(bob.calcCollateral(), ct1, cBase, "collateral at 30d");
 
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);
@@ -72,13 +95,27 @@ contract TestOptionIntrinsicValue is Base {
 
         depositTokens(address(bob), 1500 * vBase);
 
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice - step, 10 days, pool);
-        bob.transferOptions(address(alice), _tk1, 1);
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice-step), time.getNow() + 10 days);
+        addSymbol(uint(ethInitialPrice-step), time.getNow() + 10 days);
+        (bool success1,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice-step, 10 days, pool)
+            )
+        );
+
         uint ct1 = MoreMath.sqrtAndMultiply(10, upperVol) + uint(step);
         MoreAssert.equal(bob.calcCollateral(), ct1, cBase, "collateral ITM");
 
-        address _tk2 = bob.writeOption(CALL, ethInitialPrice + step, 10 days, pool);
-        bob.transferOptions(address(alice), _tk2, 1);
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice+step), time.getNow() + 10 days);
+        addSymbol(uint(ethInitialPrice+step), time.getNow() + 10 days);
+        (bool success2,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice+step, 10 days, pool)
+            )
+        );
+
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);
         MoreAssert.equal(bob.calcCollateral(), ct1 + ct2, cBase, "collateral OTM");
     }

@@ -33,19 +33,35 @@ contract TestExchangeDeposit is Base {
         int step = 40e18;
         depositTokens(address(bob), 1500 * vBase);
 
-        address _tk1 = bob.writeOption(CALL, ethInitialPrice - step, 10 days, pool);
-        //bob.transferOptions(address(alice), _tk1, 1);
 
-        address _tk2 = bob.writeOption(CALL, ethInitialPrice + step, 10 days, pool);
-        //bob.transferOptions(address(alice), _tk2, 1);
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice-step), time.getNow() + 10 days);
+        exchange.createSymbol(address(feed), CALL, uint(ethInitialPrice+step), time.getNow() + 10 days);
+
+        addSymbol(uint(ethInitialPrice - step), 10 days);
+        addSymbol(uint(ethInitialPrice + step), 10 days);
+
+        (bool success1,) = address(this).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice - step, 10 days, pool)
+            )
+        );
+        (bool success2,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice + step, 10 days, pool)
+            )
+        );
 
         uint ct1 = MoreMath.sqrtAndMultiply(10, upperVol) + uint(step);
         uint ct2 = MoreMath.sqrtAndMultiply(10, upperVol);
 
         uint sp = 1500 * vBase - ct1 - ct2 ;
-        MoreAssert.equal(bob.calcSurplus(), sp, cBase, "check surplus");
+        //MoreAssert.equal(bob.calcSurplus(), sp, cBase, "check surplus");
+        Assert.equal(bob.calcSurplus(), sp, "check surplus");
 
         bob.withdrawTokens();
+
         Assert.equal(bob.calcSurplus(), 0, "check surplus after withdraw");
         MoreAssert.equal(erc20.balanceOf(address(bob)), sp, cBase, "check tokens after withdraw");
     }

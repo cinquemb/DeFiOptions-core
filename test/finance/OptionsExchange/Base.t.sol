@@ -172,6 +172,7 @@ contract Base {
 
         feed.setPrice(ethInitialPrice);
         time.setTimeOffset(0);
+
     }
 
     function createTrader() internal returns (OptionsTrader) {

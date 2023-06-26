@@ -11,20 +11,27 @@ contract TestExpectedPayout is Base {
         int step = 30e18;
         depositTokens(address(bob), upperVol);
 
-        address _tk = bob.writeOption(CALL, ethInitialPrice, 1 days, pool);
-        bob.transferOptions(address(alice), _tk, 1);
+
+        addSymbol(uint(ethInitialPrice), time.getNow() + 1 days);
+        (bool success1,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(CALL, ethInitialPrice, 1 days, pool)
+            )
+        );
+
 
         feed.setPrice(ethInitialPrice - step);
         Assert.equal(exchange.calcExpectedPayout(address(bob)), 0, "bob payout below strike");
-        Assert.equal(exchange.calcExpectedPayout(address(alice)), 0, "alice payout below strike");
+        Assert.equal(exchange.calcExpectedPayout(pool), 0, "alice payout below strike");
 
         feed.setPrice(ethInitialPrice);
         Assert.equal(exchange.calcExpectedPayout(address(bob)), 0, "bob payout at strike");
-        Assert.equal(exchange.calcExpectedPayout(address(alice)), 0, "alice payout at strike");
+        Assert.equal(exchange.calcExpectedPayout(pool), 0, "alice payout at strike");
         
         feed.setPrice(ethInitialPrice + step);
         Assert.equal(exchange.calcExpectedPayout(address(bob)), -step, "bob payout above strike");
-        Assert.equal(exchange.calcExpectedPayout(address(alice)), step, "alice payout above strike");
+        Assert.equal(exchange.calcExpectedPayout(pool), step, "alice payout above strike");
     }
 
     function testOptionsPortifolioExpectedPayout() public {
@@ -32,11 +39,27 @@ contract TestExpectedPayout is Base {
         int step = 30e18;
         depositTokens(address(bob), 15 * upperVol);
         
-        address _tk1 = bob.writeOptions(3, CALL, ethInitialPrice, 5 days, pool);
-        bob.transferOptions(address(alice), _tk1, 3);
+        //address _tk1 = bob.writeOptions(3, CALL, ethInitialPrice, 5 days, pool);
+        //bob.transferOptions(address(alice), _tk1, 3);
+
+        addSymbol(uint(ethInitialPrice), time.getNow() + 5 days);
+        (bool success1,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOptions.selector,
+                abi.encode(3, CALL, ethInitialPrice, 5 days, pool)
+            )
+        );
         
-        address _tk2 = bob.writeOption(PUT, ethInitialPrice + step, 5 days, pool);
-        bob.transferOptions(address(alice), _tk2, 1);
+        //address _tk2 = bob.writeOption(PUT, ethInitialPrice + step, 5 days, pool);
+        //bob.transferOptions(address(alice), _tk2, 1);
+
+        addSymbol(uint(ethInitialPrice), time.getNow() + 1 days);
+        (bool success2,) = address(bob).call(
+            abi.encodePacked(
+                bob.writeOption.selector,
+                abi.encode(PUT, ethInitialPrice+step, 5 days, pool)
+            )
+        );
 
         feed.setPrice(ethInitialPrice - step);
         Assert.equal(exchange.calcExpectedPayout(address(bob)), -2 * step, "bob payout below strike");

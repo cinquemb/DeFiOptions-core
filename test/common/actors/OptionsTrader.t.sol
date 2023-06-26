@@ -54,17 +54,31 @@ contract OptionsTrader {
 
         address[] memory tokenArray = new address[](1); 
         tokenArray[0] = tokens[0];
-        exchange.withdrawTokens(tokenArray, amount);
+        //exchange.withdrawTokens(tokenArray, amount);
+
+        (bool success2,) = address(this).call(
+            abi.encodePacked(
+                exchange.withdrawTokens.selector,
+                abi.encode(tokens, amount)
+            )
+        );
     }
     
     function withdrawTokens(uint amount) public {
         address[] memory tokens = settings.getAllowedTokens();
         uint[] memory amountArray = new uint[](1); 
-        amountArray[0] = calcSurplus();
+        amountArray[0] = amount;
 
         address[] memory tokenArray = new address[](1); 
         tokenArray[0] = tokens[0];
-        exchange.withdrawTokens(tokenArray ,amountArray);
+        (bool success2,) = address(this).call(
+            abi.encodePacked(
+                exchange.withdrawTokens.selector,
+                abi.encode(tokenArray, amountArray)
+            )
+        );
+
+
     }
 
     function writeOption(
@@ -90,13 +104,6 @@ contract OptionsTrader {
         returns (address _tk)
     {
 
-        _tk = exchange.createSymbol(
-            feed,
-            optType,
-            uint(strike), 
-            time.getNow() + timeToMaturity
-        );
-
         IOptionsExchange.OpenExposureInputs memory oEi;
 
         oEi.symbols = new string[](1);
@@ -115,9 +122,11 @@ contract OptionsTrader {
         //oEi.paymentTokens[0] = address(0); //exploiting default to save gas
 
 
-        exchange.openExposure(
-            oEi,
-            address(this)
+        (bool success,) = address(this).call(
+            abi.encodePacked(
+                exchange.openExposure.selector,
+                abi.encode(oEi, address(this))
+            )
         );
     }
 

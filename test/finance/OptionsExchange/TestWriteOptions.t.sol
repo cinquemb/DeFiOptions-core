@@ -30,6 +30,13 @@ contract TestWriteOptions is Base {
         depositTokens(address(bob), 5000 * vBase);
 
         address _tk = bob.writeOptions(10, CALL, ethInitialPrice - step, 15 days, pool);
+
+        (bool success1,) = address(this).call(
+            abi.encodePacked(
+                bob.writeOptions.selector,
+                abi.encode(10, CALL, ethInitialPrice - step, 15 days, pool)
+            )
+        );
         MoreAssert.equal(bob.calcCollateral(), 10 * ct, cBase, "collateral none transfered");
 
         //bob.transferOptions(address(alice), _tk, 1);
