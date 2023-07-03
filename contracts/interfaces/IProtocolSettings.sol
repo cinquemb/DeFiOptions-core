@@ -10,6 +10,9 @@ interface IProtocolSettings {
     function checkPoolSellCreditTradable(address poolAddress) external view returns (bool);
     function getPoolCreditTradeable(address poolAddr) external view returns (uint);
 	function applyCreditInterestRate(uint value, uint date) external view returns (uint);
+    function getUnderlyingCreditInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d);
+    function setUnderlyingCreditInterestRate(uint i, uint b, address udlAsset) external;
+    function applyUnderlyingCreditInterestRate(uint value, uint date, address udlAsset) external view returns (uint);
 	function getSwapRouterInfo() external view returns (address router, address token);
 	function getSwapRouterTolerance() external view returns (uint r, uint b);
 	function getSwapPath(address from, address to) external view returns (address[] memory path);

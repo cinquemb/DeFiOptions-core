@@ -27,16 +27,18 @@ contract UnderlyingCreditToken is ERC20 {
     string private _symbol;
 
     address private issuer;
+    address private udlAsset;
 
     uint private serial;
 
-    constructor(address _deployAddr, string memory _nm, string memory _sm) ERC20(string(abi.encodePacked(_name_prefix, _nm))) public {
+    constructor(address _deployAddr, address _udlAsset, string memory _nm, string memory _sm) ERC20(string(abi.encodePacked(_name_prefix, _nm))) public {
         //DOMAIN_SEPARATOR = ERC20(address(this)).DOMAIN_SEPARATOR();
         Deployer deployer = Deployer(_deployAddr);
 
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         _name = _nm;
         _symbol = _sm;
+        udlAsset = _udlAsset;
     }
 
     function initialize(address underlyingCreditProvider) external {
@@ -65,7 +67,7 @@ contract UnderlyingCreditToken is ERC20 {
 
         bal = 0;
         if (balances[owner] > 0) {
-            bal = settings.applyCreditInterestRate(balances[owner], creditDates[owner]);
+            bal = settings.applyUnderlyingCreditInterestRate(balances[owner], creditDates[owner], udlAsset);
         }
     }
 
@@ -77,7 +79,7 @@ contract UnderlyingCreditToken is ERC20 {
             this is to avoid looping over credit dates and indivual balances, may need to use earliest credit date?
                 - may need a linked listed storing credit date reference?
         */
-        uint theoreticalMaxBal = settings.applyCreditInterestRate(_totalSupply, creditDates[msg.sender]);
+        uint theoreticalMaxBal = settings.applyUnderlyingCreditInterestRate(_totalSupply, creditDates[msg.sender], udlAsset);
 
         if (b > theoreticalMaxBal) {
             withdrawTokens(msg.sender, balanceOf(msg.sender));

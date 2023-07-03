@@ -27,6 +27,7 @@ contract UnderlyingCreditTokenFactory is ManagedContract {
         address udlcdtk = address(
             new UnderlyingCreditToken(
                 deployerAddress,
+                _udlAsset,
                 IERC20Details(_udlAsset).name(),
                 IERC20Details(_udlAsset).symbol()
             )
