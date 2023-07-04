@@ -50,8 +50,8 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => bool) private dexAggIncentiveBlacklist;
     mapping(address => address) private udlCollateralManager;
 
-    mapping(address => Rate[]) private udlCreditInteresRates;
-
+    mapping(address => Rate[]) private udlCreditInterestRates;
+    mapping(address => Rate[]) private udlDebtInterestRates;
 
     mapping(address => mapping(address => address[])) private paths;
 
@@ -91,6 +91,7 @@ contract ProtocolSettings is ManagedContract {
     event SetDebtInterestRate(address sender, uint i, uint b);
     event SetCreditInterestRate(address sender, uint i, uint b);
     event SetUnderlyingCreditInterestRate(address sender, uint i, uint b);
+    event SetUnderlyingDebtInterestRate(address sender, uint i, uint b);
     event SetProcessingFee(address sender, uint f, uint b);
     event SetUdlFeed(address sender, address addr, int v);
     event SetVolatilityPeriod(address sender, uint _volatilityPeriod);
@@ -257,6 +258,34 @@ contract ProtocolSettings is ManagedContract {
         emit SetDebtInterestRate(msg.sender, i, b);
     }
 
+    function applyUnderlyingDebtInterestRate(uint value, uint date, address udlAsset) external view returns (uint) {
+
+        if (udlDebtInterestRates[udlAsset].length > 0) {
+            return applyRates(udlDebtInterestRates[udlAsset], value, date);
+        } else {
+            // default to exchange stablecoin credit rate policy
+            return applyRates(debtInterestRates, value, date);
+        }
+    }
+
+    function getUnderlyingDebtInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d) {
+        
+        Rate memory r = getRate(udlDebtInterestRates[udlAsset], date);
+        v = r.value;
+        b = r.base;
+        d = r.date;
+    }
+
+    function setUnderlyingDebtnterestRate(uint i, uint b, address udlAsset) external {
+        
+        validateFractionGTEOne(i, b);
+        ensureWritePrivilege();
+        udlDebtInterestRates[udlAsset][udlDebtInterestRates[udlAsset].length - 1].date = time.getNow();
+        udlDebtInterestRates[udlAsset].push(Rate(i, b, MAX_UINT));
+
+        emit SetUnderlyingDebtInterestRate(msg.sender, i, b);
+    }
+
     function getCreditInterestRate() external view returns (uint v, uint b, uint d) {
         
         uint len = creditInterestRates.length;
@@ -273,8 +302,8 @@ contract ProtocolSettings is ManagedContract {
 
     function applyUnderlyingCreditInterestRate(uint value, uint date, address udlAsset) external view returns (uint) {
 
-        if (udlCreditInteresRates[udlAsset].length > 0) {
-            return applyRates(udlCreditInteresRates[udlAsset], value, date);
+        if (udlCreditInterestRates[udlAsset].length > 0) {
+            return applyRates(udlCreditInterestRates[udlAsset], value, date);
         } else {
             // default to exchange stablecoin credit rate policy
             return applyRates(creditInterestRates, value, date);
@@ -301,7 +330,7 @@ contract ProtocolSettings is ManagedContract {
 
     function getUnderlyingCreditInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d) {
         
-        Rate memory r = getRate(udlCreditInteresRates[udlAsset], date);
+        Rate memory r = getRate(udlCreditInterestRates[udlAsset], date);
         v = r.value;
         b = r.base;
         d = r.date;
@@ -311,8 +340,8 @@ contract ProtocolSettings is ManagedContract {
         
         validateFractionGTEOne(i, b);
         ensureWritePrivilege();
-        udlCreditInteresRates[udlAsset][udlCreditInteresRates[udlAsset].length - 1].date = time.getNow();
-        udlCreditInteresRates[udlAsset].push(Rate(i, b, MAX_UINT));
+        udlCreditInterestRates[udlAsset][udlCreditInterestRates[udlAsset].length - 1].date = time.getNow();
+        udlCreditInterestRates[udlAsset].push(Rate(i, b, MAX_UINT));
 
         emit SetUnderlyingCreditInterestRate(msg.sender, i, b);
     }

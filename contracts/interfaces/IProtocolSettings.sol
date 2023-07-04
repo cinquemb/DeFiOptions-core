@@ -13,6 +13,9 @@ interface IProtocolSettings {
     function getUnderlyingCreditInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d);
     function setUnderlyingCreditInterestRate(uint i, uint b, address udlAsset) external;
     function applyUnderlyingCreditInterestRate(uint value, uint date, address udlAsset) external view returns (uint);
+    function getUnderlyingDebtInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d);
+    function setUnderlyingDebtInterestRate(uint i, uint b, address udlAsset) external;
+    function applyUnderlyingDebtInterestRate(uint value, uint date, address udlAsset) external view returns (uint);
 	function getSwapRouterInfo() external view returns (address router, address token);
 	function getSwapRouterTolerance() external view returns (uint r, uint b);
 	function getSwapPath(address from, address to) external view returns (address[] memory path);

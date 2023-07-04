@@ -148,7 +148,7 @@ contract UnderlyingCreditProvider {
 
         debt = debts[addr];
         if (debt > 0) {
-            debt = settings.applyDebtInterestRate(debt, debtsDate[addr]);
+            debt = settings.applyUnderlyingDebtInterestRate(debt, debtsDate[addr], udlAssetAddr);
         }
     }
 
