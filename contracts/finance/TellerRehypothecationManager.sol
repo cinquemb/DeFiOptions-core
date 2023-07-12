@@ -35,15 +35,52 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
 
 	address tellerInterfaceAddr = address(0);
+
+	/*
+		TODO: if non stable lending (lev short), first issue the udl credit to rehypotation manager, can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
+			- after loan request
+				- swap udl credit borrowed for exchange balance at orace rate interally with agaisnt rehypo manager
+					- mint exchange balance to rehypo manager -> transfer to pool hedging manager
+					- rehypo manage keeps udl credit token
+			- when repaying 
+				- swap exchange balance for udl credit borrowed at oracle rate interally with agaisnt rehypo manager
+					- hedging manager sends exchange balance to rehypo manager
+					- repay loan with udl credit recieved
+						- free exchanage balance collateral
+					- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
+					- rehypo manager transfers exchanage balance collateral to hedging manager
+
+		TODO: if stable lending (lev long), first transfer exchange balance hedging manager then transfer here, can only hedge against exchange balance (collateral == udl credit, asset == exchange balance) 
+			- before loan request
+				- swap exchange balance deposited for udl credit minted to rehypo manager orace rate interally with agaisnt rehypo manager
+				- issue exchange balance to rehypo manager
+			- after loan request
+				- swap exchange balance borrowed for udl credit at orace rate interally with agaisnt rehypo manager
+					- mint udl credit to rehypo manager -> transfer to pool hedging manager
+					- rehypo manage keeps exchange balance
+			- when repaying 
+				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
+					- hedging manager sends udl credit borrowed to rehypo manager
+					- repay loan with exchange balance recieved
+						- free udl credit collateral
+						
+					- swap udl credit interally in to exchange balance
+					- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
+					- rehypo manager transfers exchanage balance collateral to hedging manager
+	*/
 	
 	function lend(address asset, address collateral, uint amount) override external {
-		//TODO: only allow dao approved heging manager to call
+
+		require(
+            settings.isAllowedHedgingManager(msg.sender) == true, 
+            "not allowed hedging manager"
+        );
 
 		//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/create-commitment
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] == 0, "already lending");
 		//TODO: Need to transfer asset from proper place here (from udlCreditProvider for non stable, from pool credit balance for stable)
-		//TODO: if non stable, first issue the udl credit to the hedging manager then transfer here, can only hedge against udl credit
+		
 		/**
 		* @notice Creates a loan commitment from a lender for a market.
 		* @param _commitment The new commitment data expressed as a struct
@@ -80,7 +117,11 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
     }
 
     function borrow(address asset, address collateral, uint amount) override external {
-    	//TODO: only allow dao approved heging manager to call
+    	require(
+            settings.isAllowedHedgingManager(msg.sender) == true, 
+            "not allowed hedging manager"
+        );
+
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/accept-commitment
     	/**
 		 * @notice Accept the commitment to submitBid and acceptBid using the funds
@@ -142,20 +183,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
     }
     
-    function transferTokensToCreditProvider(address tokenAddr) override external {
-        //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
-        uint value = IERC20_2(tokenAddr).balanceOf(address(this));
-        if (value > 0) {
-            IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
-        }
-    }
+    function transferTokensToCreditProvider(address tokenAddr) override external {}
 
-    function transferTokensToVault(address tokenAddr) override external {
-    	//TODO: this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
-    	//TODO: this needs to send to the proper undelryingCreditProvider addr
-        uint value = IERC20_2(tokenAddr).balanceOf(address(this));
-        if (value > 0) {
-            IERC20_2(tokenAddr).safeTransfer(address(vault), value);
-        }
-    }
+    function transferTokensToVault(address tokenAddr) override external {}
 }

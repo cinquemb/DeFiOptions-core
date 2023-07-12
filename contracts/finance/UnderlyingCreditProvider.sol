@@ -98,8 +98,9 @@ contract UnderlyingCreditProvider {
     }
 
     function issueCredit(address to, uint value) external {
-        ensureHedgingManagerCaller();
+        ensureRehypothicationManagerCaller();
 
+        //TODO: protocol settings cannot execute this currently, needs to be a proposal?
         require(msg.sender == address(settings) || msg.sender == to, "not allowed issuer");
         issueCreditTokens(to, value);
     }
@@ -375,8 +376,8 @@ contract UnderlyingCreditProvider {
         require(primeCallers[addr] == 1, "unauthorized caller (ex)");
     }
 
-    function ensureHedgingManagerCaller() private view {
-        require(primeCallers[msg.sender] == 1 || settings.isAllowedHedgingManager(msg.sender) == true, "unauthorized caller (ex)");
+    function ensureRehypothicationManagerCaller() private view {
+        require(primeCallers[msg.sender] == 1 || settings.isAllowedRehypothicationManager(msg.sender) == true, "unauthorized caller (ex)");
     }
 
     function ensurePrimeCaller() private view {        

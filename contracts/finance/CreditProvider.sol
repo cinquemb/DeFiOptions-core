@@ -120,9 +120,10 @@ contract CreditProvider is ManagedContract {
 
     function issueCredit(address to, uint value) external {
         
-        ensurePrimeCaller();
+        ensureRehypothicationManagerCaller();
+        //TODO: protocol settings cannot execute this currently, needs to be a proposal?
 
-        require(msg.sender == address(settings));
+        require(msg.sender == address(settings) || msg.sender == to, "not allowed issuer");
         issueCreditTokens(to, value);
     }
 
@@ -617,6 +618,10 @@ contract CreditProvider is ManagedContract {
 
     function ensurePoolCaller() private view {        
         require(poolCallers[msg.sender] == 1, "unauthorized caller (pool)");
+    }
+
+    function ensureRehypothicationManagerCaller() private view {
+        require(primeCallers[msg.sender] == 1 || settings.isAllowedRehypothicationManager(msg.sender) == true, "unauthorized caller (ex)");
     }
 
     function ensurePrimeCaller() private view {        
