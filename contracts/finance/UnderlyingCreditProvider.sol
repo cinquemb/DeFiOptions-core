@@ -67,7 +67,6 @@ contract UnderlyingCreditProvider {
         primeCallers[collateralManagerAddr] = 1;
     }
 
-
     function initialize(address underlyingCreditToken) external {
         ensurePrimeCaller();
         creditToken = ICreditToken(underlyingCreditToken);
@@ -133,9 +132,16 @@ contract UnderlyingCreditProvider {
 
     function withdrawTokens(address owner, uint value) external {
         
-        ensurePrimeCaller();
+        ensureRehypothicationManagerCaller();
         removeBalance(owner, value);
         burnDebtAndTransferTokens(owner, value);
+    }
+
+    function swapBalanceForCreditTokens(address owner, uint value) external {
+        
+        ensureRehypothicationManagerCaller();
+        removeBalance(owner, value);
+        issueCreditTokens(owner, value);
     }
 
     function grantTokens(address to, uint value) external {

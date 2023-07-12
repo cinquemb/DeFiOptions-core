@@ -3,6 +3,9 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseRehypothecationManager.sol";
+import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IUnderlyingCreditToken.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/external/teller/ITellerInterface.sol";
 
 
@@ -20,14 +23,14 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			
 			- supply as liq in perp protocol and short with stables collateral?
 		
-		- for long
-			- lend out user asset to teller via rehypotication manager
-				- (at undercollateralized rate, ex: $100 notional token collateral for $1000 in dodd [coming from dod, but need to incentivze users to create liq pools of token/dodd])
-				- dao determined max ratio's for lend short addr (dodd)?
-				- dao determined apy for addr?
+	- for long
+		- lend out user asset to teller via rehypotication manager
+			- (at undercollateralized rate, ex: $100 notional token collateral for $1000 in dodd [coming from dod, but need to incentivze users to create liq pools of token/dodd])
+			- dao determined max ratio's for lend short addr (dodd)?
+			- dao determined apy for addr?
 
-			- market buy asset for leveraged long?
-				- would need to sell back the asset for stables (or dodd if at higher rate), deposit stables in dod, payback loan
+		- market buy asset for leveraged long?
+			- would need to sell back the asset for stables (or dodd if at higher rate), deposit stables in dod, payback loan
 
 	*/
 
@@ -37,7 +40,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	address tellerInterfaceAddr = address(0);
 
 	/*
-		TODO: if non stable lending (lev short), first withdraw (or issue the amount short) the udl credit to rehypotation manager, can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
+		TODO: if non stable lending (lev short), can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
 			- after loan request
 				- swap udl credit borrowed for exchange balance at orace rate interally with agaisnt rehypo manager
 					- mint exchange balance to rehypo manager -> transfer to pool hedging manager
@@ -50,10 +53,10 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 					- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
 					- rehypo manager transfers exchanage balance collateral to hedging manager
 
-		TODO: if stable lending (lev long), first transfer exchange balance hedging manager then transfer here, can only hedge against exchange balance (collateral == udl credit, asset == exchange balance) 
-			- before loan request
+		TODO: if stable lending (lev long), can only hedge against exchange balance (collateral == udl credit, asset == exchange balance)
+			- before borrow request
+				- first transfer exchange balance from hedging manager to rehypo manager,
 				- swap exchange balance deposited for udl credit withdrawn (or minted amount short) to rehypo manager orace rate interally with agaisnt rehypo manager
-				- issue exchange balance to rehypo manager
 			- after loan request
 				- swap exchange balance borrowed for udl credit at orace rate interally with agaisnt rehypo manager
 					- withdraw (or mint the amount short) udl credit to rehypo manager -> transfer to pool hedging manager
@@ -69,17 +72,53 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 					- rehypo manager transfers exchanage balance collateral to hedging manager
 	*/
 	
-	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount) override external {
+	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
 
 		require(
             settings.isAllowedHedgingManager(msg.sender) == true, 
             "not allowed hedging manager"
         );
 
+        
+
 		//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/create-commitment
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] == 0, "already lending");
 		//TODO: Need to transfer asset from proper place here (from udlCreditProvider for non stable, from pool credit balance for stable)
+
+		if (collateral == address(exchange)) {
+			//non stable lending (lev short), can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
+			require(
+        		UnderlyingFeed(udlFeed).getUnderlyingAddr() == IUnderlyingCreditToken(asset).getUdlAsset(),
+        		"bad udlFeed"
+        	);
+			uint256 udlAssetBal = IUnderlyingCreditProvider(asset).balanceOf(address(this));
+
+			(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
+			uint256 udlNotionalAmount = assetAmount.mul(1e18).div(uint256(udlPrice));
+
+			//assetAmount / price = collateralAmount * leverage
+
+			//before loan request
+			if (udlAssetBal >= udlNotionalAmount){
+				IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), udlNotionalAmount);
+			} else {
+				if (udlAssetBal > 0) {
+					IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), udlAssetBal);
+				}	
+				IUnderlyingCreditProvider(asset).issueCredit(address(this), udlNotionalAmount.sub(udlAssetBal));
+
+			}
+		} else {
+			//stable lending (lev long), can only hedge against exchange balance (collateral == udl credit, asset == exchange balance) 
+			
+			uint256 assetBal = IERC20_2(asset).balanceOf(address(this));
+			//before loan request
+			if (assetBal < assetAmount){
+				creditProvider.issueCredit(address(this), assetAmount.sub(assetBal));
+				creditToken.swapForExchangeBalance(assetAmount.sub(assetBal));
+			}
+		}
 		
 		/**
 		* @notice Creates a loan commitment from a lender for a market.
@@ -89,8 +128,23 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		*/
 
 		ITellerInterface.Commitment memory _commitment;
-		address[] memory _borrowerAddressList = new address[](1);
+		
+        _commitment.maxPrincipal = assetAmount;//uint256 maxPrincipal;
+        _commitment.expiration;//uint32 expiration;TODO
+        _commitment.maxDuration;//uint32 maxDuration;TODO
+        _commitment.minInterestRate = 0;//uint16 minInterestRate;
+        _commitment.collateralTokenAddress = collateral;//address collateralTokenAddress;
+        _commitment.collateralTokenId = 0;//uint256 collateralTokenId;
+        _commitment.maxPrincipalPerCollateralAmount = assetAmount.div(collateralAmount);//uint256 maxPrincipalPerCollateralAmount;
+        _commitment.collateralTokenType = ITellerInterface.CommitmentCollateralType.ERC20;//CommitmentCollateralType collateralTokenType;
+        _commitment.lender = address(this);//address lender;
+        _commitment.marketId;//uint256 marketId;TODO
+        _commitment.principalTokenAddress = asset;//address principalTokenAddress;
+
+		address[] memory _borrowerAddressList = new address[](2);
 		_borrowerAddressList[0] = address(this);
+		_borrowerAddressList[1] = msg.sender;
+		
 		uint256 commitmentId_ = ITellerInterface(tellerInterfaceAddr).createCommitment(
 		   _commitment,
 		   _borrowerAddressList
@@ -143,7 +197,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		uint256 _principalAmount;
 	    uint256 _collateralAmount;
 	    uint256 _collateralTokenId = 0;//0 for erc20's
-	    uint16 _interestRate;
 	    uint32 _loanDuration;
 
 		uint256 _bidId = ITellerInterface(tellerInterfaceAddr).acceptCommitment(
@@ -152,7 +205,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		    _collateralAmount,
 		    _collateralTokenId,//0 for erc20's
 		    collateral,
-		    _interestRate, 
+		    0, 
 		    _loanDuration
 		);
 

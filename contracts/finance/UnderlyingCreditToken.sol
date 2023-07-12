@@ -6,7 +6,7 @@ import "../utils/ERC20.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Decimal.sol";
 import "../interfaces/IProtocolSettings.sol";
-import "../interfaces/ICreditProvider.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/IProposal.sol";
 
 
@@ -16,7 +16,7 @@ contract UnderlyingCreditToken is ERC20 {
     using Decimal for Decimal.D256;
 
     IProtocolSettings private settings;
-    ICreditProvider private creditProvider;
+    IUnderlyingCreditProvider private creditProvider;
 
     mapping(address => uint) private creditDates;
 
@@ -43,7 +43,7 @@ contract UnderlyingCreditToken is ERC20 {
 
     function initialize(address underlyingCreditProvider) external {
         require(msg.sender == address(settings), "init not allowed");
-        creditProvider = ICreditProvider(underlyingCreditProvider);
+        creditProvider = IUnderlyingCreditProvider(underlyingCreditProvider);
         issuer = underlyingCreditProvider;
     }
 
@@ -53,6 +53,10 @@ contract UnderlyingCreditToken is ERC20 {
 
     function symbol() override external view returns (string memory) {
         return string(abi.encodePacked(_symbol_prefix, _symbol));
+    }
+
+    function getUdlAsset() external view returns (address) {
+        return udlAsset;
     }
 
     function issue(address to, uint value) public {

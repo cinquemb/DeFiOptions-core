@@ -6,6 +6,7 @@ import "../deployment/ManagedContract.sol";
 import "../interfaces/IProtocolSettings.sol";
 import "../interfaces/IBaseRehypothecationManager.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/ICreditToken.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IUnderlyingVault.sol";
 import "../utils/MoreMath.sol";
@@ -20,18 +21,20 @@ abstract contract BaseRehypothecationManager is ManagedContract, IBaseRehypothec
 
     IProtocolSettings internal settings;
     ICreditProvider internal creditProvider;
+    ICreditToken internal creditToken;
     IOptionsExchange internal exchange;
     IUnderlyingVault internal vault;
 
     function initialize(Deployer deployer) virtual override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
+        creditToken = ICreditToken(deployer.getContractAddress("CreditToken"));
         settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
         exchange = IOptionsExchange(deployer.getContractAddress("OptionsExchange"));
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
 
     }
 
-    function lend(address asset, address collateral, uint assetAmount, uint collateralAmount) virtual override external;
+    function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) virtual override external;
     function withdraw(address asset, address collateral, uint amount) virtual override external;
     function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount) virtual override external;
     function repay(address asset, address collateral, uint amount) virtual override external;
