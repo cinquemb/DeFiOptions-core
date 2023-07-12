@@ -37,7 +37,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	address tellerInterfaceAddr = address(0);
 
 	/*
-		TODO: if non stable lending (lev short), first issue the udl credit to rehypotation manager, can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
+		TODO: if non stable lending (lev short), first withdraw (or issue the amount short) the udl credit to rehypotation manager, can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
 			- after loan request
 				- swap udl credit borrowed for exchange balance at orace rate interally with agaisnt rehypo manager
 					- mint exchange balance to rehypo manager -> transfer to pool hedging manager
@@ -52,11 +52,11 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 		TODO: if stable lending (lev long), first transfer exchange balance hedging manager then transfer here, can only hedge against exchange balance (collateral == udl credit, asset == exchange balance) 
 			- before loan request
-				- swap exchange balance deposited for udl credit minted to rehypo manager orace rate interally with agaisnt rehypo manager
+				- swap exchange balance deposited for udl credit withdrawn (or minted amount short) to rehypo manager orace rate interally with agaisnt rehypo manager
 				- issue exchange balance to rehypo manager
 			- after loan request
 				- swap exchange balance borrowed for udl credit at orace rate interally with agaisnt rehypo manager
-					- mint udl credit to rehypo manager -> transfer to pool hedging manager
+					- withdraw (or mint the amount short) udl credit to rehypo manager -> transfer to pool hedging manager
 					- rehypo manage keeps exchange balance
 			- when repaying 
 				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
