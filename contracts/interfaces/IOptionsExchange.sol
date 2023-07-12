@@ -43,7 +43,7 @@ interface IOptionsExchange {
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
     function createPool(string calldata nameSuffix, string calldata symbolSuffix, bool _onlyMintToOwner, address _owner) external returns (address pool);
-    function resolveToken(string calldata symbol) external view returns (address);
+    function resolveToken(string calldata symbol) external view returns (address addr);
     function getBook(address owner) external view returns (string memory symbols, address[] memory tokens, uint[] memory holding, uint[] memory written, uint[] memory uncovered, int[] memory iv, address[] memory underlying);
     function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory);
     function calcExpectedPayout(address owner) external view returns (int payout);

@@ -202,7 +202,6 @@ contract OptionsExchange is ERC20, ManagedContract {
 
         poolSymbols.push(symbolSuffix);
         emit CreatePool(pool, msg.sender, _owner);
-        return pool;
     }
 
     function totalPoolSymbols() external view returns (uint) {
@@ -213,13 +212,12 @@ contract OptionsExchange is ERC20, ManagedContract {
         return poolAddress[poolSymbol];
     }
 
-    function createDexFeed(address underlying, address stable, address dexTokenPair) external returns (address) {
+    function createDexFeed(address underlying, address stable, address dexTokenPair) external returns (address feedAddr) {
         require(dexFeedAddress[dexTokenPair] == address(0), "already created");
         address feedAddr = dexFeedFactory.create(underlying, stable, dexTokenPair);
         dexFeedAddress[dexTokenPair] = feedAddr;
 
         emit CreateDexFeed(feedAddr, msg.sender);
-        return feedAddr;
     }
 
     function getDexFeedAddress(address dexTokenPair) external view returns (address)  {
@@ -501,11 +499,10 @@ contract OptionsExchange is ERC20, ManagedContract {
         return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
     }
 
-    function resolveToken(string calldata symbol) external view returns (address) {
+    function resolveToken(string calldata symbol) external view returns (address addr) {
         
-        address addr = tokenAddress[symbol];
+        addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
-        return addr;
     }
 
     function burn(address owner, uint value, address _tk) external {

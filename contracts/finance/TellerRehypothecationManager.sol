@@ -69,7 +69,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 					- rehypo manager transfers exchanage balance collateral to hedging manager
 	*/
 	
-	function lend(address asset, address collateral, uint amount) override external {
+	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount) override external {
 
 		require(
             settings.isAllowedHedgingManager(msg.sender) == true, 
@@ -89,7 +89,8 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		*/
 
 		ITellerInterface.Commitment memory _commitment;
-		address[] memory _borrowerAddressList;
+		address[] memory _borrowerAddressList = new address[](1);
+		_borrowerAddressList[0] = address(this);
 		uint256 commitmentId_ = ITellerInterface(tellerInterfaceAddr).createCommitment(
 		   _commitment,
 		   _borrowerAddressList
@@ -116,7 +117,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
     }
 
-    function borrow(address asset, address collateral, uint amount) override external {
+    function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount) override external {
     	require(
             settings.isAllowedHedgingManager(msg.sender) == true, 
             "not allowed hedging manager"

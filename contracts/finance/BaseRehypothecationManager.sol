@@ -31,9 +31,9 @@ abstract contract BaseRehypothecationManager is ManagedContract, IBaseRehypothec
 
     }
 
-    function lend(address asset, address collateral, uint amount) virtual override external;
+    function lend(address asset, address collateral, uint assetAmount, uint collateralAmount) virtual override external;
     function withdraw(address asset, address collateral, uint amount) virtual override external;
-    function borrow(address asset, address collateral, uint amount) virtual override external;
+    function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount) virtual override external;
     function repay(address asset, address collateral, uint amount) virtual override external;
     function transferTokensToCreditProvider(address tokenAddr) virtual override external;
     function transferTokensToVault(address tokenAddr) virtual override external;
