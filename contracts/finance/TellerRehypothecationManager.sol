@@ -42,6 +42,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] == 0, "already lending");
 		//TODO: Need to transfer asset from proper place here (from udlCreditProvider for non stable, from pool credit balance for stable)
+		//TODO: if non stable, first issue the udl credit to the hedging manager then transfer here, can only hedge against udl credit
 		/**
 		* @notice Creates a loan commitment from a lender for a market.
 		* @param _commitment The new commitment data expressed as a struct

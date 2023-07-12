@@ -98,10 +98,9 @@ contract UnderlyingCreditProvider {
     }
 
     function issueCredit(address to, uint value) external {
-        
-        ensurePrimeCaller();
+        ensureCaller();
 
-        require(msg.sender == address(settings));
+        require(msg.sender == address(settings) || msg.sender == to, "not allowed issuer");
         issueCreditTokens(to, value);
     }
 
@@ -373,7 +372,7 @@ contract UnderlyingCreditProvider {
     }
 
     function ensureCaller(address addr) external view {
-        require(primeCallers[addr] == 1, "unauthorized caller (ex)");
+        require(primeCallers[addr] == 1 || settings.isAllowedHedgingManager(msg.sender) == true, "unauthorized caller (ex)");
     }
 
     function ensurePrimeCaller() private view {        
