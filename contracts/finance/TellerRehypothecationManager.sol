@@ -37,6 +37,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	address tellerInterfaceAddr = address(0);
 	
 	function lend(address asset, address collateral, uint amount) override external {
+		//TODO: only allow dao approved heging manager to call
 
 		//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/create-commitment
 
@@ -79,6 +80,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
     }
 
     function borrow(address asset, address collateral, uint amount) override external {
+    	//TODO: only allow dao approved heging manager to call
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/accept-commitment
     	/**
 		 * @notice Accept the commitment to submitBid and acceptBid using the funds
@@ -115,6 +117,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		borrowerBidIdMap[msg.sender][asset][collateral] = _bidId;
 
     }
+    
     function repay(address asset, address collateral, uint amount)  override external {
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/repay-loan
     	//TODO: need to transfer asset to repay here, then transfer asset and collateral back to proper place
