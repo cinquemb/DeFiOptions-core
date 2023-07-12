@@ -21,7 +21,7 @@ abstract contract BaseRehypothecationManager is ManagedContract, IBaseRehypothec
     IProtocolSettings internal settings;
     ICreditProvider internal creditProvider;
     IOptionsExchange internal exchange;
-    IUnderlyingVault private vault;
+    IUnderlyingVault internal vault;
 
     function initialize(Deployer deployer) virtual override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
@@ -32,9 +32,9 @@ abstract contract BaseRehypothecationManager is ManagedContract, IBaseRehypothec
     }
 
     function lend(address asset, address collateral, uint amount) virtual override external;
-    function withdraw(address asset, uint amount) virtual override external;
+    function withdraw(address asset, address collateral, uint amount) virtual override external;
     function borrow(address asset, address collateral, uint amount) virtual override external;
-    function repay(address collateral, uint amount) virtual override external;
+    function repay(address asset, address collateral, uint amount) virtual override external;
     function transferTokensToCreditProvider(address tokenAddr) virtual override external;
     function transferTokensToVault(address tokenAddr) virtual override external;
 }
