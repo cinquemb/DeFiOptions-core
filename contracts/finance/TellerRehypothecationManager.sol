@@ -12,30 +12,9 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
+	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureMap;
 
 	address tellerInterfaceAddr = address(0);
-
-	/*
-		TODO: if non stable lending (lev short), can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
-			- when repaying 
-				- swap exchange balance for udl credit borrowed at oracle rate interally with agaisnt rehypo manager
-					- hedging manager sends exchange balance to rehypo manager
-					- repay loan with udl credit recieved
-						- free exchanage balance collateral
-					- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
-					- rehypo manager transfers exchanage balance collateral to hedging manager
-
-		TODO: if stable lending (lev long), can only hedge against exchange balance (collateral == udl credit, asset == exchange balance)
-			- when repaying 
-				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
-					- hedging manager sends udl credit borrowed to rehypo manager
-					- repay loan with exchange balance recieved
-						- free udl credit collateral
-						
-					- swap udl credit interally in to exchange balance
-					- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
-					- rehypo manager transfers exchanage balance collateral to hedging manager
-	*/
 	
 	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
 
@@ -260,10 +239,10 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		
 
 		borrowerBidIdMap[msg.sender][asset][collateral] = _bidId;
-
+		notionalExposureMap[msg.sender][asset][collateral] = assetAmount;
     }
     
-    function repay(address asset, address collateral, uint amount)  override external {
+    function repay(address asset, address collateral, uint amount, address udlFeed)  override external {
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/repay-loan
     	//TODO: need to transfer asset to repay here, then transfer asset and collateral back to proper place
     	/**
@@ -274,6 +253,49 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] > 0, "no outstanding loan");
 		require(borrowerBidIdMap[msg.sender][asset][collateral] > 0, "no outstanding borrow");
 
+		(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
+
+		if (collateral == address(exchange)) {
+			//(collateral == exchange balance, asset == udl credit)
+
+			/*
+
+			TODO:
+			- when repaying 
+				- swap exchange balance for udl credit borrowed at oracle rate interally with agaisnt rehypo manager
+					- repay loan with udl credit recieved
+						- free exchanage balance collateral	
+			*/
+
+			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18);
+			IERC20_2(collateral).safeTransferFrom(
+	            msg.sender,
+	            address(this), 
+	            transferAmountInCollateral
+	        );
+		} else { 
+			//(collateral == udl credit, asset == exchange balance)
+			/*
+
+			TODO:
+			- when repaying 
+				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
+					- hedging manager sends udl credit borrowed to rehypo manager
+					- debit shortage from hegding manager pool owner/credit excess to hedging manager exchange balance
+					- repay loan with exchange balance recieved
+						- free udl credit collateral amount
+			*/
+
+			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(1e18).div(uint(udlPrice));
+
+			IERC20_2(collateral).safeTransferFrom(
+	            msg.sender,
+	            address(this), 
+	            transferAmountInAsset
+	        );
+		}
+
+
 		ITellerInterface(tellerInterfaceAddr).repayLoanFull(borrowerBidIdMap[msg.sender][asset][collateral]);
 
 		/**
@@ -282,9 +304,35 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		*/
 		ITellerInterface(tellerInterfaceAddr).withdraw(borrowerBidIdMap[msg.sender][asset][collateral]);
 
+		//TODO: net out back to proper places
+
+		if (collateral == address(exchange)) {
+			//(collateral == exchange balance, asset == udl credit)
+			/*
+
+			TODO:
+				- burn udl credit value in excess of exchange balance
+				- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
+				- rehypo manager transfers exchanage balance collateral to hedging manager
+			*/
+		} else { 
+			//(collateral == udl credit, asset == exchange balance)
+
+			/*
+
+			TODO:
+			- swap udl credit collateral amount interally in to exchange balance
+			- burn exchange balance in excess of collateral value
+			- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
+			- rehypo manager transfers exchanage balance collateral to hedging manager
+
+			*/
+		}
+
 
 		borrowerBidIdMap[msg.sender][asset][collateral] = 0;
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
+		notionalExposureMap[msg.sender][asset][collateral] = 0;
     }
     
     function transferTokensToCreditProvider(address tokenAddr) override external {}

@@ -109,6 +109,12 @@ contract UnderlyingCreditToken is ERC20 {
         balances[owner] = balances[owner].add(value);
     }
 
+
+    function burnBalance(uint value) external {
+        updateBalance(msg.sender);
+        balances[msg.sender] = balances[msg.sender].sub(value);
+    }
+
     function removeBalance(address owner, uint value) override internal {
 
         updateBalance(owner);

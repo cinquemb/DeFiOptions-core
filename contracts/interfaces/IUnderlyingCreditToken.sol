@@ -8,5 +8,6 @@ interface IUnderlyingCreditToken {
     function getUdlAsset() external view returns (address);
     function issue(address to, uint value) external;
     function balanceOf(address owner) external view returns (uint bal);
+    function burnBalance(uint value) external;
     function requestWithdraw() external;
 }
