@@ -242,7 +242,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		notionalExposureMap[msg.sender][asset][collateral] = assetAmount;
     }
     
-    function repay(address asset, address collateral, uint amount, address udlFeed)  override external {
+    function repay(address asset, address collateral, address udlFeed)  override external {
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/repay-loan
     	//TODO: need to transfer asset to repay here, then transfer asset and collateral back to proper place
     	/**
@@ -288,11 +288,22 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(1e18).div(uint(udlPrice));
 
+			uint256 udlCreditBal = IERC20_2(collateral).balanceOf(msg.sender);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
 	            address(this), 
-	            transferAmountInAsset
+	            udlCreditBal
 	        );
+
+	        uint256 diffUdlCreditBal;
+
+			if (udlCreditBal >= transferAmountInCollateral) {
+				//TODO: transfer all, swap surplus into exchange bal, credit hedging manager for exchange bal diff
+				diffUdlCreditBal = diffUdlCreditBal.sub(transferAmountInCollateral);
+			} else {
+				//TODO: transfer all, compute shortage amount, debit pool owner for exchange bal diff
+				diffUdlCreditBal = transferAmountInCollateral.sub(diffUdlCreditBal);
+			}
 		}
 
 
