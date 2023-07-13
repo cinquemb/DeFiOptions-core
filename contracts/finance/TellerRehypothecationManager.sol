@@ -8,31 +8,7 @@ import "../interfaces/IUnderlyingCreditToken.sol";
 import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/external/teller/ITellerInterface.sol";
 
-
 contract TellerRehypothecationManager is BaseRehypothecationManager {
-
-	/*
-
-	- for short 
-			- lend out user asset to teller via rehypotication manager
-				- (at undercollateralized rate, ex: $100 usdc collateral for $1000 notional token loan amount? (coming from dod rehypotication)
-				- dao determined max ratio's for lend for short addr?
-				- dao determined apy for addr?
-			- market sell asset for leveraged short?
-				- would need to buy back the asset at spot market rates, payback loan
-			
-			- supply as liq in perp protocol and short with stables collateral?
-		
-	- for long
-		- lend out user asset to teller via rehypotication manager
-			- (at undercollateralized rate, ex: $100 notional token collateral for $1000 in dodd [coming from dod, but need to incentivze users to create liq pools of token/dodd])
-			- dao determined max ratio's for lend short addr (dodd)?
-			- dao determined apy for addr?
-
-		- market buy asset for leveraged long?
-			- would need to sell back the asset for stables (or dodd if at higher rate), deposit stables in dod, payback loan
-
-	*/
 
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
@@ -41,10 +17,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 	/*
 		TODO: if non stable lending (lev short), can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
-			- after loan request
-				- swap udl credit borrowed for exchange balance at orace rate interally with agaisnt rehypo manager
-					- mint exchange balance to rehypo manager -> transfer to pool hedging manager
-					- rehypo manage keeps udl credit token
 			- when repaying 
 				- swap exchange balance for udl credit borrowed at oracle rate interally with agaisnt rehypo manager
 					- hedging manager sends exchange balance to rehypo manager
@@ -54,13 +26,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 					- rehypo manager transfers exchanage balance collateral to hedging manager
 
 		TODO: if stable lending (lev long), can only hedge against exchange balance (collateral == udl credit, asset == exchange balance)
-			- before borrow request
-				- first transfer exchange balance from hedging manager to rehypo manager,
-				- swap exchange balance deposited for udl credit withdrawn (or minted amount short) to rehypo manager orace rate interally with agaisnt rehypo manager
-			- after loan request
-				- swap exchange balance borrowed for udl credit at orace rate interally with agaisnt rehypo manager
-					- withdraw (or mint the amount short) udl credit to rehypo manager -> transfer to pool hedging manager
-					- rehypo manage keeps exchange balance
 			- when repaying 
 				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
 					- hedging manager sends udl credit borrowed to rehypo manager
@@ -79,12 +44,10 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
             "not allowed hedging manager"
         );
 
-        
-
 		//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/create-commitment
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] == 0, "already lending");
-		//TODO: Need to transfer asset from proper place here (from udlCreditProvider for non stable, from pool credit balance for stable)
+		uint notional;
 
 		if (collateral == address(exchange)) {
 			//non stable lending (lev short), can only hedge against udl credit (collateral == exchange balance, asset == udl credit)
@@ -109,6 +72,8 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 				IUnderlyingCreditProvider(asset).issueCredit(address(this), udlNotionalAmount.sub(udlAssetBal));
 
 			}
+
+			notional = udlNotionalAmount;
 		} else {
 			//stable lending (lev long), can only hedge against exchange balance (collateral == udl credit, asset == exchange balance) 
 			
@@ -118,7 +83,16 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 				creditProvider.issueCredit(address(this), assetAmount.sub(assetBal));
 				creditToken.swapForExchangeBalance(assetAmount.sub(assetBal));
 			}
+
+			notional = assetAmount;
 		}
+
+		//handle approval for commitment
+		IERC20_2 tk = IERC20_2(asset);
+        if (tk.allowance(address(this), tellerInterfaceAddr) > 0) {
+            tk.safeApprove(tellerInterfaceAddr, 0);
+        }
+        tk.safeApprove(tellerInterfaceAddr, notional);
 		
 		/**
 		* @notice Creates a loan commitment from a lender for a market.
@@ -171,7 +145,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
     }
 
-    function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount) override external {
+    function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
     	require(
             settings.isAllowedHedgingManager(msg.sender) == true, 
             "not allowed hedging manager"
@@ -192,22 +166,98 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		 */
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] > 0, "no outstanding loan");
 		require(borrowerBidIdMap[msg.sender][asset][collateral] == 0, "already borrowing");
-		//TODO: Need to transfer collateral from proper place here
 
-		uint256 _principalAmount;
-	    uint256 _collateralAmount;
+		require(
+    		UnderlyingFeed(udlFeed).getUnderlyingAddr() == IUnderlyingCreditToken(asset).getUdlAsset(),
+    		"bad udlFeed"
+    	);
+
+    	(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
+
+        if (collateral == address(exchange)) {
+			//(collateral == exchange balance, asset == udl credit)
+			IERC20_2(collateral).safeTransferFrom(
+	            msg.sender,
+	            address(this), 
+	            collateralAmount
+	        );
+		} else { 
+			//(collateral == udl credit, asset == exchange balance)
+			uint256 collateralAmountInAsset = collateralAmount.mul(uint256(udlPrice)).div(1e18);
+			//assetAmount / leverage = collateralAmount * price
+
+			IERC20_2(asset).safeTransferFrom(
+	            msg.sender,
+	            address(this), 
+	            collateralAmountInAsset
+	        );
+			uint256 udlAssetBal = IUnderlyingCreditProvider(collateral).balanceOf(address(this));
+	        //before borrow request, mint or credit the difference differing in collateral to rehypo manager
+			if (udlAssetBal >= collateralAmount){
+				IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), collateralAmount);
+			} else {
+				if (udlAssetBal > 0) {
+					IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), udlAssetBal);
+				}	
+				IUnderlyingCreditProvider(asset).issueCredit(address(this), collateralAmount.sub(udlAssetBal));
+			}
+		}
+
 	    uint256 _collateralTokenId = 0;//0 for erc20's
-	    uint32 _loanDuration;
+	    uint32 _loanDuration;//TODO
 
 		uint256 _bidId = ITellerInterface(tellerInterfaceAddr).acceptCommitment(
 		    lenderCommitmentIdMap[msg.sender][asset][collateral],
-		    _principalAmount,
-		    _collateralAmount,
+		    assetAmount,
+		    collateralAmount,
 		    _collateralTokenId,//0 for erc20's
 		    collateral,
 		    0, 
 		    _loanDuration
 		);
+
+		if (collateral == address(exchange)) {
+			//(collateral == exchange balance, asset == udl credit)
+	        /*
+
+	        - after borrow request
+				- swap udl credit borrowed for exchange balance at orace rate interally with agaisnt rehypo manager
+					- mint exchange balance to rehypo manager -> transfer to pool hedging manager
+					- rehypo manage keeps udl credit token
+
+			*/
+			uint256 collateralBal = IERC20_2(collateral).balanceOf(address(this));
+			uint256 assetAmountInCollateral = assetAmount.mul(uint256(udlPrice)).div(1e18);
+			if (collateralBal < assetAmountInCollateral){
+				creditProvider.issueCredit(address(this), assetAmountInCollateral.sub(collateralBal));
+				creditToken.swapForExchangeBalance(assetAmountInCollateral.sub(collateralBal));
+			}
+
+			IERC20_2(collateral).safeTransfer(msg.sender, assetAmountInCollateral);
+		} else {
+			//(collateral == udl credit, asset == exchange balance)
+			/*
+			- after borrow request
+				- swap exchange balance borrowed for udl credit at orace rate interally with agaisnt rehypo manager
+					- withdraw (or mint the amount short) udl credit to rehypo manager -> transfer to pool hedging manager
+					- rehypo manage keeps exchange balance
+			*/
+
+			uint256 udlAssetBal = IERC20_2(collateral).balanceOf(address(this));
+			uint256 collateralAmountInAsset = assetAmount.mul(1e18).div(uint256(udlPrice));
+			if (udlAssetBal >= collateralAmountInAsset){
+				IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), collateralAmountInAsset);
+			} else {
+				if (udlAssetBal > 0) {
+					IUnderlyingCreditProvider(collateral).swapBalanceForCreditTokens(address(this), udlAssetBal);
+				}	
+				IUnderlyingCreditProvider(collateral).issueCredit(address(this), collateralAmountInAsset.sub(udlAssetBal));
+			}
+
+			IERC20_2(collateral).safeTransfer(msg.sender, collateralAmountInAsset);
+		}
+
+		
 
 		borrowerBidIdMap[msg.sender][asset][collateral] = _bidId;
 
