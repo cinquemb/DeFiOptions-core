@@ -16,11 +16,12 @@ import "../utils/Convert.sol";
 contract TellerHedgingManager is BaseHedgingManager {
     address private orderBookAddr;
     address private perpetualProxy;
-    address private d8xHedgingManagerFactoryAddr;
+    address private tellerHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
     uint constant _volumeBase = 1e18;
+    address creditToken;
 
     event PerpOrderSubmitFailed(string reason);
     event PerpOrderSubmitSuccess(int256 amountDec18, int16 leverageInteger);
@@ -51,7 +52,7 @@ contract TellerHedgingManager is BaseHedgingManager {
         
         address underlying;
         string underlyingStr;
-        
+
         address[] at;
         address[] _pathDecLong;
         address[] allowedTokens;
@@ -65,8 +66,9 @@ contract TellerHedgingManager is BaseHedgingManager {
         poolAddr = _poolAddr;
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
-        d8xHedgingManagerFactoryAddr = deployer.getContractAddress("D8xHedgingManagerFactory");
-        (address _d8xOrderBookAddr,address _perpetualProxy) = ID8xHedgingManagerFactory(d8xHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        tellerHedgingManagerFactoryAddr = deployer.getContractAddress("TellerHedgingManagerFactory");
+        (address _d8xOrderBookAddr,address _perpetualProxy) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        creditToken = deployer.getContractAddress("CreditToken");
         
         require(_d8xOrderBookAddr != address(0), "bad order book");
         require(_perpetualProxy != address(0), "bad perp proxy");
@@ -81,7 +83,7 @@ contract TellerHedgingManager is BaseHedgingManager {
 
     function getAllowedStables() public view returns (address[] memory) {
         address[] memory outTokensReal = new address[](1);
-        outTokensReal[0] = address(exchange);
+        outTokensReal[0] = creditToken;
         return outTokensReal;
     }
 
@@ -97,13 +99,14 @@ contract TellerHedgingManager is BaseHedgingManager {
         int256[] memory posSize = new int256[](allowedTokens.length);
         uint24[] memory perIds = new uint24[](allowedTokens.length);
 
+        /*
         for (uint i=0; i<allowedTokens.length; i++) {
             uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
             ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
 
             posSize[i] = accD18.positionSizeBCD18;
             perIds[i] = d8xPerpId;
-        }
+        }*/
 
 
         return (posSize, perIds);
@@ -113,11 +116,13 @@ contract TellerHedgingManager is BaseHedgingManager {
         address[] memory allowedTokens = getAllowedStables();
         int256[] memory posData = new int256[](allowedTokens.length);
 
+        /*
         for (uint i=0; i<allowedTokens.length; i++) {
             
             uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
             posData[i] = getMaxTradeAmount(d8xPerpId, isLong);
         }
+        */
 
         int256 totalExposure = 0;
         for (uint i=0; i<(allowedTokens.length); i++) {
@@ -137,9 +142,9 @@ contract TellerHedgingManager is BaseHedgingManager {
 
         for (uint i=0; i<allowedTokens.length; i++) {
             
-            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
-            ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
-            posData[i] = accD18.positionSizeBCD18;
+            //uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
+            //ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
+            //posData[i] = accD18.positionSizeBCD18;
         }
 
         int256 totalExposure = 0;
@@ -226,7 +231,7 @@ contract TellerHedgingManager is BaseHedgingManager {
             (exData.openPos, exData.perpIds) = getPosSize(exData.underlyingStr, true);
             for(uint i=0; i< exData.openPos.length; i++){
                 if (exData.openPos[i] != 0) {
-                    postOrder(exData.perpIds[i], exData.openPos[i], 0, 0x80000000);
+                    //postOrder(exData.perpIds[i], exData.openPos[i], 0, 0x80000000);
                 }
             }
             
@@ -293,8 +298,8 @@ contract TellerHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-                                uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)).mul(-1), int16(exData.poolLeverage), 0x40000000);
+                                //uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
+                                //postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)).mul(-1), int16(exData.poolLeverage), 0x40000000);
 
                                 //back to exchange decimals
 
@@ -368,8 +373,8 @@ contract TellerHedgingManager is BaseHedgingManager {
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
 
-                                uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)), int16(exData.poolLeverage), 0x40000000);
+                                //uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
+                                //postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)), int16(exData.poolLeverage), 0x40000000);
 
                                 //back to exchange decimals
                                 if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
@@ -391,8 +396,6 @@ contract TellerHedgingManager is BaseHedgingManager {
 
         return false;
     }
-
-    //TODO: ask about how to get maxmium size avaialble to trade for an account, and my account existing pos size for a pool
 
     function getMaxLongLiquidity(address udlFeedAddr) public view returns (uint v) {
         ExposureData memory exData;
