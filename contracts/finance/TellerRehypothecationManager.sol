@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "./BaseRehypothecationManager.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IUnderlyingCreditToken.sol";
+import "../interfaces/IBaseHedgingManager.sol";
 import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/external/teller/ITellerInterface.sol";
 
@@ -13,6 +14,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureMap;
+	mapping(address => mapping(address => mapping(address => uint256))) collateralAmountMap;
 
 	address tellerInterfaceAddr = address(0);
 	
@@ -91,7 +93,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
         _commitment.maxPrincipalPerCollateralAmount = assetAmount.div(collateralAmount);//uint256 maxPrincipalPerCollateralAmount;
         _commitment.collateralTokenType = ITellerInterface.CommitmentCollateralType.ERC20;//CommitmentCollateralType collateralTokenType;
         _commitment.lender = address(this);//address lender;
-        _commitment.marketId;//uint256 marketId;TODO
+        _commitment.marketId = 33;//uint256 marketId;33 on polygon
         _commitment.principalTokenAddress = asset;//address principalTokenAddress;
 
 		address[] memory _borrowerAddressList = new address[](2);
@@ -104,25 +106,10 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		);
 
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = commitmentId_;
+		collateralAmountMap[msg.sender][asset][collateral] = collateralAmount;
 	}
 
-    function withdraw(address asset, address collateral, uint amount) override external {
-    	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/claim-collateral
-    	/**
-		 * @notice Withdraws deposited collateral from the created escrow of a bid that has been successfully repaid.
-		 * @param _bidId The id of the bid to withdraw collateral for.
-		 */
-		//TODO: then transfer asset and collateral back to proper place
-
-		require(lenderCommitmentIdMap[msg.sender][asset][collateral] > 0, "no outstanding loan");
-		require(borrowerBidIdMap[msg.sender][asset][collateral] > 0, "no outstanding borrow");
-		ITellerInterface(tellerInterfaceAddr).withdraw(
-			borrowerBidIdMap[msg.sender][asset][collateral]
-		);
-
-		borrowerBidIdMap[msg.sender][asset][collateral] = 0;
-		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
-    }
+    function withdraw(address asset, address collateral, uint amount) override external {}
 
     function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
     	require(
@@ -244,7 +231,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
     
     function repay(address asset, address collateral, address udlFeed)  override external {
     	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/repay-loan
-    	//TODO: need to transfer asset to repay here, then transfer asset and collateral back to proper place
     	/**
 		 * @notice Function for users to repay an active loan in full.
 		 * @param _bidId The id of the loan to make the payment towards.
@@ -255,19 +241,11 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 		(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
 
+		ITellerInterface.Bid memory bid = ITellerInterface(tellerInterfaceAddr).bids(borrowerBidIdMap[msg.sender][asset][collateral]);
+
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
-
-			/*
-
-			TODO:
-			- when repaying 
-				- swap exchange balance for udl credit borrowed at oracle rate interally with agaisnt rehypo manager
-					- repay loan with udl credit recieved
-						- free exchanage balance collateral	
-			*/
-
-			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18);
+			uint256 transferAmountInCollateral = bid.loanDetails.principal.mul(uint(udlPrice)).div(1e18);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
 	            address(this), 
@@ -275,37 +253,34 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	        );
 		} else { 
 			//(collateral == udl credit, asset == exchange balance)
-			/*
 
-			TODO:
-			- when repaying 
-				- swap udl credit borrowed for exchange balance at oracle rate interally with agaisnt rehypo manager
-					- hedging manager sends udl credit borrowed to rehypo manager
-					- debit shortage from hegding manager pool owner/credit excess to hedging manager exchange balance
-					- repay loan with exchange balance recieved
-						- free udl credit collateral amount
-			*/
-
-			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(1e18).div(uint(udlPrice));
-
+			uint256 transferAmountInAsset = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18);
 			uint256 udlCreditBal = IERC20_2(collateral).balanceOf(msg.sender);
+			uint256 udlCreditBalInAsset = udlCreditBal.mul(uint(udlPrice)).div(1e18);
+			uint256 assetBal = IERC20_2(asset).balanceOf(msg.sender);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
 	            address(this), 
 	            udlCreditBal
 	        );
 
-	        uint256 diffUdlCreditBal;
+	        uint256 diffAmountForPricipal;
+	    	uint256 diffAmountInExchangeBalance;
 
-			if (udlCreditBal >= transferAmountInCollateral) {
-				//TODO: transfer all, swap surplus into exchange bal, credit hedging manager for exchange bal diff
-				diffUdlCreditBal = diffUdlCreditBal.sub(transferAmountInCollateral);
+			if (udlCreditBalInAsset >= transferAmountInAsset) {
+				//transfer all udl credit bal, swap surplus into exchange bal, credit hedging manager for exchange bal diff
+				diffAmountInExchangeBalance = udlCreditBalInAsset.sub(transferAmountInAsset);
+				if (assetBal < diffAmountInExchangeBalance){
+					creditProvider.issueCredit(address(this), diffAmountInExchangeBalance.sub(assetBal));
+					creditToken.swapForExchangeBalance(diffAmountInExchangeBalance.sub(assetBal));
+				}
+				IERC20_2(asset).safeTransfer(msg.sender, diffAmountInExchangeBalance);
 			} else {
-				//TODO: transfer all, compute shortage amount, debit pool owner for exchange bal diff
-				diffUdlCreditBal = transferAmountInCollateral.sub(diffUdlCreditBal);
+				//transfer all, compute shortage amount, debit pool owner for exchange bal diff (protocol fees are charged for shortages)
+				diffAmountInExchangeBalance = transferAmountInAsset.sub(udlCreditBalInAsset);
+				creditProvider.processPayment(IBaseHedgingManager(msg.sender).pool(), address(this), diffAmountInExchangeBalance);
 			}
 		}
-
 
 		ITellerInterface(tellerInterfaceAddr).repayLoanFull(borrowerBidIdMap[msg.sender][asset][collateral]);
 
@@ -315,35 +290,29 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		*/
 		ITellerInterface(tellerInterfaceAddr).withdraw(borrowerBidIdMap[msg.sender][asset][collateral]);
 
-		//TODO: net out back to proper places
-
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
-			/*
-
-			TODO:
-				- burn udl credit value in excess of exchange balance
-				- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
-				- rehypo manager transfers exchanage balance collateral to hedging manager
-			*/
+			//burn udl credit value
+			IUnderlyingCreditToken(address(bid.loanDetails.lendingToken)).burnBalance(bid.loanDetails.principal);
+			//rehypo manager transfers exchanage balance collateral to hedging manager
+			IERC20_2(collateral).safeTransfer(msg.sender, collateralAmountMap[msg.sender][asset][collateral]);
 		} else { 
 			//(collateral == udl credit, asset == exchange balance)
-
-			/*
-
-			TODO:
-			- swap udl credit collateral amount interally in to exchange balance
-			- burn exchange balance in excess of collateral value
-			- rehypo manager redeem udl credit token for udl credit balance via `swapForExchangeBalance`
-			- rehypo manager transfers exchanage balance collateral to hedging manager
-
-			*/
+			//burn exchange balance in excess of collateral value
+			creditToken.burnBalance(bid.loanDetails.principal);
+			//burn udl credit of collateral value
+			IUnderlyingCreditToken(collateral).burnBalance(collateralAmountMap[msg.sender][asset][collateral]);
+			//transfers exchanage balance collateral to hedging manager
+			IERC20_2(asset).safeTransfer(
+				msg.sender,
+				collateralAmountMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18)
+			);
 		}
-
 
 		borrowerBidIdMap[msg.sender][asset][collateral] = 0;
 		lenderCommitmentIdMap[msg.sender][asset][collateral] = 0;
 		notionalExposureMap[msg.sender][asset][collateral] = 0;
+		collateralAmountMap[msg.sender][asset][collateral] = 0;
     }
     
     function transferTokensToCreditProvider(address tokenAddr) override external {}

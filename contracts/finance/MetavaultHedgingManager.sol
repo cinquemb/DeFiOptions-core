@@ -68,6 +68,10 @@ contract MetavaultHedgingManager is BaseHedgingManager {
         IRouter(mvxRouter).approvePlugin(positionManagerAddr);
     }
 
+    function pool() override external view returns (address) {
+        return poolAddr;
+    }
+
     function getAllowedStables() public view returns (address[] memory) {
         address[] memory allowedTokens = settings.getAllowedTokens();
         IVault mvxVault = IVault(mvxVaultAddr);

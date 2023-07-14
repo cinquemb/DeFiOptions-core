@@ -58,6 +58,16 @@ interface ITellerInterface {
         uint32 loanDuration;
     }
 
+    enum BidState {
+        NONEXISTENT,
+        PENDING,
+        CANCELED,
+        ACCEPTED,
+        PAID,
+        LIQUIDATED,
+        CLOSE
+    }
+
     /**
      * @notice Details about a loan request.
      * @param borrower Account address who is requesting a loan.
@@ -69,6 +79,11 @@ interface ITellerInterface {
      * @param terms Struct of the loan request terms.
      * @param state Represents the current state of the loan.
      */
+
+    enum PaymentType {
+        EMI,
+        BULLET
+    }
     struct Bid {
         address borrower;
         address receiver;
@@ -77,7 +92,7 @@ interface ITellerInterface {
         bytes32 _metadataURI; // DEPRECATED
         LoanDetails loanDetails;
         Terms terms;
-        //BidState state;
+        BidState state;
         //PaymentType paymentType;
     }
 

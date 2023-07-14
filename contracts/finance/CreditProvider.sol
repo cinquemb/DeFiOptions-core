@@ -222,7 +222,7 @@ contract CreditProvider is ManagedContract {
     }
 
     function processPayment(address from, address to, uint value) external {
-        ensurePrimeCaller();
+        ensureRehypothicationManagerCaller();
 
         require(from != to);
 
