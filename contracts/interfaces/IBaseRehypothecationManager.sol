@@ -7,5 +7,5 @@ interface IBaseRehypothecationManager {
 	function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) external;
 	function repay(address asset, address collateral, address udlFeed) external;
 	function transferTokensToCreditProvider(address tokenAddr) external;
-    function transferTokensToVault(address tokenAddr) virtual external;
+    function transferTokensToVault(address tokenAddr) external;
 }

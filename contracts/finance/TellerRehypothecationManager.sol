@@ -85,8 +85,8 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		ITellerInterface.Commitment memory _commitment;
 		
         _commitment.maxPrincipal = assetAmount;//uint256 maxPrincipal;
-        _commitment.expiration;//uint32 expiration;TODO
-        _commitment.maxDuration;//uint32 maxDuration;TODO
+        _commitment.expiration = 7 days;//uint32 expiration;
+        _commitment.maxDuration = 7 days;//uint32 maxDuration;7 days on polygon with marketID 33
         _commitment.minInterestRate = 0;//uint16 minInterestRate;
         _commitment.collateralTokenAddress = collateral;//address collateralTokenAddress;
         _commitment.collateralTokenId = 0;//uint256 collateralTokenId;
@@ -170,7 +170,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		}
 
 	    uint256 _collateralTokenId = 0;//0 for erc20's
-	    uint32 _loanDuration;//TODO
+	    uint32 _loanDuration = 7 days;//
 
 		uint256 _bidId = ITellerInterface(tellerInterfaceAddr).acceptCommitment(
 		    lenderCommitmentIdMap[msg.sender][asset][collateral],
@@ -264,7 +264,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	            udlCreditBal
 	        );
 
-	        uint256 diffAmountForPricipal;
 	    	uint256 diffAmountInExchangeBalance;
 
 			if (udlCreditBalInAsset >= transferAmountInAsset) {

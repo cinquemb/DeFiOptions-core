@@ -51,7 +51,7 @@ interface ITellerInterface {
     struct LoanDetails {
         IERC20_2 lendingToken;
         uint256 principal;
-        //Payment totalRepaid;
+        Payment totalRepaid;
         uint32 timestamp;
         uint32 acceptedTimestamp;
         uint32 lastRepaidTimestamp;
@@ -82,8 +82,24 @@ interface ITellerInterface {
 
     enum PaymentType {
         EMI,
-        BULLET
+        Bullet
     }
+
+    enum PaymentCycleType {
+        Seconds,
+        Monthly
+    }
+
+    /**
+     * @notice Represents a total amount for a payment.
+     * @param principal Amount that counts towards the principal.
+     * @param interest  Amount that counts toward interest.
+     */
+    struct Payment {
+        uint256 principal;
+        uint256 interest;
+    }
+
     struct Bid {
         address borrower;
         address receiver;
@@ -93,7 +109,7 @@ interface ITellerInterface {
         LoanDetails loanDetails;
         Terms terms;
         BidState state;
-        //PaymentType paymentType;
+        PaymentType paymentType;
     }
 
     function createCommitment(Commitment calldata _commitment, address[] calldata _borrowerAddressList) external returns (uint256 commitmentId_);
