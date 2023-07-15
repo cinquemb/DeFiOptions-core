@@ -21,7 +21,6 @@ contract TellerHedgingManager is BaseHedgingManager {
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
     uint constant _volumeBase = 1e18;
-    address creditToken;
 
     event PerpOrderSubmitFailed(string reason);
     event PerpOrderSubmitSuccess(int256 amountDec18, int16 leverageInteger);
@@ -67,9 +66,7 @@ contract TellerHedgingManager is BaseHedgingManager {
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         tellerHedgingManagerFactoryAddr = deployer.getContractAddress("TellerHedgingManagerFactory");
-        (address _d8xOrderBookAddr,address _perpetualProxy) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();
-        creditToken = deployer.getContractAddress("CreditToken");
-        
+        (address _d8xOrderBookAddr,address _perpetualProxy) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();        
         require(_d8xOrderBookAddr != address(0), "bad order book");
         require(_perpetualProxy != address(0), "bad perp proxy");
         
@@ -83,7 +80,7 @@ contract TellerHedgingManager is BaseHedgingManager {
 
     function getAllowedStables() public view returns (address[] memory) {
         address[] memory outTokensReal = new address[](1);
-        outTokensReal[0] = creditToken;
+        outTokensReal[0] = address(exchange);//exchnage balance will be used as stable, udlcredit tokens will be used as underlying
         return outTokensReal;
     }
 

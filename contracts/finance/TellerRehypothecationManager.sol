@@ -17,8 +17,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) collateralAmountMap;
 
 	address tellerInterfaceAddr = address(0);
-
-	//TODO: make sure for proper conversion between credit token and exchange balance
 	
 	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
 
