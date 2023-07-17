@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 
 interface IUnderlyingCreditProvider {
     function initialize(address _udlCdtk) external;
+    function getUnderlyingCreditToken() external view returns (address);
     function addBalance(address to, address token, uint value) external;
     function addBalance(uint value) external;
     function balanceOf(address owner) external view returns (uint);

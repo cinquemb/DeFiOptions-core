@@ -9,18 +9,22 @@ import "../interfaces/external/teller/ITellerInterface.sol";
 import "../interfaces/IBaseRehypothecationManager.sol";
 import "../interfaces/AggregatorV3Interface.sol";
 import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IUnderlyingVault.sol";
 import "../interfaces/ITellerHedgingManagerFactory.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../utils/Convert.sol";
 
 
 contract TellerHedgingManager is BaseHedgingManager {
-    address private orderBookAddr;
     address private perpetualProxy;
+    address private tellerRehypothicationAddr;
     address private tellerHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
     uint private defaultLeverage = 15;
     uint constant _volumeBase = 1e18;
+
+    IUnderlyingVault vault;
 
     event PerpOrderSubmitFailed(string reason);
     event PerpOrderSubmitSuccess(int256 amountDec18, int16 leverageInteger);
@@ -66,11 +70,12 @@ contract TellerHedgingManager is BaseHedgingManager {
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         tellerHedgingManagerFactoryAddr = deployer.getContractAddress("TellerHedgingManagerFactory");
-        (address _d8xOrderBookAddr,address _perpetualProxy) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();        
-        require(_d8xOrderBookAddr != address(0), "bad order book");
+        (address _perpetualProxy, address _tellerRehypothicationAddr) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));        
+        require(_tellerRehypothicationAddr != address(0), "bad order book");
         require(_perpetualProxy != address(0), "bad perp proxy");
         
-        orderBookAddr = _d8xOrderBookAddr;
+        tellerRehypothicationAddr = _tellerRehypothicationAddr;
         perpetualProxy = _perpetualProxy;
     }
 
@@ -85,37 +90,23 @@ contract TellerHedgingManager is BaseHedgingManager {
     }
 
 
-    function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
+    function getPosSize(address underlying, bool isLong) override public view returns (uint) {
         //todo: need to get udl credit token addr from udl, vault -> udlcredit provider- >udlcredit token
 
+        address udlCdtP = vault.getUnderlyingCreditProvider(underlying);
+        address udlCdtk = IUnderlyingCreditProvider(udlCdtP).getUnderlyingCreditToken();
+
+
         address[] memory allowedTokens = getAllowedStables();
-        int256[] memory posSize = new int256[](allowedTokens.length);
-        
+        //int256[] memory posSize = new int256[](allowedTokens.length);
+
         if (isLong == true) {
             //(asset == exchange balance, collateral == udl credit)
-            return notionalExposure(address(this), address(exchange), address collateral);
+            return IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk);
         } else {
             //(collateral == exchange balance, asset == udl credit)
-            return notionalExposure(address(this), address asset, address(exchange));
+            return IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange));
         }
-    }
-
-    function getPosSize(string memory underlyingStr, bool isLong) public view returns (int256[] memory, uint24[] memory) {
-        address[] memory allowedTokens = getAllowedStables();
-        int256[] memory posSize = new int256[](allowedTokens.length);
-        uint24[] memory perIds = new uint24[](allowedTokens.length);
-
-        /*
-        for (uint i=0; i<allowedTokens.length; i++) {
-            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
-            ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
-
-            posSize[i] = accD18.positionSizeBCD18;
-            perIds[i] = d8xPerpId;
-        }*/
-
-
-        return (posSize, perIds);
     }
 
     function getHedgeExposure(address underlying) override public view returns (int256) {
@@ -214,7 +205,7 @@ contract TellerHedgingManager is BaseHedgingManager {
         if (exData.real != 0) {
             //need to close long position first
             //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
-            (exData.openPos, exData.perpIds) = getPosSize(exData.underlyingStr, true);
+            exData.openPos = getPosSize(exData.underlying, true);
             for(uint i=0; i< exData.openPos.length; i++){
                 if (exData.openPos[i] != 0) {
                     //postOrder(exData.perpIds[i], exData.openPos[i], 0, 0x80000000);

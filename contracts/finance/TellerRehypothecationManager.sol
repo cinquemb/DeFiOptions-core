@@ -19,7 +19,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 	address tellerInterfaceAddr = address(0);
 
-	function notionalExposure(address account, address asset, address collateral) public view returns (uint256) {
+	function notionalExposure(address account, address asset, address collateral) override external view returns (uint256) {
 		return notionalExposureInExchangeBalMap[account][asset][collateral];
 	}
 
@@ -204,7 +204,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 				creditToken.swapForExchangeBalance(assetAmountInCollateral.sub(collateralBal));
 			}
 
-			IERC20_2(collateral).safeTransfer(msg.sender, assetAmountInCollateral)
+			IERC20_2(collateral).safeTransfer(msg.sender, assetAmountInCollateral);
 			notionalExposureInExchangeBalMap[msg.sender][asset][collateral] = assetAmountInCollateral;
 		} else {
 			//(collateral == udl credit, asset == exchange balance)

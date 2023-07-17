@@ -73,6 +73,10 @@ contract UnderlyingCreditProvider {
         primeCallers[underlyingCreditToken] = 1;
     }
 
+    function getUnderlyingCreditToken() external view returns (address) {
+        return address(creditToken);
+    }
+
     function totalTokenStock() external view returns (uint v) {
         uint value = IERC20_2(udlAssetAddr).balanceOf(address(this));
         v = Convert.to18DecimalsBase(udlAssetAddr, value);
