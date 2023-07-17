@@ -14,10 +14,15 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureMap;
+	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureInExchangeBalMap;
 	mapping(address => mapping(address => mapping(address => uint256))) collateralAmountMap;
 
 	address tellerInterfaceAddr = address(0);
-	
+
+	function notionalExposure(address account, address asset, address collateral) public view returns (uint256) {
+		return notionalExposureInExchangeBalMap[account][asset][collateral];
+	}
+
 	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
 
 		require(
@@ -199,7 +204,8 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 				creditToken.swapForExchangeBalance(assetAmountInCollateral.sub(collateralBal));
 			}
 
-			IERC20_2(collateral).safeTransfer(msg.sender, assetAmountInCollateral);
+			IERC20_2(collateral).safeTransfer(msg.sender, assetAmountInCollateral)
+			notionalExposureInExchangeBalMap[msg.sender][asset][collateral] = assetAmountInCollateral;
 		} else {
 			//(collateral == udl credit, asset == exchange balance)
 			/*
@@ -221,6 +227,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			}
 
 			IERC20_2(collateral).safeTransfer(msg.sender, collateralAmountInAsset);
+			notionalExposureInExchangeBalMap[msg.sender][asset][collateral] = assetAmount;
 		}
 
 		

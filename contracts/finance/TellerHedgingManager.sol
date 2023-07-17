@@ -86,9 +86,18 @@ contract TellerHedgingManager is BaseHedgingManager {
 
 
     function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
+        //todo: need to get udl credit token addr from udl, vault -> udlcredit provider- >udlcredit token
+
         address[] memory allowedTokens = getAllowedStables();
-        uint256[] memory posData = new uint256[](allowedTokens.length);
-        return posData;
+        int256[] memory posSize = new int256[](allowedTokens.length);
+        
+        if (isLong == true) {
+            //(asset == exchange balance, collateral == udl credit)
+            return notionalExposure(address(this), address(exchange), address collateral);
+        } else {
+            //(collateral == exchange balance, asset == udl credit)
+            return notionalExposure(address(this), address asset, address(exchange));
+        }
     }
 
     function getPosSize(string memory underlyingStr, bool isLong) public view returns (int256[] memory, uint24[] memory) {
@@ -107,26 +116,6 @@ contract TellerHedgingManager is BaseHedgingManager {
 
 
         return (posSize, perIds);
-    }
-
-    function getMaxPosSize(string memory underlyingStr, bool isLong) public view returns (int256) {
-        address[] memory allowedTokens = getAllowedStables();
-        int256[] memory posData = new int256[](allowedTokens.length);
-
-        /*
-        for (uint i=0; i<allowedTokens.length; i++) {
-            
-            uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
-            posData[i] = getMaxTradeAmount(d8xPerpId, isLong);
-        }
-        */
-
-        int256 totalExposure = 0;
-        for (uint i=0; i<(allowedTokens.length); i++) {
-            totalExposure = totalExposure.add(posData[i]);
-        }
-
-        return totalExposure;
     }
 
     function getHedgeExposure(address underlying) override public view returns (int256) {
@@ -249,11 +238,6 @@ contract TellerHedgingManager is BaseHedgingManager {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
-                require(
-                    getMaxShortLiquidity(udlFeedAddr) >= exData.totalPosValue,
-                    "no short hedge liq"
-                );
-
                 // hedging should fail if not enough stables in exchange
                 if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
                     for (uint i=0; i< exData.allowedTokens.length; i++) {
@@ -323,11 +307,6 @@ contract TellerHedgingManager is BaseHedgingManager {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
-                require(
-                    getMaxLongLiquidity(udlFeedAddr) >= exData.totalPosValue,
-                    "no long hedge liq"
-                );
-
                 // hedging should fail if not enough stables in exchange
                 if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
                     for (uint i=0; i< exData.allowedTokens.length; i++) {
@@ -392,22 +371,6 @@ contract TellerHedgingManager is BaseHedgingManager {
         }
 
         return false;
-    }
-
-    function getMaxLongLiquidity(address udlFeedAddr) public view returns (uint v) {
-        ExposureData memory exData;
-        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
-
-        return uint256(getMaxPosSize(exData.underlyingStr, true));
-
-    }
-
-    function getMaxShortLiquidity(address udlFeedAddr) public view returns (uint v) {
-        ExposureData memory exData;
-        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
-
-        return uint256(MoreMath.abs(getMaxPosSize(exData.underlyingStr, false)));
-        
     }
 
     function totalTokenStock() override public view returns (uint v) {
