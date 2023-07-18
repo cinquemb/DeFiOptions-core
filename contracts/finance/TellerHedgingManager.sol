@@ -16,7 +16,6 @@ import "../utils/Convert.sol";
 
 
 contract TellerHedgingManager is BaseHedgingManager {
-    address private perpetualProxy;
     address private tellerRehypothicationAddr;
     address private tellerHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
@@ -54,6 +53,8 @@ contract TellerHedgingManager is BaseHedgingManager {
         uint256 totalPosValueToTransfer;
         
         address underlying;
+        address udlCdtP;
+        address udlCdtk;
 
         address[] at;
         address[] _pathDecLong;
@@ -73,7 +74,6 @@ contract TellerHedgingManager is BaseHedgingManager {
         require(_perpetualProxy != address(0), "bad perp proxy");
         
         tellerRehypothicationAddr = _tellerRehypothicationAddr;
-        perpetualProxy = _perpetualProxy;
     }
 
     function pool() override external view returns (address) {
@@ -167,6 +167,8 @@ contract TellerHedgingManager is BaseHedgingManager {
     function balanceExposure(address udlFeedAddr) override external returns (bool) {
         ExposureData memory exData;
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
+        exData.udlCdtP = vault.getUnderlyingCreditProvider(exData.underlying);
+        exData.udlCdtk = IUnderlyingCreditProvider(exData.udlCdtP).getUnderlyingCreditToken();
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
         exData.allowedTokens = getAllowedStables();
@@ -188,19 +190,28 @@ contract TellerHedgingManager is BaseHedgingManager {
         if (exData.real != 0) {
             //need to close long position first
             //need to loop over all available exchange stablecoins, or need to deposit underlying int to vault (if there is a vault for it)
-            exData.openPos = getPosSize(exData.underlying, true);
-            for(uint i=0; i< exData.openPos.length; i++){
-                if (exData.openPos[i] != 0) {
-                    //postOrder(exData.perpIds[i], exData.openPos[i], 0, 0x80000000);
-                }
-            }
             
-
             if (exData.real > 0) {
+                exData.openPos = getPosSize(exData.underlying, true);
+                for(uint i=0; i< exData.openPos.length; i++){
+                    if (exData.openPos[i] != 0) {
+                        //approve && repay long
+                        //(asset == exchange balance, collateral == udl credit), long
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).repay(address(exchange), exData.udlCdtk, udlFeedAddr);
+                    }
+                }
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
             }
 
             if (exData.real < 0) {
+                exData.openPos = getPosSize(exData.underlying, false);
+                for(uint i=0; i< exData.openPos.length; i++){
+                    if (exData.openPos[i] != 0) {
+                        //approve && repay short
+                        //(collateral == exchange balance, asset == udl credit), short
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).repay(exData.udlCdtk, address(exchange), udlFeedAddr);
+                    }
+                }
                 exData.pos_size = uint256(exData.ideal);
             }
         }
@@ -228,10 +239,10 @@ contract TellerHedgingManager is BaseHedgingManager {
 
                                 //.mul(b).div(r); //convert to exchange decimals
 
-                                if (exData.t.allowance(address(this), perpetualProxy) > 0) {
-                                    exData.t.safeApprove(perpetualProxy, 0);
+                                if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
+                                    exData.t.safeApprove(tellerRehypothicationAddr, 0);
                                 }
-                                exData.t.safeApprove(perpetualProxy, v.mul(exData.r).div(exData.b));
+                                exData.t.safeApprove(tellerRehypothicationAddr, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 exData.at = new address[](1);
@@ -253,8 +264,9 @@ contract TellerHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-                                //uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                //postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)).mul(-1), int16(exData.poolLeverage), 0x40000000);
+                                //TODO: approve collateral && lend && borrow
+                                //IBaseRehypothecationManager(tellerRehypothicationAddr).lend(exData.udlCdtk, address(exchange), uint assetAmount, uint collateralAmount, udlFeedAddr);
+                                //IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(exData.udlCdtk, address(exchange), uint assetAmount, uint collateralAmount, udlFeedAddr);
 
                                 //back to exchange decimals
 
@@ -294,10 +306,10 @@ contract TellerHedgingManager is BaseHedgingManager {
                                     exData.totalPosValueToTransfer,
                                     exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
                                 );
-                                if (exData.t.allowance(address(this), perpetualProxy) > 0) {
-                                    exData.t.safeApprove(perpetualProxy, 0);
+                                if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
+                                    exData.t.safeApprove(tellerRehypothicationAddr, 0);
                                 }
-                                exData.t.safeApprove(perpetualProxy, v.mul(exData.r).div(exData.b));
+                                exData.t.safeApprove(tellerRehypothicationAddr, v.mul(exData.r).div(exData.b));
 
                                 //transfer collateral from credit provider to hedging manager and debit pool bal
                                 exData.at = new address[](1);
@@ -322,9 +334,10 @@ contract TellerHedgingManager is BaseHedgingManager {
 
                                 v = v.mul(exData.r).div(exData.b);//converts to token decimals
 
-
-                                //uint24 d8xPerpId = getAssetIdsForUnderlying(exData.underlyingStr, exData.allowedTokens[i]);
-                                //postOrder(d8xPerpId, int256(v.mul(exData.r).div(exData.b)), int16(exData.poolLeverage), 0x40000000);
+                                //approve collateral && lend && borrow
+                                //TODO: approve collateral && lend && borrow
+                                //IBaseRehypothecationManager(tellerRehypothicationAddr).lend(address(exchange), exData.udlCdtk, uint assetAmount, uint collateralAmount, udlFeedAddr);
+                                //IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(address(exchange), exData.udlCdtk, uint assetAmount, uint collateralAmount, udlFeedAddr);
 
                                 //back to exchange decimals
                                 if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
