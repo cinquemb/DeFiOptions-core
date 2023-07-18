@@ -40,16 +40,11 @@ contract TellerHedgingManager is BaseHedgingManager {
         int256 diff;
         int256 real;
         int256 ideal;
-
-        uint256 r;
-        uint256 b;
         
         uint256 pos_size;
         uint256 udlPrice;
-        uint256 totalStables;
         uint256 poolLeverage;
         uint256 totalPosValue;
-        uint256 totalHedgingStables;
         uint256 totalPosValueToTransfer;
         
         address underlying;
@@ -57,13 +52,13 @@ contract TellerHedgingManager is BaseHedgingManager {
         address udlCdtk;
 
         address[] at;
-        address[] _pathDecLong;
         address[] allowedTokens;
         uint256[] tv;
         uint256[] openPos;        
     }
 
     constructor(address _deployAddr, address _poolAddr) public {
+        //TODO: need to make sure proper addrs are available
         poolAddr = _poolAddr;
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
@@ -172,8 +167,6 @@ contract TellerHedgingManager is BaseHedgingManager {
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
         exData.allowedTokens = getAllowedStables();
-        exData.totalStables = creditProvider.totalTokenStock();
-        exData.totalHedgingStables = totalTokenStock();
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
         exData.ideal = idealHedgeExposure(exData.underlying);
@@ -197,6 +190,15 @@ contract TellerHedgingManager is BaseHedgingManager {
                     if (exData.openPos[i] != 0) {
                         //approve && repay long
                         //(asset == exchange balance, collateral == udl credit), long
+
+                        if (IERC20_2(exData.udlCdtk).allowance(address(this), tellerRehypothicationAddr) > 0) {
+                            IERC20_2(exData.udlCdtk).safeApprove(tellerRehypothicationAddr, 0);
+                        }
+                        IERC20_2(exData.udlCdtk).safeApprove(
+                            tellerRehypothicationAddr, 
+                            IBaseRehypothecationManager(tellerRehypothicationAddr).borrowExposure(address(this), address(exchange), exData.udlCdtk)
+                        );
+
                         IBaseRehypothecationManager(tellerRehypothicationAddr).repay(address(exchange), exData.udlCdtk, udlFeedAddr);
                     }
                 }
@@ -209,6 +211,13 @@ contract TellerHedgingManager is BaseHedgingManager {
                     if (exData.openPos[i] != 0) {
                         //approve && repay short
                         //(collateral == exchange balance, asset == udl credit), short
+                        if (IERC20_2(address(exchange)).allowance(address(this), tellerRehypothicationAddr) > 0) {
+                            IERC20_2(address(exchange)).safeApprove(tellerRehypothicationAddr, 0);
+                        }
+                        IERC20_2(address(exchange)).safeApprove(
+                            tellerRehypothicationAddr, 
+                            IBaseRehypothecationManager(tellerRehypothicationAddr).borrowExposure(address(this), exData.udlCdtk, address(exchange))
+                        );
                         IBaseRehypothecationManager(tellerRehypothicationAddr).repay(exData.udlCdtk, address(exchange), udlFeedAddr);
                     }
                 }
@@ -252,7 +261,7 @@ contract TellerHedgingManager is BaseHedgingManager {
                             address(this), poolAddr, v
                         );
 
-                        //TODO: approve collateral && lend && borrow
+                        //approve collateral && lend && borrow
                         //(collateral == exchange balance, asset == udl credit), short
                         IBaseRehypothecationManager(tellerRehypothicationAddr).lend(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
                         IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
@@ -328,88 +337,7 @@ contract TellerHedgingManager is BaseHedgingManager {
         return false;
     }
 
-    function totalTokenStock() override public view returns (uint v) {
+    function totalTokenStock() override public view returns (uint v) {return 0;}
 
-        address[] memory tokens = getAllowedStables();
-        for (uint i = 0; i < tokens.length; i++) {
-            (uint r, uint b) = settings.getTokenRate(tokens[i]);
-            uint value = IERC20_2(tokens[i]).balanceOf(address(this));
-            v = v.add(value.mul(b).div(r));
-        }
-    }
-
-    /**
-     * Convert signed decimal-18 number to ABDK-128x128 format
-     * @param x number decimal-18
-     * @return ABDK-128x128 number
-     */
-    function _fromDec18(int256 x) internal pure returns (int128) {
-        int256 result = (x * ONE_64x64) / DECIMALS;
-        require(x >= MIN_64x64 && x <= MAX_64x64, "result out of range");
-        return int128(result);
-    }
-
-    /**
-     * Convert ABDK-128x128 format to signed decimal-18 number
-     * @param x number in ABDK-128x128 format
-     * @return decimal 18 (signed)
-     */
-    function toDec18(int128 x) internal pure returns (int256) {
-        return (int256(x) * DECIMALS) / ONE_64x64;
-    }
-
-    /**
-     * Convert signed 256-bit integer number into signed 64.64-bit fixed point
-     * number.  Revert on overflow.
-     *
-     * @param x signed 256-bit integer number
-     * @return signed 64.64-bit fixed point number
-     */
-    function _fromInt(int256 x) internal pure returns (int128) {
-        require(x >= -0x8000000000000000 && x <= 0x7FFFFFFFFFFFFFFF, "ABDK.fromInt");
-        return int128(x << 64);
-    }
-
-    function transferTokensToCreditProvider(address tokenAddr) override external {
-        //this needs to be used if/when liquidations happen and tokens sent from external contracts end up here
-        uint value = IERC20_2(tokenAddr).balanceOf(address(this));
-        if (value > 0) {
-            IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
-            creditProvider.creditPoolBalance(poolAddr, tokenAddr, value);
-        }
-    }
-
-    function bytes32ToString(bytes32 x) private pure returns (string memory) {
-        bytes memory bytesString = new bytes(32);
-        uint charCount = 0;
-        for (uint j = 0; j < 32; j++) {
-            byte char = byte(bytes32(uint(x) * 2 ** (8 * j)));
-            if (char != 0) {
-                bytesString[charCount] = char;
-                charCount++;
-            }
-        }
-        bytes memory bytesStringTrimmed = new bytes(charCount);
-        for (uint j = 0; j < charCount; j++) {
-            bytesStringTrimmed[j] = bytesString[j];
-        }
-        return string(bytesStringTrimmed);
-    }
-
-    function toAsciiString(address x) internal pure returns (string memory) {
-        bytes memory s = new bytes(40);
-        for (uint i = 0; i < 20; i++) {
-            bytes1 b = bytes1(uint8(uint(uint160(x)) / (2**(8*(19 - i)))));
-            bytes1 hi = bytes1(uint8(b) / 16);
-            bytes1 lo = bytes1(uint8(b) - 16 * uint8(hi));
-            s[2*i] = char(hi);
-            s[2*i+1] = char(lo);            
-        }
-        return string(s);
-    }
-
-    function char(bytes1 b) internal pure returns (bytes1 c) {
-        if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
-        else return bytes1(uint8(b) + 0x57);
-    }
+    function transferTokensToCreditProvider(address tokenAddr) override external {}
 }

@@ -23,6 +23,10 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		return notionalExposureInExchangeBalMap[account][asset][collateral];
 	}
 
+	function borrowExposure(address account, address asset, address collateral) override external view returns (uint256) {
+		return notionalExposureMap[account][asset][collateral];
+	}
+
 	function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) override external {
 
 		require(

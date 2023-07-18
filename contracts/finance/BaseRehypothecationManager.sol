@@ -34,6 +34,7 @@ abstract contract BaseRehypothecationManager is ManagedContract, IBaseRehypothec
 
     }
     function notionalExposure(address account, address asset, address collateral) virtual override external view returns (uint256);
+    function borrowExposure(address account, address asset, address collateral) virtual override external view returns (uint256);
     function lend(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) virtual override external;
     function withdraw(address asset, address collateral, uint amount) virtual override external;
     function borrow(address asset, address collateral, uint assetAmount, uint collateralAmount, address udlFeed) virtual override external;
