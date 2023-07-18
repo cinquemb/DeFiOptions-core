@@ -54,15 +54,12 @@ contract TellerHedgingManager is BaseHedgingManager {
         uint256 totalPosValueToTransfer;
         
         address underlying;
-        string underlyingStr;
 
         address[] at;
         address[] _pathDecLong;
         address[] allowedTokens;
         uint256[] tv;
-        int256[] openPos;
-        uint24[] perpIds;
-        
+        uint256[] openPos;        
     }
 
     constructor(address _deployAddr, address _poolAddr) public {
@@ -90,48 +87,35 @@ contract TellerHedgingManager is BaseHedgingManager {
     }
 
 
-    function getPosSize(address underlying, bool isLong) override public view returns (uint) {
-        //todo: need to get udl credit token addr from udl, vault -> udlcredit provider- >udlcredit token
-
+    function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
         address udlCdtP = vault.getUnderlyingCreditProvider(underlying);
         address udlCdtk = IUnderlyingCreditProvider(udlCdtP).getUnderlyingCreditToken();
 
 
         address[] memory allowedTokens = getAllowedStables();
-        //int256[] memory posSize = new int256[](allowedTokens.length);
+        uint256[] memory posSize = new uint256[](allowedTokens.length);
 
         if (isLong == true) {
             //(asset == exchange balance, collateral == udl credit)
-            return IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk);
+            posSize[0] = IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk);
         } else {
             //(collateral == exchange balance, asset == udl credit)
-            return IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange));
+            posSize[0] = IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange));
         }
+
+        return posSize;
     }
 
     function getHedgeExposure(address underlying) override public view returns (int256) {
-        return 0;
-    }
-
-    function getHedgeExposure(string memory underlyingStr) public view returns (int256) {
-        address[] memory allowedTokens = getAllowedStables();
-        int256[] memory posData = new int256[](allowedTokens.length);
-
-        for (uint i=0; i<allowedTokens.length; i++) {
-            
-            //uint24 d8xPerpId = getAssetIdsForUnderlying(underlyingStr, allowedTokens[i]);
-            //ID8xPerpetualsContractInterface.D18MarginAccount memory accD18 = getMarginAccount(d8xPerpId);
-            //posData[i] = accD18.positionSizeBCD18;
-        }
-
+        address udlCdtP = vault.getUnderlyingCreditProvider(underlying);
+        address udlCdtk = IUnderlyingCreditProvider(udlCdtP).getUnderlyingCreditToken();
         int256 totalExposure = 0;
-        for (uint i=0; i<(allowedTokens.length); i++) {
-            totalExposure = totalExposure.add(posData[i]);
-        }
-
+        //(asset == exchange balance, collateral == udl credit)
+        totalExposure = totalExposure.add(int256(IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk)));
+        //(collateral == exchange balance, asset == udl credit)
+        totalExposure = totalExposure.sub(int256(IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange))));
         return totalExposure;
     }
-    
 
     function idealHedgeExposure(address underlying) override public view returns (int256) {
         // look at order book for poolAddr and compute the delta for the given underlying (depening on net positioning of the options outstanding and the side of the trade the poolAddr is on)
@@ -174,16 +158,15 @@ contract TellerHedgingManager is BaseHedgingManager {
     function realHedgeExposure(address udlFeedAddr) override public view returns (int256) {
         // look at metavault exposure for underlying, and divide by asset price
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
-        string memory underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
+        address underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
 
-        int256 exposure = getHedgeExposure(underlyingStr);
+        int256 exposure = getHedgeExposure(underlying);
         return exposure.mul(int(_volumeBase)).div(udlPrice);
     }
     
     function balanceExposure(address udlFeedAddr) override external returns (bool) {
         ExposureData memory exData;
         exData.underlying = UnderlyingFeed(udlFeedAddr).getUnderlyingAddr();
-        exData.underlyingStr = AggregatorV3Interface(UnderlyingFeed(udlFeedAddr).getUnderlyingAggAddr()).description();
         (, int256 udlPrice) = UnderlyingFeed(udlFeedAddr).getLatestPrice();
         exData.udlPrice = uint256(udlPrice);
         exData.allowedTokens = getAllowedStables();
@@ -192,7 +175,7 @@ contract TellerHedgingManager is BaseHedgingManager {
         exData.poolLeverage = (settings.isAllowedCustomPoolLeverage(poolAddr) == true) ? IGovernableLiquidityPool(poolAddr).getLeverage() : defaultLeverage;
         require(exData.poolLeverage <= maxLeverage && exData.poolLeverage >= minLeverage, "leverage out of range");
         exData.ideal = idealHedgeExposure(exData.underlying);
-        exData.real = getHedgeExposure(exData.underlyingStr).mul(int(_volumeBase)).div(udlPrice);
+        exData.real = getHedgeExposure(exData.underlying).mul(int(_volumeBase)).div(udlPrice);
         exData.diff = exData.ideal.sub(exData.real);
 
         //dont bother to hedge if delta is below $ val threshold
@@ -413,17 +396,6 @@ contract TellerHedgingManager is BaseHedgingManager {
             IERC20_2(tokenAddr).safeTransfer(address(creditProvider), value);
             creditProvider.creditPoolBalance(poolAddr, tokenAddr, value);
         }
-    }
-
-    function findAllowedUnderlying(string memory underlyingStr, bytes32[] memory d8xAssetIds) private pure returns (bool){
-
-        for (uint i = 0; i < d8xAssetIds.length; i++) {
-            if(keccak256(abi.encodePacked((underlyingStr))) == keccak256(abi.encodePacked((bytes32ToString(d8xAssetIds[i]))))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     function bytes32ToString(bytes32 x) private pure returns (string memory) {
