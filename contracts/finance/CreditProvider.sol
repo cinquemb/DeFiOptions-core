@@ -519,6 +519,19 @@ contract CreditProvider is ManagedContract {
         }
     }
 
+    function borrowCreditFromPool(address to, address pool, uint value) external {
+        
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
+        require(to != address(this) && to != address(creditToken), "invalid token transfer address");
+
+        addBalance(to, value);
+        debitPoolBalance(pool, value);
+    }
+
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         
         require(

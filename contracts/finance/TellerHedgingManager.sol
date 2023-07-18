@@ -223,64 +223,47 @@ contract TellerHedgingManager is BaseHedgingManager {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
-                // hedging should fail if not enough stables in exchange
-                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
-                    for (uint i=0; i< exData.allowedTokens.length; i++) {
+                for (uint i=0; i< exData.allowedTokens.length; i++) {
+                    if (exData.totalPosValueToTransfer > 0) {
+                        exData.t = IERC20_2(exData.allowedTokens[i]);
+                        
+                        uint v = MoreMath.min(
+                            exData.totalPosValueToTransfer, 
+                            exData.t.balanceOf(address(creditProvider))
+                        );
 
-                        if (exData.totalPosValueToTransfer > 0) {
-                            exData.t = IERC20_2(exData.allowedTokens[i]);
-                            
-                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
-                            if (exData.b != 0) {
-                                uint v = MoreMath.min(
-                                    exData.totalPosValueToTransfer, 
-                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
-                                );
-
-                                //.mul(b).div(r); //convert to exchange decimals
-
-                                if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
-                                    exData.t.safeApprove(tellerRehypothicationAddr, 0);
-                                }
-                                exData.t.safeApprove(tellerRehypothicationAddr, v.mul(exData.r).div(exData.b));
-
-                                //transfer collateral from credit provider to hedging manager and debit pool bal
-                                exData.at = new address[](1);
-                                exData.at[0] = exData.allowedTokens[i];
-
-                                exData.tv = new uint[](1);
-                                exData.tv[0] = v;
-
-
-                                if (exData.totalHedgingStables < exData.totalPosValueToTransfer){
-                                    ICollateralManager(
-                                        settings.getUdlCollateralManager(
-                                            udlFeedAddr
-                                        )
-                                    ).borrowTokensByPreference(
-                                        address(this), poolAddr, v, exData.at, exData.tv
-                                    );
-                                }
-
-                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
-
-                                //TODO: approve collateral && lend && borrow
-                                //IBaseRehypothecationManager(tellerRehypothicationAddr).lend(exData.udlCdtk, address(exchange), uint assetAmount, uint collateralAmount, udlFeedAddr);
-                                //IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(exData.udlCdtk, address(exchange), uint assetAmount, uint collateralAmount, udlFeedAddr);
-
-                                //back to exchange decimals
-
-                                if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
-                                    exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
-
-                                } else {
-                                    exData.totalPosValueToTransfer = 0;
-                                }
-
-                                exData.r = 0;
-                                exData.b = 0;
-                            }                            
+                        if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
+                            exData.t.safeApprove(tellerRehypothicationAddr, 0);
                         }
+                        exData.t.safeApprove(tellerRehypothicationAddr, v);
+
+                        //transfer collateral from credit provider to hedging manager and debit pool bal
+                        exData.at = new address[](1);
+                        exData.at[0] = exData.allowedTokens[i];
+
+                        exData.tv = new uint[](1);
+                        exData.tv[0] = v;
+
+                        ICollateralManager(
+                            settings.getUdlCollateralManager(
+                                udlFeedAddr
+                            )
+                        ).borrowCreditFromPool(
+                            address(this), poolAddr, v
+                        );
+
+                        //TODO: approve collateral && lend && borrow
+                        //(collateral == exchange balance, asset == udl credit), short
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).lend(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
+
+                        if (exData.totalPosValueToTransfer > v) {
+                            exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v);
+
+                        } else {
+                            exData.totalPosValueToTransfer = 0;
+                        }
+                                                  
                     }
                 }
 
@@ -293,63 +276,48 @@ contract TellerHedgingManager is BaseHedgingManager {
                 exData.totalPosValue = exData.pos_size.mul(exData.udlPrice).div(_volumeBase);
                 exData.totalPosValueToTransfer = exData.totalPosValue.div(exData.poolLeverage);
 
-                // hedging should fail if not enough stables in exchange
-                if (exData.totalStables.mul(exData.poolLeverage) > exData.totalPosValue) {
-                    for (uint i=0; i< exData.allowedTokens.length; i++) {
-
-                        if (exData.totalPosValueToTransfer > 0) {
-                            exData.t = IERC20_2(exData.allowedTokens[i]);
-                            
-                            (exData.r, exData.b) = settings.getTokenRate(exData.allowedTokens[i]);
-                            if (exData.b != 0) {
-                                uint v = MoreMath.min(
-                                    exData.totalPosValueToTransfer,
-                                    exData.t.balanceOf(address(creditProvider)).mul(exData.b).div(exData.r)
-                                );
-                                if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
-                                    exData.t.safeApprove(tellerRehypothicationAddr, 0);
-                                }
-                                exData.t.safeApprove(tellerRehypothicationAddr, v.mul(exData.r).div(exData.b));
-
-                                //transfer collateral from credit provider to hedging manager and debit pool bal
-                                exData.at = new address[](1);
-                                address[] memory at_s = new address[](2);
-                                exData.at[0] = exData.allowedTokens[i];
-                                
-                                at_s[0] = exData.allowedTokens[i];
-                                at_s[1] = exData.underlying;
-
-                                exData.tv = new uint[](1);
-                                exData.tv[0] = v;
-
-                                if (exData.totalHedgingStables < exData.totalPosValueToTransfer){
-                                    ICollateralManager(
-                                        settings.getUdlCollateralManager(
-                                            udlFeedAddr
-                                        )
-                                    ).borrowTokensByPreference(
-                                        address(this), poolAddr, v, exData.at, exData.tv
-                                    );
-                                }
-
-                                v = v.mul(exData.r).div(exData.b);//converts to token decimals
-
-                                //approve collateral && lend && borrow
-                                //TODO: approve collateral && lend && borrow
-                                //IBaseRehypothecationManager(tellerRehypothicationAddr).lend(address(exchange), exData.udlCdtk, uint assetAmount, uint collateralAmount, udlFeedAddr);
-                                //IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(address(exchange), exData.udlCdtk, uint assetAmount, uint collateralAmount, udlFeedAddr);
-
-                                //back to exchange decimals
-                                if (exData.totalPosValueToTransfer > v.mul(exData.r).div(exData.b)) {
-                                    exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v.mul(exData.r).div(exData.b));
-
-                                } else {
-                                    exData.totalPosValueToTransfer = 0;
-                                }
-                                exData.r = 0;
-                                exData.b = 0;
-                            }                             
+                for (uint i=0; i< exData.allowedTokens.length; i++) {
+                    if (exData.totalPosValueToTransfer > 0) {
+                        exData.t = IERC20_2(exData.allowedTokens[i]);
+                        
+                        uint v = MoreMath.min(
+                            exData.totalPosValueToTransfer,
+                            exData.t.balanceOf(address(creditProvider))
+                        );
+                        if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
+                            exData.t.safeApprove(tellerRehypothicationAddr, 0);
                         }
+                        exData.t.safeApprove(tellerRehypothicationAddr, v);
+
+                        //transfer collateral from credit provider to hedging manager and debit pool bal
+                        exData.at = new address[](1);
+                        address[] memory at_s = new address[](2);
+                        exData.at[0] = exData.allowedTokens[i];
+                        
+                        at_s[0] = exData.allowedTokens[i];
+                        at_s[1] = exData.underlying;
+
+                        exData.tv = new uint[](1);
+                        exData.tv[0] = v;
+
+                        ICollateralManager(
+                            settings.getUdlCollateralManager(
+                                udlFeedAddr
+                            )
+                        ).borrowCreditFromPool(
+                            address(this), poolAddr, v
+                        );
+                        //approve collateral && lend && borrow
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).lend(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
+
+                        //back to exchange decimals
+                        if (exData.totalPosValueToTransfer > v) {
+                            exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v);
+
+                        } else {
+                            exData.totalPosValueToTransfer = 0;
+                        }                            
                     }
                 }
 

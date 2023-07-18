@@ -334,4 +334,8 @@ contract CollateralManager is BaseCollateralManager {
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         creditProvider.borrowTokensByPreference(to, pool, value, tokensInOrder, amountsOutInOrder);
     }
+
+    function borrowCreditFromPool(address to, address pool, uint value) external {
+        creditProvider.borrowCreditFromPool(to, pool, value);
+    }
 }
