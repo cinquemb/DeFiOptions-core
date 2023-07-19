@@ -7,8 +7,7 @@ import "./TellerHedgingManager.sol";
 
 contract TellerHedgingManagerFactory is ManagedContract {
 
-    address public orderBookAddr;
-    address public perpetualProxy;
+    address public tellerRehypothecationAddr;
 
     address private deployerAddress;
 
@@ -17,29 +16,20 @@ contract TellerHedgingManagerFactory is ManagedContract {
         address indexed pool
     );
 
-    constructor(address _orderBookAddr, address _perpetualProxy) public {
-        orderBookAddr = _orderBookAddr;
-        perpetualProxy = _perpetualProxy;
+    constructor(address _tellerRehypothecationAddr) public {
+        tellerRehypothecationAddr = _tellerRehypothecationAddr;
     }
     
     function initialize(Deployer deployer) override internal {
         deployerAddress = address(deployer);
     }
 
-    function getRemoteContractAddresses() external view returns (address, address) {
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("orderBookAddr()")));
-        bytes memory data1 = abi.encodeWithSelector(bytes4(keccak256("perpetualProxy()")));
-        
+    function getRemoteContractAddresses() external view returns (address trAddr) {
+        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("tellerRehypothecationAddr()")));
         (, bytes memory returnedData) = getImplementation().staticcall(data);
-        (, bytes memory returnedData1) = getImplementation().staticcall(data1);
+        trAddr = abi.decode(returnedData, (address));
 
-        address obAddr = abi.decode(returnedData, (address));
-        address ppAddr = abi.decode(returnedData1, (address));
-
-        require(obAddr != address(0), "bad order book");
-        require(ppAddr != address(0), "bad perp proxy");
-
-        return (obAddr, ppAddr);
+        require(trAddr != address(0), "bad rehypothecation addr");
     }
 
     function create(address _poolAddr) external returns (address) {

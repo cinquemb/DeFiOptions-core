@@ -16,7 +16,7 @@ import "../utils/Convert.sol";
 
 
 contract TellerHedgingManager is BaseHedgingManager {
-    address private tellerRehypothicationAddr;
+    address private tellerRehypothecationAddr;
     address private tellerHedgingManagerFactoryAddr;
     uint private maxLeverage = 30;
     uint private minLeverage = 1;
@@ -63,12 +63,11 @@ contract TellerHedgingManager is BaseHedgingManager {
         Deployer deployer = Deployer(_deployAddr);
         super.initialize(deployer);
         tellerHedgingManagerFactoryAddr = deployer.getContractAddress("TellerHedgingManagerFactory");
-        (address _perpetualProxy, address _tellerRehypothicationAddr) = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();
+        address _tellerRehypothecationAddr = ITellerHedgingManagerFactory(tellerHedgingManagerFactoryAddr).getRemoteContractAddresses();
         vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));        
-        require(_tellerRehypothicationAddr != address(0), "bad order book");
-        require(_perpetualProxy != address(0), "bad perp proxy");
+        require(_tellerRehypothecationAddr != address(0), "bad order book");
         
-        tellerRehypothicationAddr = _tellerRehypothicationAddr;
+        tellerRehypothecationAddr = _tellerRehypothecationAddr;
     }
 
     function pool() override external view returns (address) {
@@ -92,10 +91,10 @@ contract TellerHedgingManager is BaseHedgingManager {
 
         if (isLong == true) {
             //(asset == exchange balance, collateral == udl credit)
-            posSize[0] = IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk);
+            posSize[0] = IBaseRehypothecationManager(tellerRehypothecationAddr).notionalExposure(address(this), address(exchange), udlCdtk);
         } else {
             //(collateral == exchange balance, asset == udl credit)
-            posSize[0] = IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange));
+            posSize[0] = IBaseRehypothecationManager(tellerRehypothecationAddr).notionalExposure(address(this), udlCdtk, address(exchange));
         }
 
         return posSize;
@@ -106,9 +105,9 @@ contract TellerHedgingManager is BaseHedgingManager {
         address udlCdtk = IUnderlyingCreditProvider(udlCdtP).getUnderlyingCreditToken();
         int256 totalExposure = 0;
         //(asset == exchange balance, collateral == udl credit)
-        totalExposure = totalExposure.add(int256(IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), address(exchange), udlCdtk)));
+        totalExposure = totalExposure.add(int256(IBaseRehypothecationManager(tellerRehypothecationAddr).notionalExposure(address(this), address(exchange), udlCdtk)));
         //(collateral == exchange balance, asset == udl credit)
-        totalExposure = totalExposure.sub(int256(IBaseRehypothecationManager(tellerRehypothicationAddr).notionalExposure(address(this), udlCdtk, address(exchange))));
+        totalExposure = totalExposure.sub(int256(IBaseRehypothecationManager(tellerRehypothecationAddr).notionalExposure(address(this), udlCdtk, address(exchange))));
         return totalExposure;
     }
 
@@ -191,15 +190,15 @@ contract TellerHedgingManager is BaseHedgingManager {
                         //approve && repay long
                         //(asset == exchange balance, collateral == udl credit), long
 
-                        if (IERC20_2(exData.udlCdtk).allowance(address(this), tellerRehypothicationAddr) > 0) {
-                            IERC20_2(exData.udlCdtk).safeApprove(tellerRehypothicationAddr, 0);
+                        if (IERC20_2(exData.udlCdtk).allowance(address(this), tellerRehypothecationAddr) > 0) {
+                            IERC20_2(exData.udlCdtk).safeApprove(tellerRehypothecationAddr, 0);
                         }
                         IERC20_2(exData.udlCdtk).safeApprove(
-                            tellerRehypothicationAddr, 
-                            IBaseRehypothecationManager(tellerRehypothicationAddr).borrowExposure(address(this), address(exchange), exData.udlCdtk)
+                            tellerRehypothecationAddr, 
+                            IBaseRehypothecationManager(tellerRehypothecationAddr).borrowExposure(address(this), address(exchange), exData.udlCdtk)
                         );
 
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).repay(address(exchange), exData.udlCdtk, udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).repay(address(exchange), exData.udlCdtk, udlFeedAddr);
                     }
                 }
                 exData.pos_size = uint256(MoreMath.abs(exData.ideal));
@@ -211,14 +210,14 @@ contract TellerHedgingManager is BaseHedgingManager {
                     if (exData.openPos[i] != 0) {
                         //approve && repay short
                         //(collateral == exchange balance, asset == udl credit), short
-                        if (IERC20_2(address(exchange)).allowance(address(this), tellerRehypothicationAddr) > 0) {
-                            IERC20_2(address(exchange)).safeApprove(tellerRehypothicationAddr, 0);
+                        if (IERC20_2(address(exchange)).allowance(address(this), tellerRehypothecationAddr) > 0) {
+                            IERC20_2(address(exchange)).safeApprove(tellerRehypothecationAddr, 0);
                         }
                         IERC20_2(address(exchange)).safeApprove(
-                            tellerRehypothicationAddr, 
-                            IBaseRehypothecationManager(tellerRehypothicationAddr).borrowExposure(address(this), exData.udlCdtk, address(exchange))
+                            tellerRehypothecationAddr, 
+                            IBaseRehypothecationManager(tellerRehypothecationAddr).borrowExposure(address(this), exData.udlCdtk, address(exchange))
                         );
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).repay(exData.udlCdtk, address(exchange), udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).repay(exData.udlCdtk, address(exchange), udlFeedAddr);
                     }
                 }
                 exData.pos_size = uint256(exData.ideal);
@@ -241,10 +240,10 @@ contract TellerHedgingManager is BaseHedgingManager {
                             exData.t.balanceOf(address(creditProvider))
                         );
 
-                        if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
-                            exData.t.safeApprove(tellerRehypothicationAddr, 0);
+                        if (exData.t.allowance(address(this), tellerRehypothecationAddr) > 0) {
+                            exData.t.safeApprove(tellerRehypothecationAddr, 0);
                         }
-                        exData.t.safeApprove(tellerRehypothicationAddr, v);
+                        exData.t.safeApprove(tellerRehypothecationAddr, v);
 
                         //transfer collateral from credit provider to hedging manager and debit pool bal
                         exData.at = new address[](1);
@@ -263,8 +262,8 @@ contract TellerHedgingManager is BaseHedgingManager {
 
                         //approve collateral && lend && borrow
                         //(collateral == exchange balance, asset == udl credit), short
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).lend(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).lend(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).borrow(exData.udlCdtk, address(exchange), exData.pos_size, v, udlFeedAddr);
 
                         if (exData.totalPosValueToTransfer > v) {
                             exData.totalPosValueToTransfer = exData.totalPosValueToTransfer.sub(v);
@@ -293,10 +292,10 @@ contract TellerHedgingManager is BaseHedgingManager {
                             exData.totalPosValueToTransfer,
                             exData.t.balanceOf(address(creditProvider))
                         );
-                        if (exData.t.allowance(address(this), tellerRehypothicationAddr) > 0) {
-                            exData.t.safeApprove(tellerRehypothicationAddr, 0);
+                        if (exData.t.allowance(address(this), tellerRehypothecationAddr) > 0) {
+                            exData.t.safeApprove(tellerRehypothecationAddr, 0);
                         }
-                        exData.t.safeApprove(tellerRehypothicationAddr, v);
+                        exData.t.safeApprove(tellerRehypothecationAddr, v);
 
                         //transfer collateral from credit provider to hedging manager and debit pool bal
                         exData.at = new address[](1);
@@ -317,8 +316,8 @@ contract TellerHedgingManager is BaseHedgingManager {
                             address(this), poolAddr, v
                         );
                         //approve collateral && lend && borrow
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).lend(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
-                        IBaseRehypothecationManager(tellerRehypothicationAddr).borrow(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).lend(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
+                        IBaseRehypothecationManager(tellerRehypothecationAddr).borrow(address(exchange), exData.udlCdtk, exData.totalPosValue, exData.pos_size.div(exData.poolLeverage), udlFeedAddr);
 
                         //back to exchange decimals
                         if (exData.totalPosValueToTransfer > v) {

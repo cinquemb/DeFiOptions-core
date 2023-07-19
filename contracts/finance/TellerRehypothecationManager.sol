@@ -10,6 +10,7 @@ import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/external/teller/ITellerInterface.sol";
 
 contract TellerRehypothecationManager is BaseRehypothecationManager {
+	uint constant _volumeBase = 1e18;
 
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
 	mapping(address => mapping(address => mapping(address => uint256))) borrowerBidIdMap;
@@ -48,7 +49,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			uint256 udlAssetBal = IUnderlyingCreditProvider(asset).balanceOf(address(this));
 
 			(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
-			uint256 udlNotionalAmount = assetAmount.mul(1e18).div(uint256(udlPrice));
+			uint256 udlNotionalAmount = assetAmount.mul(_volumeBase).div(uint256(udlPrice));
 
 			//assetAmount / price = collateralAmount * leverage
 
@@ -158,7 +159,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	        );
 		} else { 
 			//(collateral == udl credit, asset == exchange balance)
-			uint256 collateralAmountInAsset = collateralAmount.mul(uint256(udlPrice)).div(1e18);
+			uint256 collateralAmountInAsset = collateralAmount.mul(uint256(udlPrice)).div(_volumeBase);
 			//assetAmount / leverage = collateralAmount * price
 
 			IERC20_2(asset).safeTransferFrom(
@@ -202,7 +203,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 			*/
 			uint256 collateralBal = IERC20_2(collateral).balanceOf(address(this));
-			uint256 assetAmountInCollateral = assetAmount.mul(uint256(udlPrice)).div(1e18);
+			uint256 assetAmountInCollateral = assetAmount.mul(uint256(udlPrice)).div(_volumeBase);
 			if (collateralBal < assetAmountInCollateral){
 				creditProvider.issueCredit(address(this), assetAmountInCollateral.sub(collateralBal));
 				creditToken.swapForExchangeBalance(assetAmountInCollateral.sub(collateralBal));
@@ -220,7 +221,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			*/
 
 			uint256 udlAssetBal = IERC20_2(collateral).balanceOf(address(this));
-			uint256 collateralAmountInAsset = assetAmount.mul(1e18).div(uint256(udlPrice));
+			uint256 collateralAmountInAsset = assetAmount.mul(_volumeBase).div(uint256(udlPrice));
 			if (udlAssetBal >= collateralAmountInAsset){
 				IUnderlyingCreditProvider(asset).swapBalanceForCreditTokens(address(this), collateralAmountInAsset);
 			} else {
@@ -256,7 +257,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
-			uint256 transferAmountInCollateral = bid.loanDetails.principal.mul(uint(udlPrice)).div(1e18);
+			uint256 transferAmountInCollateral = bid.loanDetails.principal.mul(uint(udlPrice)).div(_volumeBase);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
 	            address(this), 
@@ -265,9 +266,9 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 		} else { 
 			//(collateral == udl credit, asset == exchange balance)
 
-			uint256 transferAmountInAsset = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18);
+			uint256 transferAmountInAsset = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(_volumeBase);
 			uint256 udlCreditBal = IERC20_2(collateral).balanceOf(msg.sender);
-			uint256 udlCreditBalInAsset = udlCreditBal.mul(uint(udlPrice)).div(1e18);
+			uint256 udlCreditBalInAsset = udlCreditBal.mul(uint(udlPrice)).div(_volumeBase);
 			uint256 assetBal = IERC20_2(asset).balanceOf(msg.sender);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
@@ -315,7 +316,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			//transfers exchanage balance collateral to hedging manager
 			IERC20_2(asset).safeTransfer(
 				msg.sender,
-				collateralAmountMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(1e18)
+				collateralAmountMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(_volumeBase)
 			);
 		}
 
