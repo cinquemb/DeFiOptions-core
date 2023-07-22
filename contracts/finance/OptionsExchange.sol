@@ -43,7 +43,7 @@ contract OptionsExchange is ERC20, ManagedContract {
     mapping(address => uint) public collateral;
 
     mapping(address => IOptionsExchange.OptionData) private options;
-    mapping(address => IOptionsExchange.FeedData) private feeds;
+    mapping(address => IOptionsExchange.FeedData) private feeds;//DEPRICATED
     mapping(address => address[]) private book;
 
     mapping(string => address) private poolAddress;
@@ -61,7 +61,7 @@ contract OptionsExchange is ERC20, ManagedContract {
 
     
     event WithdrawTokens(address indexed from, uint value);
-    event CreatePool(address indexed token, address indexed sender);
+    event CreatePool(address indexed token, address indexed sender, address indexed owner);
     event CreateSymbol(address indexed token, address indexed sender);
     event CreateDexFeed(address indexed feed, address indexed sender);
 
@@ -161,11 +161,6 @@ contract OptionsExchange is ERC20, ManagedContract {
         ensureFunds(msg.sender);
     }
 
-    function underlyingBalance(address owner, address _tk) external view returns (uint) {
-
-        return vault.balanceOf(owner, _tk);
-    }
-
     function withdrawTokens(address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
 
         uint value;
@@ -195,26 +190,18 @@ contract OptionsExchange is ERC20, ManagedContract {
         tokenAddress[symbol] = tk;
         options[tk] = opt;
 
-        UnderlyingFeed feed = UnderlyingFeed(udlFeed);
-        uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
-        feeds[udlFeed] = IOptionsExchange.FeedData(
-            feed.calcLowerVolatility(uint(vol)).toUint120(),
-            feed.calcUpperVolatility(uint(vol)).toUint120()
-        );
-
         emit CreateSymbol(tk, msg.sender);
     }
 
-    function createPool(string calldata nameSuffix, string calldata symbolSuffix) external returns (address pool) {
+    function createPool(string calldata nameSuffix, string calldata symbolSuffix, bool _onlyMintToOwner, address _owner) external returns (address pool) {
 
         require(poolAddress[symbolSuffix] == address(0), "already created");
-        pool = poolFactory.create(nameSuffix, symbolSuffix);
+        pool = poolFactory.create(nameSuffix, symbolSuffix, _onlyMintToOwner, _owner);
         poolAddress[symbolSuffix] = pool;
         creditProvider.insertPoolCaller(pool);
 
         poolSymbols.push(symbolSuffix);
-        emit CreatePool(pool, msg.sender);
-        return pool;
+        emit CreatePool(pool, msg.sender, _owner);
     }
 
     function totalPoolSymbols() external view returns (uint) {
@@ -225,13 +212,12 @@ contract OptionsExchange is ERC20, ManagedContract {
         return poolAddress[poolSymbol];
     }
 
-    function createDexFeed(address underlying, address stable, address dexTokenPair) external returns (address) {
+    function createDexFeed(address underlying, address stable, address dexTokenPair) external returns (address feedAddr) {
         require(dexFeedAddress[dexTokenPair] == address(0), "already created");
         address feedAddr = dexFeedFactory.create(underlying, stable, dexTokenPair);
         dexFeedAddress[dexTokenPair] = feedAddr;
 
         emit CreateDexFeed(feedAddr, msg.sender);
-        return feedAddr;
     }
 
     function getDexFeedAddress(address dexTokenPair) external view returns (address)  {
@@ -304,7 +290,7 @@ contract OptionsExchange is ERC20, ManagedContract {
             if (oEi.isShort[i] == true) {
                 //sell options
                 if (oEx.vol > 0) {
-                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to, recipient);
+                    openExposureInternal(oEx.symbol, oEx.isCovered, oEx.vol, to, recipient, oEx.isRehypothicate, oEx.rehypothicationManager);
                     if (msg.sender == oEx.poolAddr){
                         //if the pool is the one writing the option to a user, transfer from exchange to user
                         IERC20_2(oEx._tokens[i]).transfer(to, oEx.vol);
@@ -363,6 +349,8 @@ contract OptionsExchange is ERC20, ManagedContract {
         oEx.vol = oEi.volume[index];
         oEx.isCovered = oEi.isCovered[index];
         oEx.poolAddr = oEi.poolAddrs[index];
+        oEx.isRehypothicate = oEi.isRehypothicated[index];
+        oEx.rehypothicationManager = oEi.rehypothicationManagers[index];
 
         return oEx;
     }
@@ -372,7 +360,9 @@ contract OptionsExchange is ERC20, ManagedContract {
         bool isCovered,
         uint volume,
         address to,
-        address recipient
+        address recipient,
+        bool isRehypothicate,
+        address rehypothicationManager
     ) private {
         address _tk = tokenAddress[symbol];
         IOptionToken tk = IOptionToken(_tk);
@@ -398,7 +388,7 @@ contract OptionsExchange is ERC20, ManagedContract {
                 address(vault), 
                 Convert.from18DecimalsBase(underlying, volume)
             );
-            vault.lock(recipient, _tk, volume);
+            vault.lock(recipient, _tk, volume, isRehypothicate, rehypothicationManager);
         }
         emit WriteOptions(_tk, recipient, to, volume);
     }
@@ -509,19 +499,14 @@ contract OptionsExchange is ERC20, ManagedContract {
         return IBaseCollateralManager(settings.getUdlCollateralManager(opt.udlFeed)).calcIntrinsicValue(opt);
     }
 
-    function resolveToken(string calldata symbol) external view returns (address) {
+    function resolveToken(string calldata symbol) external view returns (address addr) {
         
-        address addr = tokenAddress[symbol];
+        addr = tokenAddress[symbol];
         require(addr != address(0), "token not found");
-        return addr;
     }
 
     function burn(address owner, uint value, address _tk) external {
         IOptionToken(_tk).burn(owner, value);
-    }
-
-    function getExchangeFeeds(address udlFeed) external view returns (IOptionsExchange.FeedData memory) {
-        return feeds[udlFeed];
     }
 
     function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory) {

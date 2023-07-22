@@ -25,9 +25,6 @@ contract CreditToken is ManagedContract, ERC20 {
     string private constant _symbol = "DODv2-CDTK";
 
     address private issuer;
-    address private headAddr;
-    address private tailAddr;
-
     uint private serial;
 
     constructor() ERC20(_name) public {
@@ -99,6 +96,11 @@ contract CreditToken is ManagedContract, ERC20 {
 
         updateBalance(owner);
         balances[owner] = balances[owner].add(value);
+    }
+
+    function burnBalance(uint value) external {
+        updateBalance(msg.sender);
+        balances[msg.sender] = balances[msg.sender].sub(value);
     }
 
     function removeBalance(address owner, uint value) override internal {

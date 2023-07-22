@@ -75,6 +75,10 @@ contract D8xHedgingManager is BaseHedgingManager {
         perpetualProxy = _perpetualProxy;
     }
 
+    function pool() override external view returns (address) {
+        return poolAddr;
+    }
+
     /**
      * Post an order to the order book. Order will be executed by
      * external "keepers".

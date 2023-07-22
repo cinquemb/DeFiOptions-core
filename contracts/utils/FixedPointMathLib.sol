@@ -100,7 +100,7 @@ library FixedPointMathLib {
 
             // Reduce range of x to (1, 2) * 2**96
             // ln(2^k * x) = k * ln(2) + ln(x)
-            int256 k = int256(log2(uint256(x))) - 96;
+            int256 k = int256(log2fpl(uint256(x))) - 96;
             x <<= uint256(159 - k);
             x = int256(uint256(x) >> 159);
 
@@ -349,7 +349,7 @@ library FixedPointMathLib {
         }
     }
 
-    function log2(uint256 x) internal pure returns (uint256 r) {
+    function log2fpl(uint256 x) internal pure returns (uint256 r) {
         require(x > 0, "UNDEFINED");
 
         assembly {

@@ -8,6 +8,6 @@ interface IBaseHedgingManager {
     function realHedgeExposure(address udlFeedAddr) external view returns (int256);
     function balanceExposure(address underlying) external returns (bool);
     function totalTokenStock() external view returns (uint v);
+    function pool() external view returns (address);
     function transferTokensToCreditProvider(address tokenAddr) external;
-
 }

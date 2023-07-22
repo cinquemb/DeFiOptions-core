@@ -12,11 +12,11 @@ contract LinearLiquidityPoolFactory is ManagedContract {
         deployerAddress = address(deployer);
     }
 
-    function create(string calldata name, string calldata symbolSuffix) external returns (address) {
+    function create(string calldata name, string calldata symbolSuffix, bool _onlyMintToOwner, address _owner) external returns (address) {
         //address proxyAddr = address(
         //    new Proxy(
         //        ManagedContract(deployerAddress).getOwner(),
-        return address(new GovernableLinearLiquidityPool(name, symbolSuffix, deployerAddress));
+        return address(new GovernableLinearLiquidityPool(name, symbolSuffix, deployerAddress, _onlyMintToOwner, _owner));
         //    )
         //);
         //ManagedContract(proxyAddr).initializeAndLock(Deployer(deployerAddress));

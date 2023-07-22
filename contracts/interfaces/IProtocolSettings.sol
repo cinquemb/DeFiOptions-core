@@ -10,6 +10,12 @@ interface IProtocolSettings {
     function checkPoolSellCreditTradable(address poolAddress) external view returns (bool);
     function getPoolCreditTradeable(address poolAddr) external view returns (uint);
 	function applyCreditInterestRate(uint value, uint date) external view returns (uint);
+    function getUnderlyingCreditInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d);
+    function setUnderlyingCreditInterestRate(uint i, uint b, address udlAsset) external;
+    function applyUnderlyingCreditInterestRate(uint value, uint date, address udlAsset) external view returns (uint);
+    function getUnderlyingDebtInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d);
+    function setUnderlyingDebtInterestRate(uint i, uint b, address udlAsset) external;
+    function applyUnderlyingDebtInterestRate(uint value, uint date, address udlAsset) external view returns (uint);
 	function getSwapRouterInfo() external view returns (address router, address token);
 	function getSwapRouterTolerance() external view returns (uint r, uint b);
 	function getSwapPath(address from, address to) external view returns (address[] memory path);
@@ -27,7 +33,11 @@ interface IProtocolSettings {
     function getProcessingFee() external view returns (uint v, uint b);
     function getMinShareForProposal() external view returns (uint v, uint b);
     function isAllowedHedgingManager(address hedgeMngr) external view returns (bool);
+    function isAllowedRehypothicationManager(address rehyMngr) external view returns (bool);
     function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool);
     function transferTokenBalance(address to, address tokenAddr, uint256 value) external;
     function exchangeTime() external view returns (uint256);
+    function setDebtInterestRate(uint i, uint b) external;
+    function transferBalance(address to, uint amount) external;
+    function transferGovTokens(address to, uint amount) external;
 }

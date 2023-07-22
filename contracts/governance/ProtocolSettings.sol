@@ -7,6 +7,12 @@ import "../interfaces/TimeProvider.sol";
 import "../interfaces/IProposal.sol";
 import "../interfaces/IGovToken.sol";
 import "../interfaces/ICreditProvider.sol";
+import "../interfaces/UnderlyingFeed.sol";
+import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IUnderlyingCreditToken.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
+import "../interfaces/IUnderlyingCreditTokenFactory.sol";
+import "../interfaces/IUnderlyingCreditProviderFactory.sol";
 import "../utils/Arrays.sol";
 import "../utils/MoreMath.sol";
 import "../utils/SafeERC20.sol";
@@ -28,6 +34,9 @@ contract ProtocolSettings is ManagedContract {
     IGovToken private govToken;
     ICreditProvider private creditProvider;
     ProposalsManager private manager;
+    IUnderlyingVault private vault;
+    IUnderlyingCreditTokenFactory private underlyingCreditTokenFactory;
+    IUnderlyingCreditProviderFactory private underlyingCreditProviderFactory;
 
     mapping(address => int) private underlyingFeeds;
     mapping(address => uint256) private dexOracleTwapPeriod;
@@ -36,9 +45,13 @@ contract ProtocolSettings is ManagedContract {
     mapping(address => bool) private poolSellCreditTradeable;
     mapping(address => bool) private udlIncentiveBlacklist;
     mapping(address => bool) private hedgingManager;
+    mapping(address => bool) private rehypothicationManager;
     mapping(address => bool) private poolCustomLeverage;
     mapping(address => bool) private dexAggIncentiveBlacklist;
     mapping(address => address) private udlCollateralManager;
+
+    mapping(address => Rate[]) private udlCreditInterestRates;
+    mapping(address => Rate[]) private udlDebtInterestRates;
 
     mapping(address => mapping(address => address[])) private paths;
 
@@ -77,6 +90,8 @@ contract ProtocolSettings is ManagedContract {
     event SetMinShareForProposal(address sender, uint s, uint b);
     event SetDebtInterestRate(address sender, uint i, uint b);
     event SetCreditInterestRate(address sender, uint i, uint b);
+    event SetUnderlyingCreditInterestRate(address sender, uint i, uint b);
+    event SetUnderlyingDebtInterestRate(address sender, uint i, uint b);
     event SetProcessingFee(address sender, uint f, uint b);
     event SetUdlFeed(address sender, address addr, int v);
     event SetVolatilityPeriod(address sender, uint _volatilityPeriod);
@@ -98,6 +113,9 @@ contract ProtocolSettings is ManagedContract {
         manager = ProposalsManager(deployer.getContractAddress("ProposalsManager"));
         govToken = IGovToken(deployer.getContractAddress("GovToken"));
         baseCollateralManagerAddr = deployer.getContractAddress("CollateralManager");
+        vault = IUnderlyingVault(deployer.getContractAddress("UnderlyingVault"));
+        underlyingCreditTokenFactory = IUnderlyingCreditTokenFactory(deployer.getContractAddress("UnderlyingCreditTokenFactory"));
+        underlyingCreditProviderFactory = IUnderlyingCreditProviderFactory(deployer.getContractAddress("UnderlyingCreditProviderFactory"));
 
         MAX_UINT = uint(-1);
 
@@ -117,8 +135,8 @@ contract ProtocolSettings is ManagedContract {
             MAX_UINT
         ));
 
-        creditInterestRates.push(Rate( // 5% per year
-            10000055696689545, 
+        creditInterestRates.push(Rate( // 15% per year
+            10000155696689545, 
             10000000000000000,
             MAX_UINT
         ));
@@ -240,6 +258,34 @@ contract ProtocolSettings is ManagedContract {
         emit SetDebtInterestRate(msg.sender, i, b);
     }
 
+    function applyUnderlyingDebtInterestRate(uint value, uint date, address udlAsset) external view returns (uint) {
+
+        if (udlDebtInterestRates[udlAsset].length > 0) {
+            return applyRates(udlDebtInterestRates[udlAsset], value, date);
+        } else {
+            // default to exchange stablecoin credit rate policy
+            return applyRates(debtInterestRates, value, date);
+        }
+    }
+
+    function getUnderlyingDebtInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d) {
+        
+        Rate memory r = getRate(udlDebtInterestRates[udlAsset], date);
+        v = r.value;
+        b = r.base;
+        d = r.date;
+    }
+
+    function setUnderlyingDebtnterestRate(uint i, uint b, address udlAsset) external {
+        
+        validateFractionGTEOne(i, b);
+        ensureWritePrivilege();
+        udlDebtInterestRates[udlAsset][udlDebtInterestRates[udlAsset].length - 1].date = time.getNow();
+        udlDebtInterestRates[udlAsset].push(Rate(i, b, MAX_UINT));
+
+        emit SetUnderlyingDebtInterestRate(msg.sender, i, b);
+    }
+
     function getCreditInterestRate() external view returns (uint v, uint b, uint d) {
         
         uint len = creditInterestRates.length;
@@ -252,6 +298,16 @@ contract ProtocolSettings is ManagedContract {
     function applyCreditInterestRate(uint value, uint date) external view returns (uint) {
         
         return applyRates(creditInterestRates, value, date);
+    }
+
+    function applyUnderlyingCreditInterestRate(uint value, uint date, address udlAsset) external view returns (uint) {
+
+        if (udlCreditInterestRates[udlAsset].length > 0) {
+            return applyRates(udlCreditInterestRates[udlAsset], value, date);
+        } else {
+            // default to exchange stablecoin credit rate policy
+            return applyRates(creditInterestRates, value, date);
+        }
     }
 
     function getCreditInterestRate(uint date) external view returns (uint v, uint b, uint d) {
@@ -270,6 +326,24 @@ contract ProtocolSettings is ManagedContract {
         creditInterestRates.push(Rate(i, b, MAX_UINT));
 
         emit SetCreditInterestRate(msg.sender, i, b);
+    }
+
+    function getUnderlyingCreditInterestRate(uint date, address udlAsset) external view returns (uint v, uint b, uint d) {
+        
+        Rate memory r = getRate(udlCreditInterestRates[udlAsset], date);
+        v = r.value;
+        b = r.base;
+        d = r.date;
+    }
+
+    function setUnderlyingCreditInterestRate(uint i, uint b, address udlAsset) external {
+        
+        validateFractionGTEOne(i, b);
+        ensureWritePrivilege();
+        udlCreditInterestRates[udlAsset][udlCreditInterestRates[udlAsset].length - 1].date = time.getNow();
+        udlCreditInterestRates[udlAsset].push(Rate(i, b, MAX_UINT));
+
+        emit SetUnderlyingCreditInterestRate(msg.sender, i, b);
     }
 
     function getProcessingFee() external view returns (uint v, uint b) {
@@ -297,6 +371,7 @@ contract ProtocolSettings is ManagedContract {
         require(addr != address(0), "invalid feed address");
         ensureWritePrivilege();
         underlyingFeeds[addr] = v;
+        createUnderlyingCreditManagement(addr);
 
         emit SetUdlFeed(msg.sender, addr, v);
     }
@@ -534,6 +609,34 @@ contract ProtocolSettings is ManagedContract {
     function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool) {
         return poolCustomLeverage[poolAddr];
     }
+
+    /* REHYPOTHICATION MANAGER SETTINGS */
+
+    function setAllowedRehypothicationManager(address rehyMngr, bool val) external {
+        ensureWritePrivilege();
+        rehypothicationManager[rehyMngr] = val;
+    }
+
+    function isAllowedRehypothicationManager(address rehyMngr) external view returns (bool) {
+            return rehypothicationManager[rehyMngr];
+    }
+
+    function createUnderlyingCreditManagement(address udlFeed) private {
+        //TODO: need to check how much gas is used to create two contracts
+
+        address udlAsset = UnderlyingFeed(udlFeed).getUnderlyingAddr();
+
+        if (udlAsset != address(0)) {
+            address _uct = underlyingCreditTokenFactory.create(udlFeed);
+            address _ucp = underlyingCreditProviderFactory.create(udlFeed);
+
+            vault.setUnderlyingCreditProvider(udlAsset, _ucp);
+
+            IUnderlyingCreditProvider(_ucp).initialize(_uct);
+            IUnderlyingCreditToken(_uct).initialize(_ucp);
+        }
+    }
+
 
     function getPoolCreditTradeable(address poolAddr) external view returns (uint){
         if((poolBuyCreditTradeable[poolAddr] == true) || (poolSellCreditTradeable[poolAddr] == true)) {

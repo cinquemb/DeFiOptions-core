@@ -21,6 +21,8 @@ interface IOptionsExchange {
         uint vol;
         bool isCovered;
         address poolAddr;
+        bool isRehypothicate;
+        address rehypothicationManager;
         address[] _tokens;
         uint[] _uncovered;
         uint[] _holding;
@@ -33,15 +35,15 @@ interface IOptionsExchange {
         bool[] isCovered;
         address[] poolAddrs;
         address[] paymentTokens;
+        bool[] isRehypothicated;
+        address[] rehypothicationManagers;
     }
 
     function volumeBase() external view returns (uint);
     function collateral(address owner) external view returns (uint);
     function balanceOf(address owner) external view returns (uint);
-    function createPool(string calldata nameSuffix, string calldata symbolSuffix) external returns (address pool);
-    function resolveToken(string calldata symbol) external view returns (address);
-    function getExchangeFeeds(address udlFeed) external view returns (FeedData memory);
-    function getFeedData(address udlFeed) external view returns (FeedData memory fd);
+    function createPool(string calldata nameSuffix, string calldata symbolSuffix, bool _onlyMintToOwner, address _owner) external returns (address pool);
+    function resolveToken(string calldata symbol) external view returns (address addr);
     function getBook(address owner) external view returns (string memory symbols, address[] memory tokens, uint[] memory holding, uint[] memory written, uint[] memory uncovered, int[] memory iv, address[] memory underlying);
     function getOptionData(address tkAddr) external view returns (IOptionsExchange.OptionData memory);
     function calcExpectedPayout(address owner) external view returns (int payout);
@@ -58,7 +60,6 @@ interface IOptionsExchange {
     function totalPoolSymbols() external view returns (uint);
     function getPoolAddress(string calldata poolSymbol) external view returns (address);
     function transferBalance(address from, address to, uint value) external;
-    function underlyingBalance(address owner, address _tk) external view returns (uint);
     function getOptionSymbol(OptionData calldata opt) external view returns (string memory symbol);
     function cleanUp(address owner, address _tk) external;
     function release(address owner, uint udl, uint coll) external;

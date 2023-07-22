@@ -12,5 +12,4 @@ interface IBaseCollateralManager {
     function liquidateExpired(address _tk, address[] calldata owners) external;
     function liquidateOptions(address _tk, address owner) external returns (uint value);
     function queryPoolPrice(address poolAddr, string calldata symbol) external view returns (int);
-    function getFeedData(address udlFeed) external view returns (IOptionsExchange.FeedData memory fd);
 }

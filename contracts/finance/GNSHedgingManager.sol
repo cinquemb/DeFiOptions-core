@@ -93,6 +93,10 @@ contract GNSHedgingManager is BaseHedgingManager {
         pairIndexMap["AAVE/USD"] = 12;
     }
 
+    function pool() override external view returns (address) {
+        return poolAddr;
+    }
+
     function getPosSize(address underlying, bool isLong) override public view returns (uint[] memory) {
         uint[] memory data = new uint[](1);
         return data;

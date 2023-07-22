@@ -21,7 +21,7 @@ abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
     ICreditProvider internal creditProvider;
     IOptionsExchange internal exchange;
 
-    address poolAddr;
+    address public poolAddr;
 
     function initialize(Deployer deployer) virtual override internal {
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));

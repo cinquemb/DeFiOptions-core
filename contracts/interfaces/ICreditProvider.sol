@@ -7,6 +7,7 @@ interface ICreditProvider {
     function balanceOf(address owner) external view returns (uint);
     function totalTokenStock() external view returns (uint v);
     function grantTokens(address to, uint value) external;
+    function grantTokens(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external;
     function getTotalOwners() external view returns (uint);
     function getTotalBalance() external view returns (uint);
     function processPayment(address from, address to, uint value) external;
@@ -21,6 +22,7 @@ interface ICreditProvider {
     function processEarlyLpWithdrawal(address to, uint credit) external;
     function nullOptionBorrowBalance(address option, address pool) external;
     function creditPoolBalance(address to, address token, uint value) external;
+    function borrowCreditFromPool(address to, address pool, uint value) external;
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external;
     function ensureCaller(address addr) external view;
 }

@@ -10,10 +10,14 @@ import "../interfaces/ICreditProvider.sol";
 import "../interfaces/IOptionsExchange.sol";
 import "../interfaces/IOptionToken.sol";
 import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/IBaseCollateralManager.sol";
+import "../interfaces/IUniswapV2Router01.sol";
 import "../utils/SafeCast.sol";
 import "../utils/MoreMath.sol";
 import "../utils/Decimal.sol";
+import "../utils/Convert.sol";
+import "../utils/SafeERC20.sol";
 
 abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManager {
 
@@ -21,6 +25,8 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     using SafeMath for uint;
     using SignedSafeMath for int;
     using Decimal for Decimal.D256;
+    using SafeERC20 for IERC20_2;
+
     
     IUnderlyingVault private vault;
     IProtocolSettings internal settings;
@@ -55,6 +61,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         uint volume
     );
 
+    event DebtSwap(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint volume
+    );
+
     function initialize(Deployer deployer) virtual override internal {
 
         creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
@@ -66,6 +78,52 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         timeBase = 1e18;
         sqrtTimeBase = 1e9;
         collateralCallPeriod = 1 days;
+    }
+
+    function collateralSkew(address underlyingFeed) private view returns (int) {
+        // core across all collateral models
+        /*
+            This allows the exchange to split any excess credit balance (due to debt) onto any new deposits while still holding debt balance for an individual account;
+        */
+
+        address underlying = UnderlyingFeed(underlyingFeed).getUnderlyingAddr();
+        if (underlying == address(0)) {
+            return 0;
+        }
+        
+        (,int answer) = UnderlyingFeed(underlyingFeed).getLatestPrice();
+        address udlCdtp = vault.getUnderlyingCreditProvider(underlying);
+        int totalUnderlyingBalance = int(IUnderlyingCreditProvider(udlCdtp).totalTokenStock()); // underlying token balance
+        int totalUnderlyingCreditBalance = int(IUnderlyingCreditProvider(udlCdtp).getTotalBalance()); // credit balance
+        int totalOwners = int(creditProvider.getTotalOwners()).add(1);
+        //need to multiple by latest price of asset to normalize into exchange balance amount
+        int skew = totalUnderlyingCreditBalance.sub(totalUnderlyingBalance).mul(answer).div(int(_volumeBase));
+
+        // try to split between if short underlying tokens
+        return skew.div(totalOwners);  
+    }
+
+    function collateralSkewForPositionUnderlying(int coll, address underlyingFeed) internal view returns (int) {
+        // core across all collateral models, only apply residual
+        int modColl;
+        int skew = collateralSkew(underlyingFeed);
+        Decimal.D256 memory skewPct;
+        if (skew != 0){
+            skewPct = Decimal.ratio(uint(coll), MoreMath.abs(skew));
+        } else {
+            skewPct = Decimal.zero();
+        }
+
+        if (skewPct.greaterThanOrEqualTo(Decimal.one())) {
+            modColl = skew;
+        } else {
+            // shortag per addr exceeds underlying collateral reqs, only add percentage increase of underlying collateral reqs, never reduce collateral requirements for positions covered by underlying
+
+            int modSkew = int(Decimal.mul(skewPct, uint(coll)).asUint256());
+            modColl = (skew >= 0) ? modSkew : 0;
+        }
+
+        return modColl;
     }
 
     function collateralSkew() private view returns (int) {
@@ -212,7 +270,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         return int(price).div(2);
     }
 
-    function getFeedData(address udlFeed) override public view returns (IOptionsExchange.FeedData memory fd) {
+    function getFeedData(address udlFeed) internal view returns (IOptionsExchange.FeedData memory fd) {
         UnderlyingFeed feed = UnderlyingFeed(udlFeed);
 
         uint vol = feed.getDailyVolatility(settings.getVolatilityPeriod());
@@ -285,8 +343,6 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         }
     }
 
-
-
     function liquidateAfterMaturity(
         address owner,
         IOptionToken tk,
@@ -325,7 +381,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         private
         returns (uint value)
     {
-        IOptionsExchange.FeedData memory fd = exchange.getExchangeFeeds(opt.udlFeed);
+        IOptionsExchange.FeedData memory fd = getFeedData(opt.udlFeed);
         address tkAddr = address(tk);
         uint volume = calcLiquidationVolume(owner, opt, tkAddr, fd, written);
         value = calcLiquidationValue(opt, fd.lowerVol, written, volume, iv)
@@ -353,6 +409,11 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
                 uint256 creditingValue = value.mul(5).div(100);
                 creditProvider.processPayment(owner, tkAddr, value.add(creditingValue));
                 creditProvider.processIncentivizationPayment(msg.sender, creditingValue);
+
+                if ((collateralSkew() <= 0) && (collateralSkew(opt.udlFeed) > 0)) {
+                    //swap underlying debt for stablecoin debt
+                    debtSwap(opt.udlFeed, creditingValue);
+                }
             }
 
             if (volume > 0) {
@@ -366,7 +427,16 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
     function calcCollateral(address owner, bool is_regular) override public view returns (uint) {     
         // takes custom collateral requirements and applies exchange level normalizations   
         int coll = calcCollateralInternal(owner, is_regular);
-        
+        return baseCalcCollateral(coll, is_regular);
+    }
+
+    function calcNetCollateral(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular) override public view returns (uint) {     
+        // takes custom collateral requirements and applies exchange level normalizations on prospective positions
+        int coll = calcNetCollateralInternal(_tokens, _uncovered, _holding, is_regular);
+        return baseCalcCollateral(coll, is_regular);
+    }
+
+    function baseCalcCollateral(int coll, bool is_regular) private view returns (uint) {
         coll = collateralSkewForPosition(coll);
         coll = coll.div(int(_volumeBase));
 
@@ -379,20 +449,34 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         return uint(coll);
     }
 
-    function calcNetCollateral(address[] memory _tokens, uint[] memory _uncovered, uint[] memory _holding, bool is_regular) override public view returns (uint) {     
-        // takes custom collateral requirements and applies exchange level normalizations on prospective positions
-        int coll = calcNetCollateralInternal(_tokens, _uncovered, _holding, is_regular);
-        
-        coll = collateralSkewForPosition(coll);
-        coll = coll.div(int(_volumeBase));
+    function debtSwap(address udlFeed, uint256 creditingValue) private {
+        (, address _stablecoin) = settings.getSwapRouterInfo();
+        (, int p) = UnderlyingFeed(udlFeed).getLatestPrice();
+        address underlying = UnderlyingFeed(udlFeed).getUnderlyingAddr();
 
-        if (is_regular == false) {
-            return uint(coll);
-        }
+        address udlCdtp = vault.getUnderlyingCreditProvider(underlying);
+        uint256 totalUnderlyingBalance = IUnderlyingCreditProvider(udlCdtp).totalTokenStock(); // underlying token balance
+        uint256 totalUnderlyingCreditBalance = IUnderlyingCreditProvider(udlCdtp).getTotalBalance(); // credit balance
 
-        if (coll < 0)
-            return 0;
-        return uint(coll);
+        //NEED TO DO THIS BEFORE CALLING `swapStablecoinForUnderlying` in order to make sure enough stables in udlCdtp
+        address[] memory tokensInOrder = new address[](1);
+        uint[] memory amountsOutInOrder = new uint[](1);
+        tokensInOrder[0] = _stablecoin;
+        amountsOutInOrder[0] = Convert.from18DecimalsBase(_stablecoin, creditingValue);
+        creditProvider.grantTokens(address(udlCdtp), creditingValue, tokensInOrder, amountsOutInOrder);
+
+        IUnderlyingCreditProvider(udlCdtp).swapStablecoinForUnderlying(
+            udlCdtp,
+            settings.getSwapPath(
+                _stablecoin,
+                underlying
+            ),
+            p,
+            creditingValue, //how much stables we are willing to swap for underlying
+            totalUnderlyingCreditBalance.sub(totalUnderlyingBalance)//how much we are short underlying
+        );
+
+        emit DebtSwap(_stablecoin, underlying, creditingValue);
     }
 
     function daysToMaturity(IOptionsExchange.OptionData memory opt) private view returns (uint d) {

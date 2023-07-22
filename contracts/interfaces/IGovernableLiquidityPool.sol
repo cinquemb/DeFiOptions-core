@@ -32,6 +32,10 @@ interface IGovernableLiquidityPool {
     
     event Sell(address indexed token, address indexed seller, uint price, uint volume);
 
+    function setParameters(uint _reserveRatio, uint _withdrawFee, uint _mt, uint _lm, address _hmngr, uint _ht) external;
+
+    function addSymbol(address udlFeed, uint strike, uint _mt, IOptionsExchange.OptionType optType, uint t0, uint t1, uint120[] calldata x, uint120[] calldata y, uint[3] calldata bsStockSpread) external;
+    
     function yield(uint dt) external view returns (uint);
 
     function depositTokens(address to, address token, uint value) external;

@@ -120,9 +120,10 @@ contract CreditProvider is ManagedContract {
 
     function issueCredit(address to, uint value) external {
         
-        ensurePrimeCaller();
+        ensureRehypothicationManagerCaller();
+        //TODO: protocol settings cannot execute this currently, needs to be a proposal?
 
-        require(msg.sender == address(settings));
+        require(msg.sender == address(settings) || msg.sender == to, "not allowed issuer");
         issueCreditTokens(to, value);
     }
 
@@ -174,6 +175,12 @@ contract CreditProvider is ManagedContract {
         burnDebtAndTransferTokens(to, value);
     }
 
+    function grantTokens(address to, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
+        
+        ensurePrimeCaller();
+        burnDebtAndTransferTokensByPreference(to, value, tokensInOrder, amountsOutInOrder);
+    }
+
     function calcDebt(address addr) public view returns (uint debt) {
 
         debt = debts[addr];
@@ -215,7 +222,7 @@ contract CreditProvider is ManagedContract {
     }
 
     function processPayment(address from, address to, uint value) external {
-        ensurePrimeCaller();
+        ensureRehypothicationManagerCaller();
 
         require(from != to);
 
@@ -512,6 +519,19 @@ contract CreditProvider is ManagedContract {
         }
     }
 
+    function borrowCreditFromPool(address to, address pool, uint value) external {
+        
+        require(
+            settings.isAllowedHedgingManager(IGovernableLiquidityPool(to).getHedgingManager()) == true, 
+            "pool hedge manager not allowed"
+        );
+
+        require(to != address(this) && to != address(creditToken), "invalid token transfer address");
+
+        addBalance(to, value);
+        debitPoolBalance(pool, value);
+    }
+
     function borrowTokensByPreference(address to, address pool, uint value, address[] calldata tokensInOrder, uint[] calldata amountsOutInOrder) external {
         
         require(
@@ -611,6 +631,10 @@ contract CreditProvider is ManagedContract {
 
     function ensurePoolCaller() private view {        
         require(poolCallers[msg.sender] == 1, "unauthorized caller (pool)");
+    }
+
+    function ensureRehypothicationManagerCaller() private view {
+        require(primeCallers[msg.sender] == 1 || settings.isAllowedRehypothicationManager(msg.sender) == true, "unauthorized caller (ex)");
     }
 
     function ensurePrimeCaller() private view {        

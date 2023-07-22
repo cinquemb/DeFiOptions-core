@@ -4,8 +4,8 @@ pragma experimental ABIEncoderV2;
 import "./GovernableLiquidityPoolV2.sol";
 
 contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
-    constructor(string memory _nm, string memory _sb, address _deployAddr)
-        GovernableLiquidityPoolV2(_nm, _sb, _deployAddr) public {}
+    constructor(string memory _nm, string memory _sb, address _deployAddr, bool _onlyMintToOwner, address _owner)
+        GovernableLiquidityPoolV2(_nm, _sb, _deployAddr, _onlyMintToOwner, _owner) public {}
     
     function name() override external view returns (string memory) {
         return string(abi.encodePacked(_name_prefix, _name));
@@ -80,17 +80,15 @@ contract GovernableLinearLiquidityPool is GovernableLiquidityPoolV2 {
         );
     }
 
-    function calcSkewSpread(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell) private pure returns (uint) {
+    function calcSkewSpread(PricingParameters memory p, Operation op, uint poolPosBuy, uint poolPosSell) private pure returns (uint skew) {
         uint skewBuy = (p.bsStockSpread[0] > 0) ? poolPosBuy.mul(p.bsStockSpread[2]).div(p.bsStockSpread[0]) : 0; //buy expo / max buy expo * spread
         uint skewSell = (p.bsStockSpread[1] > 0) ? poolPosSell.mul(p.bsStockSpread[2]).div(p.bsStockSpread[1]) : 0; //sell expo / max sell expo * spread
 
-        uint skew =  (op == Operation.BUY) ? (
+        skew =  (op == Operation.BUY) ? (
             (skewBuy > skewSell) ? 0 : skewSell //when pricing when someone wants to buy, if buy volume greater than sell volume, no discount, else discount back to mid
         ) : (
             (skewBuy > skewSell) ? skewBuy : 0 //when pricing when someone wants to sell, if buy volume greater than sell volume, discount back to mid, else no discount
         );
-
-        return skew;
     }
 
     function calcVolume(
