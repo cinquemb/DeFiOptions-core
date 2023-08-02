@@ -1,0 +1,83 @@
+****** Before — After — Bridge ******
+
+
+Before — This will be the first section of your white paper. In it, you describe the reader’s world as it is right now. Provide as much detail as you can to create a gap where your solution will fit or foreground a lack that will need to be fixed for that world to be perfect.
+
+[
+	Where we are now, crypto options are a nasent market defined by a variety of on-chain amm, off-chain order books, request for quote systems and OTC systems targeting primarily to traders. These leverage oracles of all sorts, stablecoins (usually centrlized ones or ones dependant on off chain credit origination) and a variety of underlying tokens/nfts on particular chains.
+]
+
+After –In this section, you will paint a world where the problem you foregrounded and highlighted in the first section is solved. Bring the readers to imagine that world and how better it is than what they know.
+
+[
+	In the future, dex crypto options represents on the deeps markets for on chain liquity, where un collateralized lending markets are heavily active buyers of option to hedge their loan books on the long tail of tokens/nfts collateral, traders pricing and hedging those options for them while leverating a credit system that is no longer overly reliant upon  stablecoins built on off chain originated credit.
+]
+
+Bridge — This is the last section, and it is where you describe your solution as what makes the new, better world possible. Describe the solution’s design, protocol, and implementation process concerning the reader’s ability to comprehend the technical aspects. In essence, in this section, you are presenting your solution as the bridge between the current world and the possible better world.
+
+[
+	DeFI Options DAO is defined as a Decentralized Options Exchange where the parameters can be governed by token holders. 
+	This includes:
+	 - exchange contract
+	 	- options books
+	 	- options registered
+	 	- pools registered
+	 	- erc20 token
+	 	- trades facilitation
+	 	- interface
+	 - what oracles traders can use
+	 	- dex twap aggregators
+	 		- inteface
+	 	- underlying feeds abtraction
+	 		- interface
+	 - the differet collateral models (including support for portfolio margin) that can be used for the assets
+	 	- default model
+	 	- portfolio margin
+	 	- how stable/udl token shortages are factored
+	 - credit systems (on for stablecoins and another for each individual) underlying assets
+	 	- stablecoin credit system
+	 		- creation/destruction
+	 		- internal debt
+	 	- underlying asset credit system
+	 		- creation/destruction
+	 		- internal debt
+	 - hedging contracts that interface with other protocols that can help offest a traders options exposure (as well as originate credit for those hedges that is destroyed upon expiration of the options/closing of the hedges)
+	 	- ideal exposure calc
+	 	- current esposure calc
+	 	- rebalancing
+	 	- interface
+	 - credit tokens that can be redeemed over time for stables coins/underlying assets at an interest rate from the protocol when there is a shortage of the underlying assets
+	 	- stablecoins
+		 	- define redemption conditions
+		 	- erc20
+		- underlying asset
+			- define redemption conditions
+		 	- erc20
+	 - rehypothication contracts that traders+DAO have to approve where they want their collateral they provide to sell options against, can be deposited/withrawn from external protocols for additional yield.
+	 	- interface
+	 - liquidity pools that price options based on uploaded pricing surfaces that update automatically with oracle pries or can be static (this can be abstracted in frontends to look like typical limit orders).
+	 	- pricing:
+	 		- surface
+	 		- pulled from external amm
+	 	- lp tokens
+	 	- conditional hedging
+	 	- governace
+	 	- interface
+	 - incentivization functions users can call that manages the exchange
+	 	- underlying feed stats updates
+	 	- liquidations
+	 		- before/after maturity (settlement)
+	 		- collateral calls/2-step liquidation
+	 - protocol goverance and settings
+	 	- interface
+]
+
+****** Features — Advantages — Benefits (FAB) ******
+
+This is another white paper template you can use. It focuses more on the solution you are presenting to the reader or the target customer. This is best suited when the solution you are presenting is meant for a problem that is almost obvious to the reader.
+
+Features — In the first section of the white paper will break down and describe the features of your solution. For example, if you are introducing a new blockchain, you will describe the mining or consensus process, the network architecture, and the wallet design.
+
+Advantages — In this section, you will describe what things give the solution a better chance at succeeding. Still, on your new blockchain, you can describe the capacity of the team behind it as well as the resilience of the technology you are using.
+
+Benefits — This is the most critical part because it is what will sell your solution. People are always interested in how something makes their lives better. Describing benefits is about showing people how the solution will improve the quality of their life or that of their business.
