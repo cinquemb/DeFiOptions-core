@@ -25,6 +25,9 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 	- erc20 token
 	 	- trades facilitation
 	 	- interface
+	 - underlying vault
+	 	- inteface
+	 	- vault shares
 	 - what oracles traders can use
 	 	- dex twap aggregators
 	 		- inteface
@@ -69,7 +72,38 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 		- before/after maturity (settlement)
 	 		- collateral calls/2-step liquidation
 	 - protocol goverance and settings
-	 	- interface
+	 	- function setCirculatingSupply(uint supply) external;
+	 		Allows token holders to set the circulating suply of dod, can not be set smaller than the previously set setting, cannot exeed that max supply for the token
+	    - function setTokenRate(address token, uint v, uint b) external;
+	    	Sets the decimal normalization used to adjust the tokens decimals to the decimals DOD uses internally
+	    - function setAllowedToken(address token, uint v, uint b) external;
+	    	Sets the allow stable coin
+	    - function RemoveAllowedToken(address token, uint v, uint b) external;
+	    	Removes a previously the allow stable coin
+	    - function updateCreditWithdrawlTimeLock(uint duration) external;
+	    	Sets the rate at which and address holding credit tokens can redeem them for stables/underlying tokens, defaults to 24 hours, min 2 hours max 48 hours
+		- function applyCreditInterestRate(uint value, uint date) external view returns (uint);
+			Applies the interest rate the DAO is willing to pay on credit tokens
+	    - function setUnderlyingCreditInterestRate(uint i, uint b, address udlAsset) external;
+	    	Applies the interest rate the DAO is willing to pay on underlying credit tokens on a particlar asset
+	    - function setDebtInterestRate(uint i, uint b, address udlAsset) external;
+	    	Applies the interest rate the DAO wants to charge on DAO issued credit
+	    - function setUnderlyingDebtInterestRate(uint i, uint b, address udlAsset) external;
+	    	Applies the interest rate the DAO wants to charge on a particlar asset
+	    - function setUdlCollateralManager(address udlFeed, address ctlMngr) external;
+	    	Approved the allowed collateral manager for a paricualr underlying feed
+	    - function setDexOracleTwapPeriod(address dexOracleAddress, uint256 _twapPeriod) external;
+	    	Sets the dex twap oracle period, min 2 hours, max 1 day
+	    - function setBaseIncentivisation(uint amount) external;
+	    	Sets the amount of credit the DAO wants to issue to an address for calling the incentivized functions on the exchange
+	    - function setProcessingFee(uint f, uint b) external;
+	    	Sets rate the DAO wants to have when processing liquidations and settling ITM options, does not included hard coded rate for liquidations
+	    - function transferTokenBalance(address to, address tokenAddr, uint256 value) external;
+	    	Tokens stored in protocol settings address and be transfered by DAO
+	    - function transferBalance(address to, uint amount) external;
+	        Credit balance of protocol settings (from fees and liquidations) address and be transfered by DAO
+	    - function transferGovTokens(address to, uint amount) external;
+	    	Governance tokens held by DAO in protocol settings can be transfered by DAO
 ]
 
 ****** Features — Advantages — Benefits (FAB) ******

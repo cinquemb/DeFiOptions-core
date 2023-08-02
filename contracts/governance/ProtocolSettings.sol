@@ -87,6 +87,7 @@ contract ProtocolSettings is ManagedContract {
     event SetCirculatingSupply(address sender, uint supply);
     event SetTokenRate(address sender, address token, uint v, uint b);
     event SetAllowedToken(address sender, address token, uint v, uint b);
+    event RemoveAllowedToken(address sender, address token);
     event SetMinShareForProposal(address sender, uint s, uint b);
     event SetDebtInterestRate(address sender, uint i, uint b);
     event SetCreditInterestRate(address sender, uint i, uint b);
@@ -204,6 +205,18 @@ contract ProtocolSettings is ManagedContract {
         tokenRates[token] = Rate(v, b, MAX_UINT);
 
         emit SetAllowedToken(msg.sender, token, v, b);
+    }
+
+    function removedAllowedToken(address token) external {
+
+        require(token != address(0), "invalid token address");
+        ensureWritePrivilege();
+        if (tokenRates[token].value != 0) {
+            Arrays.removeItem(tokens, token);
+            tokenRates[token] = Rate(0, 0, 0);
+        }
+
+        emit RemoveAllowedToken(msg.sender, token);
     }
 
     function isHotVotingAllowed() external view returns (bool) {

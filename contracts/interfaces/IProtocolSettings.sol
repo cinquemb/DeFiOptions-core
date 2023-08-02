@@ -26,6 +26,7 @@ interface IProtocolSettings {
     function getUdlCollateralManager(address udlFeed) external view returns (address);
     function getVolatilityPeriod() external view returns(uint);
     function getAllowedTokens() external view returns (address[] memory);
+    function removedAllowedToken(address token) external;
     function setDexOracleTwapPeriod(address dexOracleAddress, uint256 _twapPeriod) external;
     function getDexOracleTwapPeriod(address dexOracleAddress) external view returns (uint256);
     function setBaseIncentivisation(uint amount) external;
