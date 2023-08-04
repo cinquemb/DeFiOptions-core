@@ -114,8 +114,9 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 		- before
 	 			- first try(only if more than 24h until expiration, else will just liquidate): collateral call
 	 			- second try : liquidation
-	 			- liquidation fee and penaltie payed to DAO
+	 			- liquidation fee and penalty payed to DAO
 	 		- after maturity (settlement)
+	 			- settlement fee payed to DAO
 	 - protocol goverance and settings
 	 	- function setCirculatingSupply(uint supply) external;
 	 		Allows token holders to set the circulating suply of dod, can not be set smaller than the previously set setting, cannot exeed that max supply for the token
