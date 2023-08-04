@@ -77,6 +77,7 @@ contract UnderlyingCreditToken is ERC20 {
 
     function requestWithdraw() external {
         uint b = creditProvider.totalTokenStock();
+        uint bC = creditProvider.getTotalBalance();
 
         require(b > 0, "CDTK: please wait to redeem");
         /*
@@ -91,7 +92,8 @@ contract UnderlyingCreditToken is ERC20 {
             uint diffCreditTime = settings.exchangeTime().sub(creditDates[msg.sender]);
             require(diffCreditTime > settings.getCreditWithdrawlTimeLock() && creditDates[msg.sender] != 0, "CDTK: Must wait until time lock has passed");
             Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), theoreticalMaxBal);
-            uint currWitdrawalLimit = withdrawalPct.mul(b).asUint256();
+            Decimal.D256 memory udlTokenPct = Decimal.ratio(b, bC);
+            uint currWitdrawalLimit = withdrawalPct.mul(udlTokenPct).mul(b).asUint256();
             require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");
             withdrawTokens(msg.sender, currWitdrawalLimit);
         }

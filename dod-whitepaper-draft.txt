@@ -27,6 +27,7 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 	- interface
 	 - underlying vault
 	 	- inteface
+	 	- storage of underlying tokens collateral used for covered calls not marked for rehypothecation
 	 	- vault shares
 	 - what oracles traders can use
 	 	- dex twap aggregators
@@ -52,9 +53,15 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 - credit tokens that can be redeemed over time for stables coins/underlying assets at an interest rate from the protocol when there is a shortage of the underlying assets
 	 	- stablecoins
 		 	- define redemption conditions
+		 		- can redeem when stables >= credit
+		 		- can redeem % debt outstanding owned * (% stables / credit) * stables available, when stables < credit
+		 			- once every dao defined withdrawal period
 		 	- erc20
 		- underlying asset
 			- define redemption conditions
+				- can redeem when udl token >= udl credit
+		 		- can redeem % debt outstanding owned * (% udl token / udl credit) * udl token available, when udl token < udl credit
+		 			- once every dao defined withdrawal period
 		 	- erc20
 	 - rehypothication contracts that traders+DAO have to approve where they want their collateral they provide to sell options against, can be deposited/withrawn from external protocols for additional yield.
 	 	- interface
