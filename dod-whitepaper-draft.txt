@@ -22,9 +22,9 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 	- options books
 	 	- options registered
 	 	- pools registered
-	 	- erc20 token
+	 	- erc20 token that represents an address exchange balance
 	 	- trades facilitation
-	 	- interface
+	 	- settlement facilitation
 	 - underlying vault
 	 	- inteface
 	 	- storage of underlying tokens collateral used for covered calls not marked for rehypothecation
@@ -33,18 +33,45 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 	- dex twap aggregators
 	 		- inteface
 	 	- underlying feeds abtraction
+	 		- chainlink, pyth, etc
 	 		- interface
 	 - the differet collateral models (including support for portfolio margin) that can be used for the assets
 	 	- default model
 	 	- portfolio margin
-	 	- how stable/udl token shortages are factored
+	 	- how stable/udl token shortages/surplus are factored
 	 - credit systems (on for stablecoins and another for each individual) underlying assets
 	 	- stablecoin credit system
 	 		- creation/destruction
-	 		- internal debt
+	 			- creation
+	 				- deposits of stables
+	 				- when hedging manager enabled on pool approved for borrowing collateral
+	 			- destruction
+	 				- withdrawals of stables
+	 				- when hedges closed enabled on pool approved for borrowing collateral
+	 		- internal debt creation/destruction
+	 			- destruction
+		 			- gains from providing liquidty for traders hedging
+		 		- creation
+		 			- losses from address exceeding their collateral deposited
+		 			- losses from providing liquidty for traders hedging
+		 			- losses from rehypothecated collateral
 	 	- underlying asset credit system
 	 		- creation/destruction
-	 		- internal debt
+	 			- creation
+	 				- deposits of underlying token
+	 				- when hedging manager enabled on pool approved for borrowing collateral
+	 			- destruction
+	 				- withdrawals of underliying token
+	 				- when hedges closed enabled on pool approved for borrowing collateral
+	 		- internal debt creation/destruction
+	 			- destruction
+		 			- gains from providing liquidty for traders hedging
+		 			- gains from rehypothecated collateral
+		 		- creation
+		 			- losses from address exceeding their collateral deposited
+		 			- losses from providing liquidty for traders hedging
+		 			- losses from rehypothecated collateral
+
 	 - hedging contracts that interface with other protocols that can help offest a traders options exposure (as well as originate credit for those hedges that is destroyed upon expiration of the options/closing of the hedges)
 	 	- ideal exposure calc
 	 	- current esposure calc
