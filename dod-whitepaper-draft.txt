@@ -94,7 +94,7 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 	- interface
 	 - liquidity pools that price options based on uploaded pricing surfaces that update automatically with oracle pries or can be static (this can be abstracted in frontends to look like typical limit orders).
 	 	- pricing:
-	 		- surface
+	 		- surface (https://thomasvilhena.com/2021/03/a-linear-interpolation-based-liquidity-pool)
 	 		- pulled from external amm
 	 	- lp tokens
 	 		- anyone
