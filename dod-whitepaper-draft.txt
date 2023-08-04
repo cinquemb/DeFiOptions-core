@@ -111,8 +111,11 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 - incentivization functions users can call that manages the exchange
 	 	- underlying feed stats updates
 	 	- liquidations
-	 		- before/after maturity (settlement)
-	 		- collateral calls/2-step liquidation
+	 		- before
+	 			- first try(only if more than 24h until expiration, else will just liquidate): collateral call
+	 			- second try : liquidation
+	 			- liquidation fee and penaltie payed to DAO
+	 		- after maturity (settlement)
 	 - protocol goverance and settings
 	 	- function setCirculatingSupply(uint supply) external;
 	 		Allows token holders to set the circulating suply of dod, can not be set smaller than the previously set setting, cannot exeed that max supply for the token
