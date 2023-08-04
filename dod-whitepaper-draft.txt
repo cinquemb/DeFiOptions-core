@@ -102,6 +102,8 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 		- permissioned
 	 			- only to owner defined on pool creation
 	 	- conditional hedging
+	 		- hedging manager defined
+	 		- min dollar threshold in oi to hedge
 	 	- governace
 	 		- uses lp tokens as the governance token, not DAO governance token
 	 		- adding what options to buy/sell
