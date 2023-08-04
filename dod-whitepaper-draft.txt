@@ -97,8 +97,16 @@ Bridge — This is the last section, and it is where you describe your solution 
 	 		- surface
 	 		- pulled from external amm
 	 	- lp tokens
+	 		- anyone
+	 			- to any one who deposits 
+	 		- permissioned
+	 			- only to owner defined on pool creation
 	 	- conditional hedging
 	 	- governace
+	 		- uses lp tokens as the governance token, not DAO governance token
+	 		- adding what options to buy/sell
+	 		- setting updating option price surfaces
+	 		- setting underlying price range when to allow for buying/selling options
 	 	- interface
 	 - incentivization functions users can call that manages the exchange
 	 	- underlying feed stats updates
