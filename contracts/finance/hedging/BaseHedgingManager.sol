@@ -1,15 +1,15 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
-import "../interfaces/IProtocolSettings.sol";
-import "../interfaces/IBaseHedgingManager.sol";
-import "../interfaces/ICreditProvider.sol";
-import "../interfaces/IOptionsExchange.sol";
-import "../utils/MoreMath.sol";
-import "../utils/SafeERC20.sol";
-import "../utils/SafeCast.sol";
+import "../../deployment/Deployer.sol";
+import "../../deployment/ManagedContract.sol";
+import "../../interfaces/IProtocolSettings.sol";
+import "../../interfaces/IBaseHedgingManager.sol";
+import "../../interfaces/ICreditProvider.sol";
+import "../../interfaces/IOptionsExchange.sol";
+import "../../utils/MoreMath.sol";
+import "../../utils/SafeERC20.sol";
+import "../../utils/SafeCast.sol";
 
 abstract contract BaseHedgingManager is ManagedContract, IBaseHedgingManager {
 	using SafeERC20 for IERC20_2;

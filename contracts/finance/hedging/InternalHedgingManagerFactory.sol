@@ -1,13 +1,13 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
-import "./TellerHedgingManager.sol";
+import "../../deployment/Deployer.sol";
+import "../../deployment/ManagedContract.sol";
+import "./InternalHedgingManager.sol";
 
-contract TellerHedgingManagerFactory is ManagedContract {
+contract InternalHedgingManagerFactory is ManagedContract {
 
-    address public tellerRehypothecationAddr;
+    address public internalRehypothecationAddr;
 
     address private deployerAddress;
 
@@ -16,8 +16,8 @@ contract TellerHedgingManagerFactory is ManagedContract {
         address indexed pool
     );
 
-    constructor(address _tellerRehypothecationAddr) public {
-        tellerRehypothecationAddr = _tellerRehypothecationAddr;
+    constructor(address _internalRehypothecationAddr) public {
+        internalRehypothecationAddr = _internalRehypothecationAddr;
     }
     
     function initialize(Deployer deployer) override internal {
@@ -25,7 +25,7 @@ contract TellerHedgingManagerFactory is ManagedContract {
     }
 
     function getRemoteContractAddresses() external view returns (address trAddr) {
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("tellerRehypothecationAddr()")));
+        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("internalRehypothecationAddr()")));
         (, bytes memory returnedData) = getImplementation().staticcall(data);
         trAddr = abi.decode(returnedData, (address));
 
@@ -36,7 +36,7 @@ contract TellerHedgingManagerFactory is ManagedContract {
         //cant use proxies unless all extenral addrs store here
         require(deployerAddress != address(0), "bad deployer addr");
         address hdgMngr = address(
-            new TellerHedgingManager(
+            new InternalHedgingManager(
                 deployerAddress,
                 _poolAddr
             )

@@ -1,62 +1,51 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../deployment/Deployer.sol";
-import "../utils/ERC20.sol";
-import "../utils/MoreMath.sol";
-import "../utils/Decimal.sol";
-import "../interfaces/IProtocolSettings.sol";
-import "../interfaces/IUnderlyingCreditProvider.sol";
-import "../interfaces/IProposal.sol";
+import "../../deployment/Deployer.sol";
+import "../../deployment/ManagedContract.sol";
+import "../../utils/ERC20.sol";
+import "../../utils/MoreMath.sol";
+import "../../utils/Decimal.sol";
+import "../../interfaces/IProtocolSettings.sol";
+import "../../interfaces/ICreditProvider.sol";
+import "../../interfaces/IProposal.sol";
 
 
-contract UnderlyingCreditToken is ERC20 {
+contract CreditToken is ManagedContract, ERC20 {
 
     using SafeMath for uint;
     using Decimal for Decimal.D256;
 
     IProtocolSettings private settings;
-    IUnderlyingCreditProvider private creditProvider;
+    ICreditProvider private creditProvider;
 
     mapping(address => uint) private creditDates;
 
-    string private constant _name_prefix = "DeFi Options DAO Credit Token: ";
-    string private constant _symbol_prefix = "DODv2-CDTK-";
-
-    string private _name;
-    string private _symbol;
+    string private constant _name = "DeFi Options DAO Credit Token";
+    string private constant _symbol = "DODv2-CDTK";
 
     address private issuer;
-    address private udlAsset;
-
     uint private serial;
 
-    constructor(address _deployAddr, address _udlAsset, string memory _nm, string memory _sm) ERC20(string(abi.encodePacked(_name_prefix, _nm))) public {
-        //DOMAIN_SEPARATOR = ERC20(address(this)).DOMAIN_SEPARATOR();
-        Deployer deployer = Deployer(_deployAddr);
-
-        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
-        _name = _nm;
-        _symbol = _sm;
-        udlAsset = _udlAsset;
+    constructor() ERC20(_name) public {
+        
     }
 
-    function initialize(address underlyingCreditProvider) external {
-        require(msg.sender == address(settings), "init not allowed");
-        creditProvider = IUnderlyingCreditProvider(underlyingCreditProvider);
-        issuer = underlyingCreditProvider;
+    function initialize(Deployer deployer) override internal {
+
+        DOMAIN_SEPARATOR = ERC20(getImplementation()).DOMAIN_SEPARATOR();
+        
+        settings = IProtocolSettings(deployer.getContractAddress("ProtocolSettings"));
+        creditProvider = ICreditProvider(deployer.getContractAddress("CreditProvider"));
+        issuer = deployer.getContractAddress("CreditIssuer");
     }
 
     function name() override external view returns (string memory) {
-        return string(abi.encodePacked(_name_prefix, _name));
+        return _name;
     }
 
     function symbol() override external view returns (string memory) {
-        return string(abi.encodePacked(_symbol_prefix, _symbol));
-    }
-
-    function getUdlAsset() external view returns (address) {
-        return udlAsset;
+        return _symbol;
     }
 
     function issue(address to, uint value) public {
@@ -71,7 +60,7 @@ contract UnderlyingCreditToken is ERC20 {
 
         bal = 0;
         if (balances[owner] > 0) {
-            bal = settings.applyUnderlyingCreditInterestRate(balances[owner], creditDates[owner], udlAsset);
+            bal = settings.applyCreditInterestRate(balances[owner], creditDates[owner]);
         }
     }
 
@@ -84,7 +73,7 @@ contract UnderlyingCreditToken is ERC20 {
             this is to avoid looping over credit dates and indivual balances, may need to use earliest credit date?
                 - may need a linked listed storing credit date reference?
         */
-        uint theoreticalMaxBal = settings.applyUnderlyingCreditInterestRate(_totalSupply, creditDates[msg.sender], udlAsset);
+        uint theoreticalMaxBal = settings.applyCreditInterestRate(_totalSupply, creditDates[msg.sender]);
 
         if (b > bC.add(theoreticalMaxBal)) {
             withdrawTokens(msg.sender, balanceOf(msg.sender));
@@ -92,8 +81,8 @@ contract UnderlyingCreditToken is ERC20 {
             uint diffCreditTime = settings.exchangeTime().sub(creditDates[msg.sender]);
             require(diffCreditTime > settings.getCreditWithdrawlTimeLock() && creditDates[msg.sender] != 0, "CDTK: Must wait until time lock has passed");
             Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), theoreticalMaxBal);
-            Decimal.D256 memory udlTokenPct = Decimal.ratio(b, bC.add(theoreticalMaxBal));
-            uint currWitdrawalLimit = withdrawalPct.mul(udlTokenPct).mul(b).asUint256();
+            Decimal.D256 memory stablesPct = Decimal.ratio(b, bC.add(theoreticalMaxBal));
+            uint currWitdrawalLimit = withdrawalPct.mul(stablesPct).mul(b).asUint256();
             require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");
             withdrawTokens(msg.sender, currWitdrawalLimit);
         }
@@ -110,7 +99,6 @@ contract UnderlyingCreditToken is ERC20 {
         updateBalance(owner);
         balances[owner] = balances[owner].add(value);
     }
-
 
     function burnBalance(uint value) external {
         updateBalance(msg.sender);

@@ -3,13 +3,13 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseHedgingManager.sol";
-import "../interfaces/ICollateralManager.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../interfaces/external/d8x/ID8xPerpetualsContractInterface.sol";
-import "../interfaces/AggregatorV3Interface.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/ID8xHedgingManagerFactory.sol";
-import "../utils/Convert.sol";
+import "../../interfaces/ICollateralManager.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../interfaces/external/d8x/ID8xPerpetualsContractInterface.sol";
+import "../../interfaces/AggregatorV3Interface.sol";
+import "../../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/ID8xHedgingManagerFactory.sol";
+import "../../utils/Convert.sol";
 
 
 contract D8xHedgingManager is BaseHedgingManager {

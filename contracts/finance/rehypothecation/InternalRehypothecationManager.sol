@@ -3,13 +3,12 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseRehypothecationManager.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/IUnderlyingCreditToken.sol";
-import "../interfaces/IBaseHedgingManager.sol";
-import "../interfaces/IUnderlyingCreditProvider.sol";
-import "../interfaces/external/teller/ITellerInterface.sol";
+import "../../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/IUnderlyingCreditToken.sol";
+import "../../interfaces/IBaseHedgingManager.sol";
+import "../../interfaces/IUnderlyingCreditProvider.sol";
 
-contract TellerRehypothecationManager is BaseRehypothecationManager {
+contract InternalRehypothecationManager is BaseRehypothecationManager {
 	uint constant _volumeBase = 1e18;
 
 	mapping(address => mapping(address => mapping(address => uint256))) lenderCommitmentIdMap;
@@ -17,8 +16,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureMap;
 	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureInExchangeBalMap;
 	mapping(address => mapping(address => mapping(address => uint256))) collateralAmountMap;
-
-	address tellerInterfaceAddr = address(0);
 
 	function notionalExposure(address account, address asset, address collateral) override external view returns (uint256) {
 		return notionalExposureInExchangeBalMap[account][asset][collateral];
@@ -35,7 +32,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
             "not allowed hedging manager"
         );
 
-		//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/lenders/create-commitment
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] == 0, "already lending");
 		uint notional;
@@ -77,45 +73,8 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 			notional = assetAmount;
 		}
-
-		//handle approval for commitment
-		IERC20_2 tk = IERC20_2(asset);
-        if (tk.allowance(address(this), tellerInterfaceAddr) > 0) {
-            tk.safeApprove(tellerInterfaceAddr, 0);
-        }
-        tk.safeApprove(tellerInterfaceAddr, notional);
 		
-		/**
-		* @notice Creates a loan commitment from a lender for a market.
-		* @param _commitment The new commitment data expressed as a struct
-		* @param _borrowerAddressList The array of borrowers that are allowed to accept loans using this commitment
-		* @return commitmentId_ returns the commitmentId for the created commitment
-		*/
-
-		ITellerInterface.Commitment memory _commitment;
-		
-        _commitment.maxPrincipal = assetAmount;//uint256 maxPrincipal;
-        _commitment.expiration = 7 days;//uint32 expiration;
-        _commitment.maxDuration = 7 days;//uint32 maxDuration;7 days on polygon with marketID 33
-        _commitment.minInterestRate = 0;//uint16 minInterestRate;
-        _commitment.collateralTokenAddress = collateral;//address collateralTokenAddress;
-        _commitment.collateralTokenId = 0;//uint256 collateralTokenId;
-        _commitment.maxPrincipalPerCollateralAmount = assetAmount.div(collateralAmount);//uint256 maxPrincipalPerCollateralAmount;
-        _commitment.collateralTokenType = ITellerInterface.CommitmentCollateralType.ERC20;//CommitmentCollateralType collateralTokenType;
-        _commitment.lender = address(this);//address lender;
-        _commitment.marketId = 33;//uint256 marketId;33 on polygon
-        _commitment.principalTokenAddress = asset;//address principalTokenAddress;
-
-		address[] memory _borrowerAddressList = new address[](2);
-		_borrowerAddressList[0] = address(this);
-		_borrowerAddressList[1] = msg.sender;
-		
-		uint256 commitmentId_ = ITellerInterface(tellerInterfaceAddr).createCommitment(
-		   _commitment,
-		   _borrowerAddressList
-		);
-
-		lenderCommitmentIdMap[msg.sender][asset][collateral] = commitmentId_;
+		lenderCommitmentIdMap[msg.sender][asset][collateral]++;
 		collateralAmountMap[msg.sender][asset][collateral] = collateralAmount;
 	}
 
@@ -127,19 +86,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
             "not allowed hedging manager"
         );
 
-    	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/accept-commitment
-    	/**
-		 * @notice Accept the commitment to submitBid and acceptBid using the funds
-		 * @dev LoanDuration must be longer than the market payment cycle
-		 * @param _commitmentId The id of the commitment being accepted.
-		 * @param _principalAmount The amount of currency to borrow for the loan.
-		 * @param _collateralAmount The amount of collateral to use for the loan.
-		 * @param _collateralTokenId The tokenId of collateral to use for the loan if ERC721 or ERC1155.
-		 * @param _collateralTokenAddress The contract address to use for the loan collateral token.s
-		 * @param _interestRate The interest rate APY to use for the loan in basis points.
-		 * @param _loanDuration The overall duratiion for the loan.  Must be longer than market payment cycle duration.
-		 * @return bidId The ID of the loan that was created on TellerV2
-		 */
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] > 0, "no outstanding loan");
 		require(borrowerBidIdMap[msg.sender][asset][collateral] == 0, "already borrowing");
 
@@ -178,19 +124,6 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 				IUnderlyingCreditProvider(asset).issueCredit(address(this), collateralAmount.sub(udlAssetBal));
 			}
 		}
-
-	    uint256 _collateralTokenId = 0;//0 for erc20's
-	    uint32 _loanDuration = 7 days;//
-
-		uint256 _bidId = ITellerInterface(tellerInterfaceAddr).acceptCommitment(
-		    lenderCommitmentIdMap[msg.sender][asset][collateral],
-		    assetAmount,
-		    collateralAmount,
-		    _collateralTokenId,//0 for erc20's
-		    collateral,
-		    0, 
-		    _loanDuration
-		);
 
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
@@ -237,27 +170,37 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 
 		
 
-		borrowerBidIdMap[msg.sender][asset][collateral] = _bidId;
+		borrowerBidIdMap[msg.sender][asset][collateral] = 1;
 		notionalExposureMap[msg.sender][asset][collateral] = assetAmount;
     }
     
     function repay(address asset, address collateral, address udlFeed)  override external {
-    	//https://docs.teller.org/teller-v2-protocol/l96ARgEDQcTgx4muwINt/personas/borrowers/repay-loan
-    	/**
-		 * @notice Function for users to repay an active loan in full.
-		 * @param _bidId The id of the loan to make the payment towards.
-		 */
 
 		require(lenderCommitmentIdMap[msg.sender][asset][collateral] > 0, "no outstanding loan");
 		require(borrowerBidIdMap[msg.sender][asset][collateral] > 0, "no outstanding borrow");
 
 		(,int udlPrice) = UnderlyingFeed(udlFeed).getLatestPrice();
 
-		ITellerInterface.Bid memory bid = ITellerInterface(tellerInterfaceAddr).bids(borrowerBidIdMap[msg.sender][asset][collateral]);
+		/*
+
+		uint256 _collateralTokenId = 0;//0 for erc20's
+	    uint32 _loanDuration = 7 days;//
+
+		uint256 _bidId = ITellerInterface(tellerInterfaceAddr).acceptCommitment(
+		    lenderCommitmentIdMap[msg.sender][asset][collateral],
+		    assetAmount,
+		    collateralAmount,
+		    _collateralTokenId,//0 for erc20's
+		    collateral,
+		    0, 
+		    _loanDuration
+		);
+
+		*/
 
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
-			uint256 transferAmountInCollateral = bid.loanDetails.principal.mul(uint(udlPrice)).div(_volumeBase);
+			uint256 transferAmountInCollateral = notionalExposureMap[msg.sender][asset][collateral].mul(uint(udlPrice)).div(_volumeBase);
 			IERC20_2(collateral).safeTransferFrom(
 	            msg.sender,
 	            address(this), 
@@ -293,24 +236,16 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 			}
 		}
 
-		ITellerInterface(tellerInterfaceAddr).repayLoanFull(borrowerBidIdMap[msg.sender][asset][collateral]);
-
-		/**
-		* @notice Withdraws deposited collateral from the created escrow of a bid that has been successfully repaid.
-		* @param _bidId The id of the bid to withdraw collateral for.
-		*/
-		ITellerInterface(tellerInterfaceAddr).withdraw(borrowerBidIdMap[msg.sender][asset][collateral]);
-
 		if (collateral == address(exchange)) {
 			//(collateral == exchange balance, asset == udl credit)
 			//burn udl credit value
-			IUnderlyingCreditToken(address(bid.loanDetails.lendingToken)).burnBalance(bid.loanDetails.principal);
+			IUnderlyingCreditToken(asset).burnBalance(notionalExposureMap[msg.sender][asset][collateral]);
 			//rehypo manager transfers exchanage balance collateral to hedging manager
 			IERC20_2(collateral).safeTransfer(msg.sender, collateralAmountMap[msg.sender][asset][collateral]);
 		} else { 
 			//(collateral == udl credit, asset == exchange balance)
 			//burn exchange balance in excess of collateral value
-			creditToken.burnBalance(bid.loanDetails.principal);
+			creditToken.burnBalance(notionalExposureMap[msg.sender][asset][collateral]);
 			//burn udl credit of collateral value
 			IUnderlyingCreditToken(collateral).burnBalance(collateralAmountMap[msg.sender][asset][collateral]);
 			//transfers exchanage balance collateral to hedging manager

@@ -3,16 +3,16 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseHedgingManager.sol";
-import "../interfaces/ICollateralManager.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../interfaces/external/teller/ITellerInterface.sol";
-import "../interfaces/IBaseRehypothecationManager.sol";
-import "../interfaces/AggregatorV3Interface.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/IUnderlyingVault.sol";
-import "../interfaces/ITellerHedgingManagerFactory.sol";
-import "../interfaces/IUnderlyingCreditProvider.sol";
-import "../utils/Convert.sol";
+import "../../interfaces/ICollateralManager.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../interfaces/external/teller/ITellerInterface.sol";
+import "../../interfaces/IBaseRehypothecationManager.sol";
+import "../../interfaces/AggregatorV3Interface.sol";
+import "../../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/IUnderlyingVault.sol";
+import "../../interfaces/ITellerHedgingManagerFactory.sol";
+import "../../interfaces/IUnderlyingCreditProvider.sol";
+import "../../utils/Convert.sol";
 
 
 contract TellerHedgingManager is BaseHedgingManager {
@@ -24,15 +24,6 @@ contract TellerHedgingManager is BaseHedgingManager {
     uint constant _volumeBase = 1e18;
 
     IUnderlyingVault vault;
-
-    event PerpOrderSubmitFailed(string reason);
-    event PerpOrderSubmitSuccess(int256 amountDec18, int16 leverageInteger);
-        
-    int256 private constant DECIMALS = 10**18;
-    int128 private constant ONE_64x64 = 0x010000000000000000;
-    int128 private constant MIN_64x64 = -0x80000000000000000000000000000000;
-    int128 private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    int128 private constant TEN_64x64 = 0xa0000000000000000;
 
     struct ExposureData {
         IERC20_2 t;

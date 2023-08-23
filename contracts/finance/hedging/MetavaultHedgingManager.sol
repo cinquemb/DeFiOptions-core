@@ -3,15 +3,15 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseHedgingManager.sol";
-import "../interfaces/ICollateralManager.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../interfaces/external/metavault/IPositionManager.sol";
-import "../interfaces/external/metavault/IReader.sol";
-import "../interfaces/external/metavault/IRouter.sol";
-import "../interfaces/external/metavault/IVault.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/IMetavaultHedgingManagerFactory.sol";
-import "../utils/Convert.sol";
+import "../../interfaces/ICollateralManager.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../interfaces/external/metavault/IPositionManager.sol";
+import "../../interfaces/external/metavault/IReader.sol";
+import "../../interfaces/external/metavault/IRouter.sol";
+import "../../interfaces/external/metavault/IVault.sol";
+import "../../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/IMetavaultHedgingManagerFactory.sol";
+import "../../utils/Convert.sol";
 
 contract MetavaultHedgingManager is BaseHedgingManager {
     address private positionManagerAddr;

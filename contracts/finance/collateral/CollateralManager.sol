@@ -2,8 +2,8 @@ pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "./BaseCollateralManager.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../interfaces/IBaseHedgingManager.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../interfaces/IBaseHedgingManager.sol";
 
 contract CollateralManager is BaseCollateralManager {
 

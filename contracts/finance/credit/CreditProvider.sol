@@ -1,16 +1,16 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
-import "../governance/ProtocolSettings.sol";
-import "../interfaces/IOptionsExchange.sol";
-import "../interfaces/ICreditToken.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../utils/MoreMath.sol";
-import "../utils/SafeERC20.sol";
-import "../utils/SafeMath.sol";
-import "../utils/SignedSafeMath.sol";
+import "../../deployment/Deployer.sol";
+import "../../deployment/ManagedContract.sol";
+import "../../governance/ProtocolSettings.sol";
+import "../../interfaces/IOptionsExchange.sol";
+import "../../interfaces/ICreditToken.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../utils/MoreMath.sol";
+import "../../utils/SafeERC20.sol";
+import "../../utils/SafeMath.sol";
+import "../../utils/SignedSafeMath.sol";
 
 
 contract CreditProvider is ManagedContract {

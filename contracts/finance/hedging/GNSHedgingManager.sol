@@ -11,14 +11,14 @@ pragma experimental ABIEncoderV2;
 
 
 import "./BaseHedgingManager.sol";
-import "../interfaces/ICollateralManager.sol";
-import "../interfaces/IGovernableLiquidityPool.sol";
-import "../interfaces/external/gains_network/IGFarmTradingStorageV5.sol";
-import "../interfaces/external/gains_network/IGNSTradingV6_2.sol";
-import "../interfaces/external/gains_network/IGNSPairInfosV6_1.sol";
-import "../interfaces/UnderlyingFeed.sol";
-import "../interfaces/IGNSHedgingmanagerFactory.sol";
-import "../utils/Convert.sol";
+import "../../interfaces/ICollateralManager.sol";
+import "../../interfaces/IGovernableLiquidityPool.sol";
+import "../../interfaces/external/gains_network/IGFarmTradingStorageV5.sol";
+import "../../interfaces/external/gains_network/IGNSTradingV6_2.sol";
+import "../../interfaces/external/gains_network/IGNSPairInfosV6_1.sol";
+import "../../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/IGNSHedgingmanagerFactory.sol";
+import "../../utils/Convert.sol";
 
 
 contract GNSHedgingManager is BaseHedgingManager {

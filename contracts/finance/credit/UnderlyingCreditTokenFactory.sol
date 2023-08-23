@@ -1,11 +1,11 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
-import "../deployment/Deployer.sol";
-import "../deployment/ManagedContract.sol";
+import "../../deployment/Deployer.sol";
+import "../../deployment/ManagedContract.sol";
 import "./UnderlyingCreditToken.sol";
-import "../interfaces/IERC20Details.sol";
-import "../interfaces/UnderlyingFeed.sol";
+import "../../interfaces/IERC20Details.sol";
+import "../../interfaces/UnderlyingFeed.sol";
 
 contract UnderlyingCreditTokenFactory is ManagedContract {
 
