@@ -3,7 +3,7 @@ pragma experimental ABIEncoderV2;
 
 import "../../../contracts/finance/OptionsExchange.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
-import "../../../contracts/finance/CreditProvider.sol";
+import "../../../contracts/finance/credit/CreditProvider.sol";
 import "../../../contracts/interfaces/TimeProvider.sol";
 import "../../../contracts/interfaces/UnderlyingFeed.sol";
 import "../../../contracts/interfaces/ICollateralManager.sol";

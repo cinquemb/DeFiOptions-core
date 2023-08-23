@@ -1,6 +1,6 @@
 pragma solidity >=0.6.0;
 
-import "../../../contracts/finance/CreditToken.sol";
+import "../../../contracts/finance/credit/CreditToken.sol";
 import "../../../contracts/deployment/ManagedContract.sol";
 
 contract CreditHolder is ManagedContract {

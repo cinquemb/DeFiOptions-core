@@ -4,10 +4,10 @@ import "truffle/Assert.sol";
 //import "truffle/DeployedAddresses.sol";
 
 import "../../../contracts/deployment/Deployer.sol";
-import "../../../contracts/finance/CreditProvider.sol";
+import "../../../contracts/finance/credit/CreditProvider.sol";
 import "../../../contracts/finance/OptionsExchange.sol";
-import "../../../contracts/finance/CollateralManager.sol";
-import "../../../contracts/finance/CreditToken.sol";
+import "../../../contracts/finance/collateral/CollateralManager.sol";
+import "../../../contracts/finance/credit/CreditToken.sol";
 import "../../../contracts/finance/UnderlyingVault.sol";
 import "../../../contracts/finance/Incentivized.sol";
 import "../../../contracts/finance/OptionTokenFactory.sol";
@@ -17,8 +17,8 @@ import "../../../contracts/feeds/DEXFeedFactory.sol";
 import "../../../contracts/pools/LinearLiquidityPoolFactory.sol";
 import "../../../contracts/pools/LinearAnySlopeInterpolator.sol";
 
-import "../../../contracts/finance/UnderlyingCreditProviderFactory.sol";
-import "../../../contracts/finance/UnderlyingCreditTokenFactory.sol";
+import "../../../contracts/finance/credit/UnderlyingCreditProviderFactory.sol";
+import "../../../contracts/finance/credit/UnderlyingCreditTokenFactory.sol";
 import "../../../contracts/governance/ProtocolSettings.sol";
 import "../../../contracts/governance/ProposalsManager.sol";
 import "../../../contracts/governance/GovToken.sol";
