@@ -9,6 +9,7 @@ import "../interfaces/IGovToken.sol";
 import "../interfaces/ICreditProvider.sol";
 import "../interfaces/UnderlyingFeed.sol";
 import "../interfaces/IUnderlyingVault.sol";
+import "../interfaces/IBaseCollateralManager.sol";
 import "../interfaces/IUnderlyingCreditToken.sol";
 import "../interfaces/IUnderlyingCreditProvider.sol";
 import "../interfaces/IUnderlyingCreditTokenFactory.sol";
@@ -648,6 +649,13 @@ contract ProtocolSettings is ManagedContract {
             IUnderlyingCreditProvider(_ucp).initialize(_uct);
             IUnderlyingCreditToken(_uct).initialize(_ucp);
         }
+    }
+
+    /* underlying debt for stable swap */
+
+    function swapUnderlyingDebtForStableDebt(address udlFeed, uint256 creditingValue) external {
+        ensureWritePrivilege();
+        IBaseCollateralManager(baseCollateralManagerAddr).debtSwap(udlFeed, creditingValue);
     }
 
 

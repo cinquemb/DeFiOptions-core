@@ -414,7 +414,7 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
 
                 if ((collateralSkew() <= 0) && (collateralSkew(opt.udlFeed) > 0)) {
                     //swap underlying debt for stablecoin debt
-                    debtSwap(opt.udlFeed, creditingValue);
+                    debtSwapInternal(opt.udlFeed, creditingValue);
                 }
             }
 
@@ -451,7 +451,12 @@ abstract contract BaseCollateralManager is ManagedContract, IBaseCollateralManag
         return uint(coll);
     }
 
-    function debtSwap(address udlFeed, uint256 creditingValue) private {
+    function debtSwap(address udlFeed, uint256 creditingValue) override external {
+        require(msg.sender == address(settings), "non settings");
+        debtSwapInternal(udlFeed,creditingValue);
+    }
+
+    function debtSwapInternal(address udlFeed, uint256 creditingValue) private {
         (, address _stablecoin) = settings.getSwapRouterInfo();
         (, int p) = UnderlyingFeed(udlFeed).getLatestPrice();
         address underlying = UnderlyingFeed(udlFeed).getUnderlyingAddr();

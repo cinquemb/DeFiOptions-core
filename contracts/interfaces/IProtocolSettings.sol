@@ -37,6 +37,7 @@ interface IProtocolSettings {
     function isAllowedRehypothicationManager(address rehyMngr) external view returns (bool);
     function isAllowedCustomPoolLeverage(address poolAddr) external view returns (bool);
     function transferTokenBalance(address to, address tokenAddr, uint256 value) external;
+    function swapUnderlyingDebtForStableDebt(address udlFeed, uint256 creditingValue) external;
     function exchangeTime() external view returns (uint256);
     function setDebtInterestRate(uint i, uint b) external;
     function transferBalance(address to, uint amount) external;
