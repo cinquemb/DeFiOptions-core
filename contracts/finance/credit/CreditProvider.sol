@@ -154,6 +154,12 @@ contract CreditProvider is ManagedContract {
         emit DepositTokens(to, token, value);
     }
 
+    function swapTokenForCredit(address to, address token, uint value) external {
+        IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
+        emit DepositTokens(to, token, value);
+        issueCreditTokens(to, value);
+    }
+
     function withdrawTokens(address owner, uint value) external {
         
         ensurePrimeCaller();

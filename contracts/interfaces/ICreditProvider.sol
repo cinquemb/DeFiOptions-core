@@ -19,6 +19,7 @@ interface ICreditProvider {
     function borrowBuyLiquidity(address to, uint credit, address option) external;
     function borrowSellLiquidity(address to, uint credit, address option) external;
     function issueCredit(address to, uint value) external;
+    function swapTokenForCredit(address to, address token, uint value) external;
     function processEarlyLpWithdrawal(address to, uint credit) external;
     function nullOptionBorrowBalance(address option, address pool) external;
     function creditPoolBalance(address to, address token, uint value) external;

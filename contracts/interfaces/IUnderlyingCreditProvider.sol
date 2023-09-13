@@ -16,6 +16,7 @@ interface IUnderlyingCreditProvider {
     function depositTokens(address to, address token, uint value) external;
     function withdrawTokens(address owner, uint value) external;
     function issueCredit(address to, uint value) external;
+    function swapTokenForCredit(address to, address token, uint value) external;
     function processEarlyLpWithdrawal(address to, uint credit) external;
     function swapStablecoinForUnderlying(address udlCdtp, address[] calldata path, int price, uint balance, uint amountOut) external;
     function swapBalanceForCreditTokens(address owner, uint value) external;

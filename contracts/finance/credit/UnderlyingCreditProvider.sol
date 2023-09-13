@@ -129,9 +129,18 @@ contract UnderlyingCreditProvider {
     }
     
     function depositTokens(address to, address token, uint value) external {
+        require(token == udlAssetAddr, "not udlAssetAddr");
         IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
         addBalance(to, token, value, true);
         emit DepositTokens(to, token, value);
+    }
+
+
+    function swapTokenForCredit(address to, address token, uint value) external {
+        require(token == udlAssetAddr, "not udlAssetAddr");
+        IERC20_2(token).safeTransferFrom(msg.sender, address(this), value);
+        emit DepositTokens(to, token, value);
+        issueCreditTokens(to, value);
     }
 
     function withdrawTokens(address owner, uint value) external {
@@ -211,7 +220,7 @@ contract UnderlyingCreditProvider {
                 ensurePrimeCaller();
             }
             
-            require(token != address(creditToken), "token not allowed");
+            require(token != address(creditToken) || token != udlAssetAddr, "token not allowed");
             value = Convert.to18DecimalsBase(token, value);
             addBalance(to, value);
             emit TransferBalance(address(0), to, value);
