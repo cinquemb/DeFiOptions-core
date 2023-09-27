@@ -154,8 +154,8 @@ contract UnderlyingVault is ManagedContract {
             uint b1 = totalSupplyRehypothicated(token, rehypothicationManager);
             uint p = b1.sub(b0).mul(fractionBase).div(b1);
             uint b = 1e3;
-            uint v = totalSupplyRehypothicated(token, rehypothicationManager) > 0 ?
-                totalSupplyRehypothicated(token, rehypothicationManager).mul(p).mul(b).div(fractionBase.sub(p)) : 
+            uint v = _totalSupplyShareRehypothicated[token][rehypothicationManager] > 0 ?
+                _totalSupplyShareRehypothicated[token][rehypothicationManager].mul(p).mul(b).div(fractionBase.sub(p)) : 
                 b1.mul(b);
             v = MoreMath.round(v, b);
 
