@@ -128,7 +128,11 @@ contract CreditProvider is ManagedContract {
     }
 
     function balanceOf(address owner) external view returns (uint) {
-
+        /*
+            TODO: could be a dynamic balance that also factors in their unerlying deposit in dollar value?
+            cannot have negative balances so must have dynamic debts?
+            allow user to swap undrlying credit for exchange balance?
+        */
         return balances[owner];
     }
     
