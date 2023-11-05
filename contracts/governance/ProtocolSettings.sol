@@ -381,10 +381,76 @@ contract ProtocolSettings is ManagedContract {
     }
 
     function setUdlFeed(address addr, int v) external {
-
         require(addr != address(0), "invalid feed address");
-        ensureWritePrivilege();
+
+        bool success;
+        uint i;
+        int state_success_count = 0;
+
+        //sucess bool true tests, revert imdeiately
+        string[5] memory udlFunctionSignaturesNoArgs = [
+            "symbol()",
+            "getUnderlyingAddr()",
+            "getPrivledgedPublisherKeeper()",
+            "getUnderlyingAggAddr()",
+            "getLatestPrice()"
+        ];
+
+        for(i=0;i<udlFunctionSignaturesNoArgs.length;i++){
+            (success, ) = addr.call(
+                abi.encodeWithSignature(
+                    udlFunctionSignaturesNoArgs[i]
+                )
+            );
+            require(success == true, "failed compat");
+        }
+
+        //sucess bool true tests, revert imdeiately
+        string[5] memory udlFunctionSignaturesArgs = [
+            "getPrice(uint)",//seed with input -> 0
+            "getDailyVolatility(uint)",//seed with input -> volatilityPeriod
+            "getDailyVolatilityCached(uint)",//seed with input -> volatilityPeriod
+            "calcLowerVolatility(uint)", //seed with input->volatilityPeriod
+            "calcUpperVolatility(uint)" //seed with input->volatilityPeriod
+        ];
+        for(i=0;i<udlFunctionSignaturesArgs.length;i++){
+            (success, ) = addr.call(
+                abi.encodeWithSignature(
+                    udlFunctionSignaturesArgs[i],
+                    (i == 0) ? 0: volatilityPeriod
+                )
+            );
+            require(success == true, "failed compat");
+        }
+        //sucess bool true tests, revert if all false
+        string[3] memory udlFunctionSignaturesState = [
+            "prefetchSample()",
+            "prefetchDailyPrice(uint)",//seed with input -> 0
+            "prefetchDailyVolatility(uint)" //seed with input -> volatilityPeriod
+        ];
+        for(i=0;i<udlFunctionSignaturesState.length;i++){
+            if (i == 0) {
+                (success, ) = addr.call(
+                    abi.encodeWithSignature(
+                        udlFunctionSignaturesState[i]
+                    )
+                );
+            } else {
+                (success, ) = addr.call(
+                    abi.encodeWithSignature(
+                        udlFunctionSignaturesState[i],
+                        (i == 1) ? 0: volatilityPeriod
+                    )
+                );
+            }
+            if(success == true){
+                state_success_count++;
+            }
+        }
+        require(state_success_count > 0, "failed state compat");
+
         underlyingFeeds[addr] = v;
+        udlIncentiveBlacklist[addr] = true;
         createUnderlyingCreditManagement(addr);
 
         emit SetUdlFeed(msg.sender, addr, v);
