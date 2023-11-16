@@ -11,23 +11,25 @@ import "../../interfaces/external/ISwapUtils.sol";
 //https://raw.githubusercontent.com/nerve-finance/contracts/main/SwapUtils.sol
 
 /*
-	- onwer of swapflashloan contracts need to
-				- mint enough lp tokens to cover enough requested stables
-					- redeem lp tokens for stables
-				- call swapTokenForCredit function on desired credit provider
-					- hold as long as desired, redeem debt for stables at interest
-					- deposit stables back to desired lp pool
+	- onwer of SwapFlashLoan contracts need to
+		- upgrade Swap.sol 
+		- mint enough lp tokens to cover enough requested stables
+			- redeem lp tokens for stables
+		- call swapTokenForCredit function on desired credit provider
+			- hold as long as desired, redeem debt for stables at interest
+			- deposit stables back to desired lp pool
 
-				- call swapForExchangeBalance(uint value) if desire for exchange balance for using options
+		- call swapForExchangeBalance(uint value) if desire for exchange balance for using options
 
-				- when redeeming (requestWithdraw) need to factor in lp:axial holder profit spit in contract
-					-25% sent to axial holders
-						- seperate contract that holds the funds before its sent back to sAxial holders?
-							- claiamable contract that will allow saxial stakers to claim their share relative to their sAxial ownership
-					-75% deposited back into liquidity pool
+		- when redeeming (requestWithdraw) need to factor in lp:axial holder profit spit in contract
+			-25% sent to axial holders
+				- seperate contract that holds the funds before its sent back to sAxial holders?
+					- claiamable contract that will allow saxial stakers to claim their share relative to their sAxial ownership
+			-75% deposited back into liquidity pool
 
 		- assumptions
-			- apy on liquidy swap > base line aby on pool with no liquidity swap
+			- apy on liquidity swap > base line aby on pool with no liquidity swap
+		
 		- pros:
 			- more swap volume
 			- more revenue
