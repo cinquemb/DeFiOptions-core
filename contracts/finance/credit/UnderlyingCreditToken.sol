@@ -91,7 +91,7 @@ contract UnderlyingCreditToken is ERC20 {
         } else {
             uint diffCreditTime = settings.exchangeTime().sub(creditDates[msg.sender]);
             require(diffCreditTime > settings.getCreditWithdrawlTimeLock() && creditDates[msg.sender] != 0, "CDTK: Must wait until time lock has passed");
-            Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), theoreticalMaxBal);
+            Decimal.D256 memory withdrawalPct = Decimal.ratio(balanceOf(msg.sender), b);
             Decimal.D256 memory udlTokenPct = Decimal.ratio(b, bC.add(theoreticalMaxBal));
             uint currWitdrawalLimit = withdrawalPct.mul(udlTokenPct).mul(b).asUint256();
             require(currWitdrawalLimit > 0, "CDTK: please wait to redeem");
@@ -100,8 +100,9 @@ contract UnderlyingCreditToken is ERC20 {
     }
 
     function swapForExchangeBalance(uint value) external {
-        creditProvider.addBalance(value);
+        value = MoreMath.min(balanceOf(msg.sender), value);
         removeBalance(msg.sender, value);
+        creditProvider.addBalance(value);
         emitTransfer(msg.sender, address(0), value);
     }
 
