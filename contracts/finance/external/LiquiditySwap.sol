@@ -1,10 +1,11 @@
 pragma solidity >=0.6.0;
 pragma experimental ABIEncoderV2;
 
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "../../interfaces/IERC20.sol";
 import "../../interfaces/ICreditToken.sol";
 import "../../interfaces/ICreditProvider.sol";
-import "../../interfaces/external/ISwap.sol";
+import "../../interfaces/external/axial/ISwap.sol";
 
 
 //https://raw.githubusercontent.com/nerve-finance/contracts/main/SwapUtils.sol
@@ -38,19 +39,26 @@ import "../../interfaces/external/ISwap.sol";
 			- non zero increase in credit risk reliant upon demand for option buyers and traders using DOD
 */
 
-contract LiquiditySwap is Ownable {
+contract LiquiditySwap is OwnableUpgradeable {
 	address creditProvider;
 	address creditToken;
 	address tokenPool;
+	address govToken;
 
-	constructor(address _creditProvider, address _creditToken, address _tokenPool, address owner) {
-		address creditProvider = _creditProvider;
-		address creditToken = _creditToken;
-		address tokenPool = _tokenPool;
-		transferOwnerShip(owner);
+	constructor(address _creditProvider, address _creditToken, address _tokenPool, address _govToken, address owner) public {
+		creditProvider = _creditProvider;
+		creditToken = _creditToken;
+		tokenPool = _tokenPool;
+		govToken = _govToken;
+		transferOwnership(owner);
 	}
 
-	function executeLiquiditySwap(uint256 amountUnderlying) ownlyGovernance external {
+	modifier onlyGovernance() {
+		require(msg.sender == govToken, "only gov");
+		_;
+	}
+
+	function executeLiquiditySwap(uint256 amountUnderlying) onlyGovernance external {
 		ISwap(tokenPool).mintForLiquidtySwap(amountUnderlying);
 		address[] memory pooledTokens = ISwap(tokenPool).getPooledTokens();
 		address lpToken = ISwap(tokenPool).getLpToken();
@@ -70,23 +78,23 @@ contract LiquiditySwap is Ownable {
 				address(this),
 				pooledTokens[i],
 				IERC20(pooledTokens[i]).balanceOf(address(this))
-			)
+			);
 		}
 	}
 
-	function executeCreditSwap(uint256 value) ownlyGovernance external{
+	function executeCreditSwap(uint256 value) onlyGovernance external{
 		//burning credit for exchange balance + interest, NOTE: INTEREST PAYOUT PERIOD WILL RESET WHEN CALLED
 		ICreditToken(creditToken).swapForExchangeBalance(value);
 	}
 
-	function executeRequestWithdraw() ownlyGovernance external {
+	function executeRequestWithdraw() onlyGovernance external {
 		//burning credit for underlying tokens + interest, NOTE: INTEREST PAYOUT PERIOD WILL RESET WHEN CALLED
 		ICreditToken(creditToken).requestWithdraw();
 	}
 
-	function executeTransfer(address token, address to, uint256 amount) ownlyOwner external {
+	function executeTransfer(address token, address to, uint256 amount) onlyOwner external {
 		if (amount > 0) {
-            IERC20(token).safeTransfer(to, amount);
+            IERC20(token).transfer(to, amount);
         }
 	}
 }
