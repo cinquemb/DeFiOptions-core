@@ -37,58 +37,6 @@ import "../../interfaces/external/ISwapUtils.sol";
 			- non zero increase in credit risk reliant upon demand for option buyers and traders using DOD
 */
 
-
-contract SwapFlashLoan {
-	...existing methods;
-	
-	address private liquiditySwapAddr;
-
-	function setLiquiditySwapAddr(address addr) onlyOwner {
-		liquiditySwapAddr = addr;
-	}
-
-	function _xp(
-        uint256[] memory balances,
-        uint256[] memory precisionMultipliers
-    ) internal pure returns (uint256[] memory) {
-        uint256 numTokens = balances.length;
-        require(
-            numTokens == precisionMultipliers.length,
-            "Balances must match multipliers"
-        );
-        uint256[] memory xp = new uint256[](numTokens);
-        for (uint256 i = 0; i < numTokens; i++) {
-            xp[i] = balances[i].mul(precisionMultipliers[i]);
-        }
-        return xp;
-    }
-
-	function mintForLiquidtySwap(uint256 underlyingDesiredTokenAmount) onlyLiquiditySwap {
-		/*
-
-			mintmount = totalLPTokenSupply * (underlyingDesiredTokenAmount / total amount underlying tokens);
-		*/
-
-        ISwapUtils.SwapUtils.Swap swapInfo = ISwapFlashLoan(tokenPool).swapStorage();
-        uint256[] normedBalances = _xp(swapInfo.balances, swapInfo.tokenPrecisionMultipliers);
-
-        uint256 normedBalanceSum = 0;
-        for(uint i=0;i<normedBalances.length;i++){
-        	normedBalanceSum += normedBalances[i];
-        }
-
-        require(underlyingDesiredTokenAmount < normedBalanceSum, "exceeds balances");
-        uint256 toMint = self.lpToken.totalSupply().mul(underlyingDesiredTokenAmount).div(normedBalanceSum);
-		self.lpToken.mint(msg.sender, toMint);
-	}
-
-	modifier onlyLiquiditySwap() {
-		require(msg.sender == liquiditySwapAddr, "only liquidity swap");
-		_;
-	}
-}
-
-
 contract LiquiditySwap is Ownable {
 	address creditProvider;
 	address creditToken;
