@@ -4,14 +4,13 @@ pragma experimental ABIEncoderV2;
 import "../../interfaces/IERC20.sol";
 import "../../interfaces/ICreditToken.sol";
 import "../../interfaces/ICreditProvider.sol";
-import "../../interfaces/external/ISwapFlashLoan.sol";
-import "../../interfaces/external/ISwapUtils.sol";
+import "../../interfaces/external/ISwap.sol";
 
 
 //https://raw.githubusercontent.com/nerve-finance/contracts/main/SwapUtils.sol
 
 /*
-	- onwer of SwapFlashLoan contracts need to
+	- owner of SwapFlashLoan contracts need to
 		- upgrade Swap.sol 
 		- mint enough lp tokens to cover enough requested stables
 			- redeem lp tokens for stables
@@ -52,17 +51,26 @@ contract LiquiditySwap is Ownable {
 	}
 
 	function executeLiquiditySwap(uint256 amountUnderlying) ownlyGovernance external {
-		ISwapFlashLoan(tokenPool).mintForLiquidtySwap(amountUnderlying);
-		ISwapUtils.SwapUtils.Swap swapInfo = ISwapFlashLoan(tokenPool).swapStorage();
+		ISwap(tokenPool).mintForLiquidtySwap(amountUnderlying);
+		address[] memory pooledTokens = ISwap(tokenPool).getPooledTokens();
+		address lpToken = ISwap(tokenPool).getLpToken();
 
-		ISwapFlashLoan(tokenPool).removeLiquidity(
-			uint256 amount,
-			uint256[] calldata minAmounts,
-			uint256 deadline
+		uint256[] memory minAmounts = new uint256[](pooledTokens.length);
+		for (uint i=0; i<pooledTokens.length;i++) {
+			minAmounts[i] = 0;
+		}
+		ISwap(tokenPool).removeLiquidity(
+			IERC20(lpToken).balanceOf(address(this)),
+			minAmounts,
+			0
 		);
 
-		for (uint i=0; i<swapInfo.pooledTokens.length;i++) {
-			ICreditProvider(creditProvider).swapTokenForCredit(address(this), address(swapInfo.pooledTokens[i]), swapInfo.pooledTokens[i].balanceOf(address(this)))
+		for (uint i=0; i<pooledTokens.length;i++) {
+			ICreditProvider(creditProvider).swapTokenForCredit(
+				address(this),
+				pooledTokens[i],
+				IERC20(pooledTokens[i]).balanceOf(address(this))
+			)
 		}
 	}
 
