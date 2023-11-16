@@ -103,7 +103,7 @@ contract LiquiditySwap is Ownable {
 	}
 
 	function executeCreditSwap(uint256 value) ownlyGovernance external{
-		//burning credit for exchange balance (no interest?)
+		//burning credit for exchange balance + interest
 		ICreditToken(creditToken).swapForExchangeBalance(value);
 	}
 
