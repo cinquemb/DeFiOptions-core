@@ -6,10 +6,57 @@ import "../../interfaces/ICreditProvider.sol";
 import "../../interfaces/external/ISwapFlashLoan.sol";
 import "../../interfaces/external/ISwapUtils.sol";
 
+
+//https://raw.githubusercontent.com/nerve-finance/contracts/main/SwapUtils.sol
+
 contract SwapFlashLoan {
 	...existing methods;
+	
+	address private liquiditySwapAddr;
 
-	function mintForLiquidtySwap(uint256 underlyingDesiredTokenAmount) {}
+	function setLiquiditySwapAddr(address addr) onlyOwner {
+		liquiditySwapAddr = addr;
+	}
+
+	function _xp(
+        uint256[] memory balances,
+        uint256[] memory precisionMultipliers
+    ) internal pure returns (uint256[] memory) {
+        uint256 numTokens = balances.length;
+        require(
+            numTokens == precisionMultipliers.length,
+            "Balances must match multipliers"
+        );
+        uint256[] memory xp = new uint256[](numTokens);
+        for (uint256 i = 0; i < numTokens; i++) {
+            xp[i] = balances[i].mul(precisionMultipliers[i]);
+        }
+        return xp;
+    }
+
+	function mintForLiquidtySwap(uint256 underlyingDesiredTokenAmount) onlyLiquiditySwap {
+		/*
+
+			mintmount = totalLPTokenSupply * (underlyingDesiredTokenAmount / total amount underlying tokens);
+		*/
+
+        ISwapUtils.SwapUtils.Swap swapInfo = ISwapFlashLoan(tokenPool).swapStorage();
+        uint256[] normedBalances = _xp(swapInfo.balances, swapInfo.tokenPrecisionMultipliers);
+
+        uint256 normedBalanceSum = 0;
+        for(uint i=0;i<normedBalances.length;i++){
+        	normedBalanceSum += normedBalances[i];
+        }
+
+        require(underlyingDesiredTokenAmount < normedBalanceSum, "exceeds balances");
+        uint256 toMint = self.lpToken.totalSupply().mul(underlyingDesiredTokenAmount).div(normedBalanceSum);
+		self.lpToken.mint(msg.sender, toMint);
+	}
+
+	modifier onlyLiquiditySwap {
+		require(msg.sender == liquiditySwapAddr, "only liquidity swap");
+		_;
+	}
 }
 
 
@@ -47,7 +94,6 @@ contract LiquiditySwap is Ownable {
 	function executeLiquiditySwap(uint256 amountUnderlying) ownlyGovernance external {
 		ISwapFlashLoan(tokenPool).mintForLiquidtySwap(amountUnderlying);
 		ISwapUtils.SwapUtils.Swap swapInfo = ISwapFlashLoan(tokenPool).swapStorage();
-		//TODO: make sure ISwapFlashLoan(tokenPool).calculateRemoveLiquidity == amountUnderlying after diluting existing lp holders
 
 		ISwapFlashLoan(tokenPool).removeLiquidity(uint256 amount, uint256[] calldata minAmounts,uint256 deadline);
 
@@ -58,7 +104,7 @@ contract LiquiditySwap is Ownable {
 
 	function executeCreditSwap(uint256 value) ownlyGovernance external{
 		//burning credit for exchange balance (no interest?)
-		ICreditToken(creditToken).swapForExchangeBalance(uint value);
+		ICreditToken(creditToken).swapForExchangeBalance(value);
 	}
 
 	function executeRequestWithdraw() ownlyGovernance external {
