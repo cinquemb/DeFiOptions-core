@@ -26,6 +26,20 @@ interface ITellerInterface {
         address principalTokenAddress;
     }
 
+    struct CommitmentV2 {
+        uint256 maxPrincipal;
+        uint32 expiration;
+        uint32 maxDuration;
+        uint16[] minInterestRate;
+        address[] collateralTokenAddress;
+        uint256[] collateralTokenId; //we use this for the MerkleRootHash  for type ERC721_MERKLE_PROOF
+        uint256[] maxPrincipalPerCollateralAmount;
+        CommitmentCollateralType[] collateralTokenType;
+        address lender;
+        uint256 marketId;
+        address principalTokenAddress;
+    }
+
     /**
      * @notice Information on the terms of a loan request
      * @param paymentCycleAmount Value of tokens expected to be repaid every payment cycle.
@@ -126,4 +140,5 @@ interface ITellerInterface {
     function repayLoanFull(uint256 _bidId) external;
 
     function bids(uint256) external view returns (Bid memory);
+    function commitments(uint256) ecternal view returns (CommitmentV2 memory);
 }

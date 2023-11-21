@@ -18,6 +18,7 @@ contract TellerRehypothecationManager is BaseRehypothecationManager {
 	mapping(address => mapping(address => mapping(address => uint256))) notionalExposureInExchangeBalMap;
 	mapping(address => mapping(address => mapping(address => uint256))) collateralAmountMap;
 
+	//TODO: need to set to propper addr
 	address tellerInterfaceAddr = address(0);
 
 	function notionalExposure(address account, address asset, address collateral) override external view returns (uint256) {
