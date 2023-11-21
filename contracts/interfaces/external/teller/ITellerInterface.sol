@@ -140,5 +140,5 @@ interface ITellerInterface {
     function repayLoanFull(uint256 _bidId) external;
 
     function bids(uint256) external view returns (Bid memory);
-    function commitments(uint256) ecternal view returns (CommitmentV2 memory);
+    function commitments(uint256) external view returns (CommitmentV2 memory);
 }
