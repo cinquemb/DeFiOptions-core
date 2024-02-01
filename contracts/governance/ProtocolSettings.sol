@@ -402,25 +402,27 @@ contract ProtocolSettings is ManagedContract {
                     udlFunctionSignaturesNoArgs[i]
                 )
             );
-            require(success == true, "failed compat");
+            require(success == true, "failed compat 1");
         }
 
         //sucess bool true tests, revert imdeiately
         string[5] memory udlFunctionSignaturesArgs = [
-            "getPrice(uint)",//seed with input -> 0
-            "getDailyVolatility(uint)",//seed with input -> volatilityPeriod
-            "getDailyVolatilityCached(uint)",//seed with input -> volatilityPeriod
-            "calcLowerVolatility(uint)", //seed with input->volatilityPeriod
-            "calcUpperVolatility(uint)" //seed with input->volatilityPeriod
+            "getPrice(uint256)",//seed with input -> 0
+            "getDailyVolatility(uint256)",//seed with input -> volatilityPeriod
+            "getDailyVolatilityCached(uint256)",//seed with input -> volatilityPeriod
+            "calcLowerVolatility(uint256)", //seed with input->volatilityPeriod
+            "calcUpperVolatility(uint256)" //seed with input->volatilityPeriod
         ];
+
+
         for(i=0;i<udlFunctionSignaturesArgs.length;i++){
             (success, ) = addr.call(
                 abi.encodeWithSignature(
                     udlFunctionSignaturesArgs[i],
-                    (i == 0) ? 0: volatilityPeriod
+                    (i == 0) ? uint(0): volatilityPeriod
                 )
             );
-            require(success == true, "failed compat");
+            require(success == true, udlFunctionSignaturesArgs[i]);
         }
         //sucess bool true tests, revert if all false
         string[3] memory udlFunctionSignaturesState = [
