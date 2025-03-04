@@ -32,6 +32,10 @@ import "../../utils/SafeERC20.sol";
 	 			- makes market buy order put options  to hedge their deposited collateral for given size
 	 			- borrower gets lending asset amount - cost of hedging
 
+
+	 		todo:
+	 			- if pricipal is not stables, may need to swap some pripaal into stables to pay for options
+
 */
 
 contract LoanHedgingFacilitator {
@@ -42,15 +46,15 @@ contract LoanHedgingFacilitator {
 	struct request {
 		uint256 id;
 		uint256 commitmentId;
-		uint256 borrowerBidId;
+		uint256 borrowerOfferId;
 		uint256 startTime;
 		bool active;
 		bool initiated;
 		bool isUpsideHedging;
 		mapping(address => string) put;
 		mapping(address => string) call;
-		address[] putBids;
-		address[] callBids;
+		address[] putOffers;
+		address[] callOffers;
 		uint256 selectedPut;
 		uint256 selectedCall;
 		address selectedPutPool;
@@ -79,7 +83,7 @@ contract LoanHedgingFacilitator {
 	}
 
 	
-	function requestLoan(uint256 commitmentId, address collateral, uint256 maxPrincipalHaircut, uint256 collateralAmount, uint256 principalAmount, uint16 interestRate, uint32 loanDuration, bool hedgeCollateralUpside) external {
+	function requestLoan(uint256 commitmentId, address collateral, uint256 maxPrincipalHaircut, uint256 collateralAmount, uint256 principalAmount, uint16 interestRate, uint32 loanDuration) external {
 
 		IERC20_2(collateral).safeTransferFrom(msg.sender, address(this), collateralAmount);
 
@@ -90,7 +94,7 @@ contract LoanHedgingFacilitator {
 		borrowRequest[borrowRequestId].startTime = block.timestamp;
 		borrowRequest[borrowRequestId].active = true;
 		borrowRequest[borrowRequestId].initiated = true;
-		borrowRequest[borrowRequestId].isUpsideHedging = hedgeCollateralUpside;
+		borrowRequest[borrowRequestId].isUpsideHedging = true;//TODO: if pricipal is stables then should be false, else true
 		borrowRequest[borrowRequestId].collateral = collateral;
 		borrowRequest[borrowRequestId].principal = commitment.principalTokenAddress;
 		borrowRequest[borrowRequestId].maxPrincipalHaircut = maxPrincipalHaircut;
@@ -105,7 +109,7 @@ contract LoanHedgingFacilitator {
 
 	}
 
-	function submitOptionBid(uint256 borrowId, address liquidityPool, string calldata lenderOptionSymbol, string calldata borrowerOptionSymbol) external {
+	function submitOptionOffer(uint256 borrowId, address liquidityPool, string calldata lenderOptionSymbol, string calldata borrowerOptionSymbol) external {
 		/*
 			each bid gets bid id for loan auction, close auction if beyond time, check if msg.sender is holding at least greater than 50% of pool tokens
 		*/
@@ -125,7 +129,7 @@ contract LoanHedgingFacilitator {
 		}
 	}
 
-	function acceptBestOptionBids(uint256 borrowId) external {
+	function acceptBestOptionOffers(uint256 borrowId) external {
 		/*
 			- 1 tx:
 	 			- loan origination happens, loan duration starts from here
@@ -151,42 +155,42 @@ contract LoanHedgingFacilitator {
 		    borrowRequest[borrowId].loanDuration
 		);
 
-		borrowRequest[borrowId].borrowerBidId = _bidId;
+		borrowRequest[borrowId].borrowerOfferId = _bidId;
 
-		(int256 callBidId, int256 putBidId, address callBidAddr, address putBidAddr) = selectBestBid(borrowId);
+		(int256 callOfferId, int256 putOfferId, address callOfferAddr, address putOfferAddr) = selectBestOffer(borrowId);
 		//_price.mul(oEx.vol).div(_volumeBase) == exchange balance cost
 
-		require(putBidId > -1, "no put bids");
-		borrowRequest[borrowId].selectedPutPool = putBidAddr;
-		borrowRequest[borrowId].selectedCallPool = callBidAddr;
-		borrowRequest[borrowId].selectedSymbol = borrowRequest[borrowId].put[putBidAddr];
+		require(putOfferId > -1, "no put offerss");
+		borrowRequest[borrowId].selectedPutPool = putOfferAddr;
+		borrowRequest[borrowId].selectedCallPool = callOfferAddr;
+		borrowRequest[borrowId].selectedSymbol = borrowRequest[borrowId].put[putOfferAddr];
 
-		executeHedgeAndLoan(borrowId, putBidAddr, callBidAddr, callBidId, putBidId);
+		executeHedgeAndLoan(borrowId, putOfferAddr, callOfferAddr, callOfferId, putOfferId);
 	}
 
 	function repayLoanFull(uint256 borrowId) external {
 		IERC20_2(borrowRequest[borrowId].principal).safeTransferFrom(msg.sender, address(this), borrowRequest[borrowId].principalAmount);
-		ITellerInterface(tellerInterfaceAddr).repayLoanFull(borrowRequest[borrowId].borrowerBidId);
-		ITellerInterface(tellerInterfaceAddr).withdraw(borrowRequest[borrowId].borrowerBidId);
+		ITellerInterface(tellerInterfaceAddr).repayLoanFull(borrowRequest[borrowId].borrowerOfferId);
+		ITellerInterface(tellerInterfaceAddr).withdraw(borrowRequest[borrowId].borrowerOfferId);
 		IERC20_2(borrowRequest[borrowId].collateral).transfer(msg.sender, borrowRequest[borrowId].collateralAmount);
 
 	}
 
-	function selectBestBid(uint256 borrowId) public view returns (int256 callBidId, int256 putBidId, address callBidAddr, address putBidAddr){
+	function selectBestOffer(uint256 borrowId) public view returns (int256 callOfferId, int256 putOfferId, address callOfferAddr, address putOfferAddr){
 
 		uint i;
-		putBidId = -1;
-		callBidId = -1;
+		putOfferId = -1;
+		callOfferId = -1;
 		uint256 bestPrice = UINT256_MAX;
 		IGovernableLiquidityPool pool;
 
-		for(i=0;i<borrowRequest[borrowId].putBids.length;i++){
-			pool = IGovernableLiquidityPool(borrowRequest[borrowId].putBids[i]);
-			try pool.queryBuy(borrowRequest[borrowId].put[borrowRequest[borrowId].putBids[i]], true) returns (uint _buyPrice, uint) {
+		for(i=0;i<borrowRequest[borrowId].putOffers.length;i++){
+			pool = IGovernableLiquidityPool(borrowRequest[borrowId].putOffers[i]);
+			try pool.queryBuy(borrowRequest[borrowId].put[borrowRequest[borrowId].putOffers[i]], true) returns (uint _buyPrice, uint) {
 				if (_buyPrice < bestPrice) {
 	            	bestPrice = _buyPrice;
-	            	putBidAddr = borrowRequest[borrowId].putBids[i];
-	            	putBidId = int256(i);
+	            	putOfferAddr = borrowRequest[borrowId].putOffers[i];
+	            	putOfferId = int256(i);
 				}
 	        } catch (bytes memory /*lowLevelData*/) {
 	        	continue;
@@ -196,13 +200,13 @@ contract LoanHedgingFacilitator {
 
 		if (borrowRequest[borrowId].isUpsideHedging == true) {
 			bestPrice = UINT256_MAX;
-	        for(i=0;i<borrowRequest[borrowId].callBids.length;i++){
-				pool = IGovernableLiquidityPool(borrowRequest[borrowId].callBids[i]);
-				try pool.queryBuy(borrowRequest[borrowId].call[borrowRequest[borrowId].callBids[i]], true) returns (uint _buyPrice, uint) {
+	        for(i=0;i<borrowRequest[borrowId].callOffers.length;i++){
+				pool = IGovernableLiquidityPool(borrowRequest[borrowId].callOffers[i]);
+				try pool.queryBuy(borrowRequest[borrowId].call[borrowRequest[borrowId].callOffers[i]], true) returns (uint _buyPrice, uint) {
 					if (_buyPrice < bestPrice) {
 		            	bestPrice = _buyPrice;
-		            	callBidAddr = borrowRequest[borrowId].callBids[i];
-		            	callBidId = int256(i);
+		            	callOfferAddr = borrowRequest[borrowId].callOffers[i];
+		            	callOfferId = int256(i);
 					}
 		        } catch (bytes memory /*lowLevelData*/) {
 		            continue;
@@ -215,7 +219,7 @@ contract LoanHedgingFacilitator {
 	    return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
 	}
 
-	function executeHedgeAndLoan(uint256 borrowId, address putBidAddr, address callBidAddr, int256 callBidId, int256 putBidId) private {
+	function executeHedgeAndLoan(uint256 borrowId, address putOfferAddr, address callOfferAddr, int256 callOfferId, int256 putOfferId) private {
 		uint256 totalHedgeCost = 0;
 
 		uint256 optVolume = Convert.to18DecimalsBase(
@@ -223,11 +227,11 @@ contract LoanHedgingFacilitator {
 			borrowRequest[borrowId].collateralAmount
 		);
 
-		totalHedgeCost = downsideHedge(totalHedgeCost, borrowId, putBidAddr, putBidId, optVolume);
+		totalHedgeCost = downsideHedge(totalHedgeCost, borrowId, putOfferAddr, putOfferId, optVolume);
 
 		if (borrowRequest[borrowId].isUpsideHedging == true) {
-			require(callBidId > -1, "no call bids");
-			totalHedgeCost = upsideHedge(totalHedgeCost, borrowId, callBidAddr, callBidId, optVolume);
+			require(callOfferId > -1, "no call offers");
+			totalHedgeCost = upsideHedge(totalHedgeCost, borrowId, callOfferAddr, callOfferId, optVolume);
 		}		
 
 		uint residual = borrowRequest[borrowId].principalAmount.sub(totalHedgeCost);
@@ -237,46 +241,46 @@ contract LoanHedgingFacilitator {
 		IERC20_2(borrowRequest[borrowId].principal).transfer(borrowRequest[borrowId].borrower, residual);
 	}
 
-	function upsideHedge(uint256 totalHedgeCost, uint256 borrowId, address callBidAddr, int256 callBidId, uint256 optVolume) private returns (uint256) {
-		require(callBidId > -1, "no call bids");
-		(borrowRequest[borrowId].selectedCall,) = IGovernableLiquidityPool(callBidAddr).queryBuy(borrowRequest[borrowId].call[callBidAddr], true);
+	function upsideHedge(uint256 totalHedgeCost, uint256 borrowId, address callOfferAddr, int256 callOfferId, uint256 optVolume) private returns (uint256) {
+		require(callOfferId > -1, "no call offers");
+		(borrowRequest[borrowId].selectedCall,) = IGovernableLiquidityPool(callOfferAddr).queryBuy(borrowRequest[borrowId].call[callOfferAddr], true);
 		uint256 cHedgeCost = Convert.from18DecimalsBase(borrowRequest[borrowId].principal, borrowRequest[borrowId].selectedCall.mul(optVolume).div(1e18));
 		
 		IERC20_2 pTk = IERC20_2(borrowRequest[borrowId].principal);
-		if (pTk.allowance(address(this), callBidAddr) > 0) {
-            pTk.safeApprove(callBidAddr, 0);
+		if (pTk.allowance(address(this), callOfferAddr) > 0) {
+            pTk.safeApprove(callOfferAddr, 0);
         }
-        pTk.safeApprove(callBidAddr, cHedgeCost);
+        pTk.safeApprove(callOfferAddr, cHedgeCost);
 
-		address optCallTkn = IGovernableLiquidityPool(callBidAddr).buy(
-			borrowRequest[borrowId].call[callBidAddr],
+		address optCallTkn = IGovernableLiquidityPool(callOfferAddr).buy(
+			borrowRequest[borrowId].call[callOfferAddr],
 			borrowRequest[borrowId].selectedCall,
 			optVolume, 
 			borrowRequest[borrowId].principal //address token
 		);
-		//transfer upside protection to borrower
-		IERC20_2(optCallTkn).transfer(borrowRequest[borrowId].borrower, optVolume);
+		//transfer upside protection (on pricipal) to lender
+		IERC20_2(optCallTkn).transfer(borrowRequest[borrowId].lender, optVolume);
 		totalHedgeCost += cHedgeCost;
 		return totalHedgeCost;
 	}
 
-	function downsideHedge(uint256 totalHedgeCost, uint256 borrowId, address putBidAddr, int256 putBidId, uint256 optVolume) private returns (uint256) {
-		(borrowRequest[borrowId].selectedPut,) = IGovernableLiquidityPool(putBidAddr).queryBuy(borrowRequest[borrowId].put[putBidAddr], true);
+	function downsideHedge(uint256 totalHedgeCost, uint256 borrowId, address putOfferAddr, int256 putOfferId, uint256 optVolume) private returns (uint256) {
+		(borrowRequest[borrowId].selectedPut,) = IGovernableLiquidityPool(putOfferAddr).queryBuy(borrowRequest[borrowId].put[putOfferAddr], true);
 		uint256 pHedgeCost = Convert.from18DecimalsBase(borrowRequest[borrowId].principal, borrowRequest[borrowId].selectedPut.mul(optVolume).div(1e18));
 
 		IERC20_2 pTk = IERC20_2(borrowRequest[borrowId].principal);
-		if (pTk.allowance(address(this), putBidAddr) > 0) {
-            pTk.safeApprove(putBidAddr, 0);
+		if (pTk.allowance(address(this), putOfferAddr) > 0) {
+            pTk.safeApprove(putOfferAddr, 0);
         }
-        pTk.safeApprove(putBidAddr, pHedgeCost);
+        pTk.safeApprove(putOfferAddr, pHedgeCost);
 
-		address optPutTkn = IGovernableLiquidityPool(putBidAddr).buy(
-			borrowRequest[borrowId].put[putBidAddr],
+		address optPutTkn = IGovernableLiquidityPool(putOfferAddr).buy(
+			borrowRequest[borrowId].put[putOfferAddr],
 			borrowRequest[borrowId].selectedPut,
 			optVolume, 
 			borrowRequest[borrowId].principal //address token
 		);
-		//transfer downside protection to lender
+		//transfer downside protection (on collateral) to lender
 		IERC20_2(optPutTkn).transfer(borrowRequest[borrowId].lender, optVolume);
 		
 		totalHedgeCost += pHedgeCost;
