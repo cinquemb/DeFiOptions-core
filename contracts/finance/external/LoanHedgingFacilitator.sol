@@ -33,8 +33,9 @@ import "../../utils/SafeERC20.sol";
 	 			- borrower gets lending asset amount - cost of hedging
 
 
-	 		todo:
+	 		TODO:
 	 			- if pricipal is not stables, may need to swap some pripaal into stables to pay for options
+	 			- function to cancelLoan request and transfer back collateral
 
 */
 
