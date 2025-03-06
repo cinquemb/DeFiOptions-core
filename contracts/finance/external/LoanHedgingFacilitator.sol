@@ -79,7 +79,7 @@ contract LoanHedgingFacilitator {
 	}
 
 	
-	function requestLoan(uint256 commitmentId, address collateral, uint256 maxPrincipalHaircut, uint256 collateralAmount, uint256 principalAmount, uint16 interestRate, uint32 loanDuration) external {
+	function requestLoan(uint256 commitmentId, address collateral, uint256 maxPrincipalHaircut, uint256 collateralAmount, uint256 principalAmount, uint16 interestRate, uint32 loanDuration, address settings) external {
 
 		IERC20_2(collateral).safeTransferFrom(msg.sender, address(this), collateralAmount);
 
@@ -91,10 +91,21 @@ contract LoanHedgingFacilitator {
 		borrowRequest[borrowRequestId].active = true;
 		borrowRequest[borrowRequestId].initiated = true;
 		borrowRequest[borrowRequestId].isUpsideHedging = true;
-		/*
-			//TODO: if pricipal is stables then should be false, else true
-			check address array for settings.getAllowedTokens() on dod
-		*/
+		
+		(bool success, bytes memory allowedStablesData) = settings.call(
+			abi.encodeWithSelector(
+				bytes4(keccak256("getAllowedTokens()"))
+			)
+		);
+		require(success == true, "failed allowedStablesData");
+
+		address[] memory checkStables = abi.decode(allowedStablesData, (address[]));
+		for (uint i=0;i<checkStables.length;i++){
+			if (commitment.principalTokenAddress == checkStables[i]) {
+				borrowRequest[borrowRequestId].isUpsideHedging = false;
+				break;
+			}
+		}
 
 		borrowRequest[borrowRequestId].collateral = collateral;
 		borrowRequest[borrowRequestId].principal = commitment.principalTokenAddress;
